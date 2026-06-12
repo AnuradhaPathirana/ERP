@@ -11,6 +11,7 @@ import {
   Ruler,
   ShoppingCart,
   Tag,
+  Truck,
   UserCog,
   Users,
   X,
@@ -39,6 +40,7 @@ const NAV_ITEMS = [
     moduleKey: 'inventory',
     children: [
       { label: 'Products',        to: '/inventory/products',          icon: Box },
+      { label: 'Suppliers',       to: '/inventory/suppliers',         icon: Truck },
       { label: 'Sales Channels',  to: '/inventory/sales-channels',   icon: ShoppingCart },
       { label: 'Unit Categories', to: '/inventory/unit-categories',  icon: Tag },
       { label: 'Unit Types',      to: '/inventory/unit-types',       icon: Ruler },

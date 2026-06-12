@@ -15,6 +15,9 @@ const ProductViewPage          = lazy(() => import('./pages/inventory/ProductVie
 const SalesChannelsPage        = lazy(() => import('./pages/inventory/SalesChannelsPage'))
 const SalesChannelFormPage     = lazy(() => import('./pages/inventory/SalesChannelFormPage'))
 const SalesChannelViewPage     = lazy(() => import('./pages/inventory/SalesChannelViewPage'))
+const SuppliersPage            = lazy(() => import('./pages/inventory/SuppliersPage'))
+const SupplierFormPage         = lazy(() => import('./pages/inventory/SupplierFormPage'))
+const SupplierViewPage         = lazy(() => import('./pages/inventory/SupplierViewPage'))
 const UserManagementPage    = lazy(() => import('./pages/admin/UserManagementPage'))
 
 function PageLoader() {
@@ -60,6 +63,10 @@ export default function App() {
         <Route path="/inventory/sales-channels/create"         element={<Lazy component={SalesChannelFormPage} />} />
         <Route path="/inventory/sales-channels/:id"            element={<Lazy component={SalesChannelViewPage} />} />
         <Route path="/inventory/sales-channels/:id/edit"       element={<Lazy component={SalesChannelFormPage} />} />
+        <Route path="/inventory/suppliers"                     element={<Lazy component={SuppliersPage} />} />
+        <Route path="/inventory/suppliers/create"              element={<Lazy component={SupplierFormPage} />} />
+        <Route path="/inventory/suppliers/:id"                 element={<Lazy component={SupplierViewPage} />} />
+        <Route path="/inventory/suppliers/:id/edit"            element={<Lazy component={SupplierFormPage} />} />
       </Route>
 
       {/* Fallback */}

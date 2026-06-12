@@ -2,24 +2,20 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
-import {
-  createSalesChannel,
-  getSalesChannel,
-  updateSalesChannel,
-} from '../../api/salesChannels'
+import { createSalesChannel, getSalesChannel, updateSalesChannel } from '../../api/salesChannels'
 import Breadcrumb from '../../components/Breadcrumb'
 
-const CHANNEL_TYPES = ['Wholesale', 'e-commerce', 'Retail']
+const CHANNEL_TYPES  = ['Wholesale', 'e-commerce', 'Retail']
 const STATUS_OPTIONS = ['Active', 'Inactive']
 
 const EMPTY_FORM = {
-  type:                '',
-  sales_channel_name:  '',
-  max_qty:             '',
-  applicable_from:     '',
-  applicable_to:       '',
-  description:         '',
-  status:              '',
+  type:               '',
+  sales_channel_name: '',
+  max_qty:            '',
+  applicable_from:    '',
+  applicable_to:      '',
+  description:        '',
+  status:             '',
 }
 
 function validate(field, value, allValues) {
@@ -29,20 +25,18 @@ function validate(field, value, allValues) {
       break
     case 'sales_channel_name':
       if (!String(value).trim()) return 'Sales channel name is required.'
-      if (String(value).length > 100) return 'Name must be 100 characters or less.'
+      if (String(value).length > 100) return 'Max 100 characters.'
       break
     case 'max_qty':
       if (value !== '' && (isNaN(Number(value)) || Number(value) < 0))
-        return 'Max quantity must be a positive number.'
-      break
-    case 'applicable_from':
+        return 'Must be a positive number.'
       break
     case 'applicable_to':
       if (value && allValues.applicable_from && value < allValues.applicable_from)
         return 'End date must be on or after start date.'
       break
     case 'description':
-      if (String(value).length > 255) return 'Description must be 255 characters or less.'
+      if (String(value).length > 255) return 'Max 255 characters.'
       break
   }
   return ''
@@ -53,15 +47,13 @@ const inputBase =
 const inputErr =
   'block w-full rounded border border-red-400 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
 
-function fieldCls(errors, touched, name) {
-  return errors[name] && touched[name] ? inputErr : inputBase
-}
+const fieldCls = (errors, touched, name) =>
+  errors[name] && touched[name] ? inputErr : inputBase
 
 function Label({ children, required }) {
   return (
-    <label className="mb-1 block text-xs font-medium text-slate-600">
-      {children}
-      {required && <span className="ml-0.5 text-red-500">*</span>}
+    <label className="mb-0.5 block text-xs font-medium text-slate-600">
+      {children}{required && <span className="ml-0.5 text-red-500">*</span>}
     </label>
   )
 }
@@ -93,13 +85,13 @@ export default function SalesChannelFormPage() {
     if (fetchedData?.data && !initialized.current) {
       const c = fetchedData.data
       setForm({
-        type:               c.type ?? '',
+        type:               c.type               ?? '',
         sales_channel_name: c.sales_channel_name ?? '',
         max_qty:            c.max_qty != null ? String(c.max_qty) : '',
-        applicable_from:    c.applicable_from ?? '',
-        applicable_to:      c.applicable_to ?? '',
-        description:        c.description ?? '',
-        status:             c.status ?? '',
+        applicable_from:    c.applicable_from    ?? '',
+        applicable_to:      c.applicable_to      ?? '',
+        description:        c.description        ?? '',
+        status:             c.status             ?? '',
       })
       initialized.current = true
     }
@@ -110,9 +102,7 @@ export default function SalesChannelFormPage() {
   const handleChange = (e) => {
     const { name, value } = e.target
     setForm((prev) => ({ ...prev, [name]: value }))
-    if (touched[name]) {
-      setErrors((prev) => ({ ...prev, [name]: validate(name, value, { ...form, [name]: value }) }))
-    }
+    if (touched[name]) setErrors((prev) => ({ ...prev, [name]: validate(name, value, { ...form, [name]: value }) }))
   }
 
   const handleBlur = (e) => {
@@ -141,20 +131,20 @@ export default function SalesChannelFormPage() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    const fields = Object.keys(EMPTY_FORM)
+    const fields    = Object.keys(EMPTY_FORM)
     const newErrors = Object.fromEntries(fields.map((f) => [f, validate(f, form[f], form)]))
     setErrors(newErrors)
     setTouched(Object.fromEntries(fields.map((f) => [f, true])))
     if (Object.values(newErrors).some(Boolean)) return
 
     mutation.mutate({
-      type:                form.type,
-      sales_channel_name:  form.sales_channel_name.trim(),
-      max_qty:             form.max_qty !== '' ? Number(form.max_qty) : null,
-      applicable_from:     form.applicable_from || null,
-      applicable_to:       form.applicable_to || null,
-      description:         form.description.trim() || null,
-      status:              form.status || null,
+      type:               form.type,
+      sales_channel_name: form.sales_channel_name.trim(),
+      max_qty:            form.max_qty !== '' ? Number(form.max_qty) : null,
+      applicable_from:    form.applicable_from || null,
+      applicable_to:      form.applicable_to   || null,
+      description:        form.description.trim() || null,
+      status:             form.status || null,
     })
   }
 
@@ -172,7 +162,7 @@ export default function SalesChannelFormPage() {
     <div className="w-full">
       <Breadcrumb crumbs={crumbs} />
 
-      <div className="mb-3">
+      <div className="mb-2">
         <h1 className="text-xl font-bold text-slate-800">
           {isEditing ? 'Edit Sales Channel' : 'New Sales Channel'}
         </h1>
@@ -180,133 +170,131 @@ export default function SalesChannelFormPage() {
 
       <form onSubmit={handleSubmit} noValidate>
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-
-          {/* Section header */}
-          <div className="border-b border-slate-100 bg-slate-50 px-4 py-2">
+          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Channel Details</h2>
           </div>
 
-          <div className="space-y-3 p-4">
+          {/* 2-column grid: fields left, description right */}
+          <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2">
 
-            {/* Row 1: Type | Name | Status */}
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div>
-                <Label required>Channel Type</Label>
-                <select
-                  name="type"
-                  value={form.type}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  className={fieldCls(errors, touched, 'type')}
-                >
-                  <option value="">— Select type —</option>
-                  {CHANNEL_TYPES.map((t) => (
-                    <option key={t} value={t}>{t}</option>
-                  ))}
-                </select>
-                <FieldError errors={errors} touched={touched} name="type" />
+            {/* Left — structured fields */}
+            <div className="space-y-3">
+              {/* Row: Type | Name | Status */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label required>Channel Type</Label>
+                  <select
+                    name="type"
+                    value={form.type}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    className={fieldCls(errors, touched, 'type')}
+                  >
+                    <option value="">— Select —</option>
+                    {CHANNEL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <FieldError errors={errors} touched={touched} name="type" />
+                </div>
+                <div>
+                  <Label required>Channel Name</Label>
+                  <input
+                    ref={nameRef}
+                    name="sales_channel_name"
+                    type="text"
+                    value={form.sales_channel_name}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    placeholder="e.g. Main Retail Store"
+                    maxLength={100}
+                    autoComplete="off"
+                    className={fieldCls(errors, touched, 'sales_channel_name')}
+                  />
+                  <FieldError errors={errors} touched={touched} name="sales_channel_name" />
+                </div>
+                <div>
+                  <Label>Status</Label>
+                  <select
+                    name="status"
+                    value={form.status}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    className={fieldCls(errors, touched, 'status')}
+                  >
+                    <option value="">— Select —</option>
+                    {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <FieldError errors={errors} touched={touched} name="status" />
+                </div>
               </div>
 
-              <div>
-                <Label required>Sales Channel Name</Label>
-                <input
-                  ref={nameRef}
-                  name="sales_channel_name"
-                  type="text"
-                  value={form.sales_channel_name}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  placeholder="e.g. Main Retail Store"
-                  maxLength={100}
-                  autoComplete="off"
-                  className={fieldCls(errors, touched, 'sales_channel_name')}
-                />
-                <FieldError errors={errors} touched={touched} name="sales_channel_name" />
-              </div>
-
-              <div>
-                <Label>Status</Label>
-                <select
-                  name="status"
-                  value={form.status}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  className={fieldCls(errors, touched, 'status')}
-                >
-                  <option value="">— Select status —</option>
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>{s}</option>
-                  ))}
-                </select>
-                <FieldError errors={errors} touched={touched} name="status" />
-              </div>
-            </div>
-
-            {/* Row 2: Max Qty | Applicable From | Applicable To */}
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              <div>
-                <Label>Max Quantity</Label>
-                <input
-                  name="max_qty"
-                  type="number"
-                  min="0"
-                  step="any"
-                  value={form.max_qty}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  placeholder="e.g. 1000"
-                  className={fieldCls(errors, touched, 'max_qty')}
-                />
-                <FieldError errors={errors} touched={touched} name="max_qty" />
-              </div>
-
-              <div>
-                <Label>Applicable From</Label>
-                <input
-                  name="applicable_from"
-                  type="date"
-                  value={form.applicable_from}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  className={fieldCls(errors, touched, 'applicable_from')}
-                />
-                <FieldError errors={errors} touched={touched} name="applicable_from" />
-              </div>
-
-              <div>
-                <Label>Applicable To</Label>
-                <input
-                  name="applicable_to"
-                  type="date"
-                  value={form.applicable_to}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  className={fieldCls(errors, touched, 'applicable_to')}
-                />
-                <FieldError errors={errors} touched={touched} name="applicable_to" />
+              {/* Row: Max Qty | Applicable From | Applicable To */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label>Max Quantity</Label>
+                  <input
+                    name="max_qty"
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={form.max_qty}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    placeholder="e.g. 1000"
+                    className={fieldCls(errors, touched, 'max_qty')}
+                  />
+                  <FieldError errors={errors} touched={touched} name="max_qty" />
+                </div>
+                <div>
+                  <Label>Applicable From</Label>
+                  <input
+                    name="applicable_from"
+                    type="date"
+                    value={form.applicable_from}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    className={fieldCls(errors, touched, 'applicable_from')}
+                  />
+                  <FieldError errors={errors} touched={touched} name="applicable_from" />
+                </div>
+                <div>
+                  <Label>Applicable To</Label>
+                  <input
+                    name="applicable_to"
+                    type="date"
+                    value={form.applicable_to}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    className={fieldCls(errors, touched, 'applicable_to')}
+                  />
+                  <FieldError errors={errors} touched={touched} name="applicable_to" />
+                </div>
               </div>
             </div>
 
-            {/* Row 3: Description */}
-            <div>
+            {/* Right — description */}
+            <div className="flex flex-col">
               <Label>Description</Label>
-              <textarea
-                name="description"
-                rows={2}
-                value={form.description}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                maxLength={255}
-                placeholder="Optional notes about this channel…"
-                className={`${fieldCls(errors, touched, 'description')} resize-none`}
-              />
+              <div className="relative flex-1">
+                <textarea
+                  name="description"
+                  rows={5}
+                  value={form.description}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  maxLength={255}
+                  placeholder="Optional notes about this channel…"
+                  className={`${fieldCls(errors, touched, 'description')} h-full min-h-24 resize-none pb-5`}
+                />
+                <span className="absolute bottom-1.5 right-2 text-[10px] text-slate-400">
+                  {form.description.length}/255
+                </span>
+              </div>
               <FieldError errors={errors} touched={touched} name="description" />
             </div>
-
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-2.5">
+          <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-2">
             <Link
               to="/inventory/sales-channels"
               className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"

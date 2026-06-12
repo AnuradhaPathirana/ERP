@@ -579,118 +579,129 @@ export default function ProductFormPage() {
 
       <form onSubmit={handleSubmit} noValidate className="space-y-2.5">
 
-        {/* ── Basic Information ── */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Basic Information</h2>
-          </div>
-          <div className="space-y-2.5 p-3">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-              <Field label="Product Code" required error={e.product_code} touched={t.product_code}>
-                <Input name="product_code" value={f.product_code} onChange={handleChange} onBlur={handleBlur}
-                  error={e.product_code} touched={t.product_code} placeholder="e.g. PRD-0001" maxLength={50} />
-              </Field>
-              <Field label="Reference No" error={e.reference_no} touched={t.reference_no}>
-                <Input name="reference_no" value={f.reference_no} onChange={handleChange} onBlur={handleBlur}
-                  error={e.reference_no} touched={t.reference_no} placeholder="Supplier / internal ref" maxLength={50} />
-              </Field>
-              <Field label="EAN / Barcode" error={e.ean_13} touched={t.ean_13}>
-                <Input name="ean_13" value={f.ean_13} onChange={handleChange} onBlur={handleBlur}
-                  error={e.ean_13} touched={t.ean_13} placeholder="EAN-13 barcode" maxLength={50} />
-              </Field>
-              <Field label="Product Type" required error={e.product_type} touched={t.product_type}>
-                <SelectField name="product_type" value={f.product_type} onChange={handleChange} onBlur={handleBlur}
-                  error={e.product_type} touched={t.product_type} options={PRODUCT_TYPES} placeholder="— Select type —" />
-              </Field>
+        {/* ── Top grid: Basic Info (wide) + Supplier & Stock (narrow) ── */}
+        <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
+
+          {/* Basic Information — 2/3 width */}
+          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white lg:col-span-2">
+            <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Basic Information</h2>
             </div>
-
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5">
-              <Field label="Product Name" required error={e.name} touched={t.name}>
-                <Input name="name" value={f.name} onChange={handleChange} onBlur={handleBlur}
-                  error={e.name} touched={t.name} placeholder="Full product name" maxLength={100} />
-              </Field>
-              <Field label="Display Name" required error={e.display_name} touched={t.display_name}>
-                <Input name="display_name" value={f.display_name} onChange={handleChange} onBlur={handleBlur}
-                  error={e.display_name} touched={t.display_name} placeholder="Short / POS name" maxLength={100} />
-              </Field>
-              <Field label="Category" error={e.category} touched={t.category}>
-                <Input name="category" value={f.category} onChange={handleChange} onBlur={handleBlur}
-                  error={e.category} touched={t.category} placeholder="e.g. Electronics" maxLength={100} />
-              </Field>
-              <Field label="Location" error={e.location} touched={t.location}>
-                <Input name="location" value={f.location} onChange={handleChange} onBlur={handleBlur}
-                  error={e.location} touched={t.location} placeholder="Warehouse / shelf" maxLength={100} />
-              </Field>
-            </div>
-
-            <Field label="Description">
-              <textarea name="description" value={f.description} onChange={handleChange} rows={2}
-                placeholder="Optional product description…"
-                className="block w-full resize-none rounded border border-slate-300 px-2 py-1 text-sm text-slate-800 placeholder-slate-300 outline-none transition-all focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30" />
-            </Field>
-          </div>
-        </section>
-
-        {/* ── Supplier ── */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Supplier <span className="text-red-500">*</span>
-            </h2>
-          </div>
-          <div className="p-3">
-            {e.supplier_ids && t.supplier_ids && (
-              <p className="mb-1.5 text-xs text-red-600">{e.supplier_ids}</p>
-            )}
-            {suppliers.length === 0 ? (
-              <p className="text-xs italic text-slate-400">No suppliers available.</p>
-            ) : (
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-1.5">
-                {suppliers.map((s) => (
-                  <label key={s.id} className="flex cursor-pointer items-center gap-1.5">
-                    <input type="checkbox" checked={f.supplier_ids.includes(s.id)}
-                      onChange={() => toggleSupplier(s.id)}
-                      className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0" />
-                    <span className="truncate text-xs text-slate-700" title={s.name}>{s.name}</span>
-                  </label>
-                ))}
+            <div className="space-y-2 p-3">
+              <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+                <Field label="Product Code" required error={e.product_code} touched={t.product_code}>
+                  <Input name="product_code" value={f.product_code} onChange={handleChange} onBlur={handleBlur}
+                    error={e.product_code} touched={t.product_code} placeholder="e.g. PRD-0001" maxLength={50} />
+                </Field>
+                <Field label="Reference No" error={e.reference_no} touched={t.reference_no}>
+                  <Input name="reference_no" value={f.reference_no} onChange={handleChange} onBlur={handleBlur}
+                    error={e.reference_no} touched={t.reference_no} placeholder="Supplier / internal ref" maxLength={50} />
+                </Field>
+                <Field label="EAN / Barcode" error={e.ean_13} touched={t.ean_13}>
+                  <Input name="ean_13" value={f.ean_13} onChange={handleChange} onBlur={handleBlur}
+                    error={e.ean_13} touched={t.ean_13} placeholder="EAN-13 barcode" maxLength={50} />
+                </Field>
+                <Field label="Product Type" required error={e.product_type} touched={t.product_type}>
+                  <SelectField name="product_type" value={f.product_type} onChange={handleChange} onBlur={handleBlur}
+                    error={e.product_type} touched={t.product_type} options={PRODUCT_TYPES} placeholder="— Select type —" />
+                </Field>
               </div>
-            )}
-          </div>
-        </section>
 
-        {/* ── Stock & Reorder Settings ── */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Stock &amp; Reorder Settings</h2>
-          </div>
-          <div className="p-3">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
-              <Field label="Reorder Level" error={e.reorder_level} touched={t.reorder_level}>
-                <Input name="reorder_level" value={f.reorder_level} onChange={handleChange} onBlur={handleBlur}
-                  error={e.reorder_level} touched={t.reorder_level} type="number" min="0" step="0.0001" placeholder="0.0000" />
-              </Field>
-              <Field label="Reorder Qty" error={e.reorder_qty} touched={t.reorder_qty}>
-                <Input name="reorder_qty" value={f.reorder_qty} onChange={handleChange} onBlur={handleBlur}
-                  error={e.reorder_qty} touched={t.reorder_qty} type="number" min="0" step="0.0001" placeholder="0.0000" />
-              </Field>
-              <Field label="Reorder Period">
-                <SelectField name="reorder_period" value={f.reorder_period} onChange={handleChange} onBlur={handleBlur}
-                  options={REORDER_PERIODS} placeholder="— Select —" />
-              </Field>
-              <Field label="Stock Method">
-                <SelectField name="stock_releasing_method" value={f.stock_releasing_method} onChange={handleChange} onBlur={handleBlur}
-                  options={STOCK_METHODS} placeholder="— Select —" />
-              </Field>
-              <Field label="Tracking Type">
-                <SelectField name="tracking_type" value={f.tracking_type} onChange={handleChange} onBlur={handleBlur}
-                  options={TRACKING_TYPES} placeholder="— None —" />
+              <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+                <Field label="Product Name" required error={e.name} touched={t.name}>
+                  <Input name="name" value={f.name} onChange={handleChange} onBlur={handleBlur}
+                    error={e.name} touched={t.name} placeholder="Full product name" maxLength={100} />
+                </Field>
+                <Field label="Display Name" required error={e.display_name} touched={t.display_name}>
+                  <Input name="display_name" value={f.display_name} onChange={handleChange} onBlur={handleBlur}
+                    error={e.display_name} touched={t.display_name} placeholder="Short / POS name" maxLength={100} />
+                </Field>
+                <Field label="Category" error={e.category} touched={t.category}>
+                  <Input name="category" value={f.category} onChange={handleChange} onBlur={handleBlur}
+                    error={e.category} touched={t.category} placeholder="e.g. Electronics" maxLength={100} />
+                </Field>
+                <Field label="Location" error={e.location} touched={t.location}>
+                  <Input name="location" value={f.location} onChange={handleChange} onBlur={handleBlur}
+                    error={e.location} touched={t.location} placeholder="Warehouse / shelf" maxLength={100} />
+                </Field>
+              </div>
+
+              <Field label="Description">
+                <textarea name="description" value={f.description} onChange={handleChange} rows={2}
+                  placeholder="Optional product description…"
+                  className="block w-full resize-none rounded border border-slate-300 px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition-all focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30" />
               </Field>
             </div>
-          </div>
-        </section>
+          </section>
 
-        {/* ── Cost Details ── */}
+          {/* Right column: Supplier + Stock & Reorder — 1/3 width */}
+          <div className="space-y-2.5">
+
+            {/* Supplier */}
+            <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                  Supplier <span className="text-red-500">*</span>
+                </h2>
+              </div>
+              <div className="p-3">
+                {e.supplier_ids && t.supplier_ids && (
+                  <p className="mb-1.5 text-xs text-red-600">{e.supplier_ids}</p>
+                )}
+                {suppliers.length === 0 ? (
+                  <p className="text-xs italic text-slate-400">No suppliers available.</p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-y-1.5">
+                    {suppliers.map((s) => (
+                      <label key={s.id} className="flex cursor-pointer items-center gap-1.5">
+                        <input type="checkbox" checked={f.supplier_ids.includes(s.id)}
+                          onChange={() => toggleSupplier(s.id)}
+                          className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0" />
+                        <span className="truncate text-xs text-slate-700" title={s.name}>{s.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+
+            {/* Stock & Reorder Settings */}
+            <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Stock &amp; Reorder</h2>
+              </div>
+              <div className="space-y-2 p-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Reorder Level" error={e.reorder_level} touched={t.reorder_level}>
+                    <Input name="reorder_level" value={f.reorder_level} onChange={handleChange} onBlur={handleBlur}
+                      error={e.reorder_level} touched={t.reorder_level} type="number" min="0" step="0.0001" placeholder="0.0000" />
+                  </Field>
+                  <Field label="Reorder Qty" error={e.reorder_qty} touched={t.reorder_qty}>
+                    <Input name="reorder_qty" value={f.reorder_qty} onChange={handleChange} onBlur={handleBlur}
+                      error={e.reorder_qty} touched={t.reorder_qty} type="number" min="0" step="0.0001" placeholder="0.0000" />
+                  </Field>
+                </div>
+                <div className="grid grid-cols-1 gap-2">
+                  <Field label="Reorder Period">
+                    <SelectField name="reorder_period" value={f.reorder_period} onChange={handleChange} onBlur={handleBlur}
+                      options={REORDER_PERIODS} placeholder="— Select —" />
+                  </Field>
+                  <Field label="Stock Method">
+                    <SelectField name="stock_releasing_method" value={f.stock_releasing_method} onChange={handleChange} onBlur={handleBlur}
+                      options={STOCK_METHODS} placeholder="— Select —" />
+                  </Field>
+                  <Field label="Tracking Type">
+                    <SelectField name="tracking_type" value={f.tracking_type} onChange={handleChange} onBlur={handleBlur}
+                      options={TRACKING_TYPES} placeholder="— None —" />
+                  </Field>
+                </div>
+              </div>
+            </section>
+
+          </div>
+        </div>
+
+        {/* ── Cost Details — full width ── */}
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Cost Details</h2>
@@ -715,7 +726,6 @@ export default function ProductFormPage() {
               />
             ))}
 
-            {/* Add button */}
             <div className="flex justify-end">
               <button
                 type="button"
@@ -730,12 +740,12 @@ export default function ProductFormPage() {
           </div>
         </section>
 
-        {/* ── Product Options ── */}
+        {/* ── Product Options — full width ── */}
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Product Options</h2>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-x-4 gap-y-2 p-3">
+          <div className="grid grid-cols-3 gap-x-4 gap-y-2 p-3 md:grid-cols-6 lg:grid-cols-11">
             {BOOL_OPTIONS.map(({ key, label }) => (
               <label key={key} className="flex cursor-pointer items-center gap-1.5">
                 <input type="checkbox" checked={f[key]} onChange={() => handleCheck(key)}
@@ -754,11 +764,11 @@ export default function ProductFormPage() {
             </p>
           )}
           <Link to="/inventory/products"
-            className="rounded px-3 py-1.5 text-sm font-medium text-slate-600 transition-colors hover:bg-slate-100">
+            className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100">
             Cancel
           </Link>
           <button type="submit" disabled={mutation.isPending}
-            className="flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
+            className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
             <Save size={13} strokeWidth={2.5} />
             {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Product'}
           </button>

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Inventory\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class SupplierMasterRequest extends FormRequest
 {
@@ -18,20 +19,24 @@ class SupplierMasterRequest extends FormRequest
         return [
             // General
             'supplier_name'             => ['required', 'string', 'max:100'],
-            'supplier_code'             => ['nullable', 'string', 'max:50'],
+            'supplier_code'             => [
+                'required', 'string', 'max:50',
+                Rule::unique('inv_supplier_masters', 'supplier_code')
+                    ->ignore($this->route('supplier_master')),
+            ],
             'reference_no'              => ['nullable', 'string', 'max:50'],
-            'supplier_type'             => ['nullable', 'string', 'max:50'],
-            'check_writer_name'         => ['nullable', 'string', 'max:100'],
+            'supplier_type'             => ['required', 'string', 'max:50'],
+            'check_writer_name'         => ['required', 'string', 'max:100'],
 
             // Contact
-            'mobile'                    => ['nullable', 'string', 'max:20'],
-            'land_line'                 => ['nullable', 'string', 'max:20'],
-            'email'                     => ['nullable', 'email', 'max:100'],
+            'mobile'                    => ['required', 'string', 'max:20'],
+            'land_line'                 => ['required', 'string', 'max:20'],
+            'email'                     => ['required', 'email', 'max:100'],
             'fax'                       => ['nullable', 'string', 'max:20'],
             'website'                   => ['nullable', 'url', 'max:255'],
 
             // Billing address
-            'bil_address_line_1'        => ['nullable', 'string', 'max:100'],
+            'bil_address_line_1'        => ['required', 'string', 'max:100'],
             'bil_address_line_2'        => ['nullable', 'string', 'max:100'],
             'bil_address_line_3'        => ['nullable', 'string', 'max:100'],
             'bil_city'                  => ['nullable', 'string', 'max:50'],
@@ -56,9 +61,9 @@ class SupplierMasterRequest extends FormRequest
             'bank_acc_no'               => ['nullable', 'string', 'max:50'],
 
             // Contact person
-            'contact_person_name'       => ['nullable', 'string', 'max:100'],
+            'contact_person_name'       => ['required', 'string', 'max:100'],
             'contact_person_designation'=> ['nullable', 'string', 'max:100'],
-            'contact_person_mobile'     => ['nullable', 'string', 'max:20'],
+            'contact_person_mobile'     => ['required', 'string', 'max:20'],
             'contact_person_email'      => ['nullable', 'email', 'max:100'],
             'contact_person_fax'        => ['nullable', 'string', 'max:20'],
         ];
