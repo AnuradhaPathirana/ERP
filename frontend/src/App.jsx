@@ -15,6 +15,15 @@ const ProductViewPage          = lazy(() => import('./pages/inventory/ProductVie
 const SalesChannelsPage        = lazy(() => import('./pages/inventory/SalesChannelsPage'))
 const SalesChannelFormPage     = lazy(() => import('./pages/inventory/SalesChannelFormPage'))
 const SalesChannelViewPage     = lazy(() => import('./pages/inventory/SalesChannelViewPage'))
+const IndustriesPage           = lazy(() => import('./pages/inventory/IndustriesPage'))
+const IndustryFormPage         = lazy(() => import('./pages/inventory/IndustryFormPage'))
+const IndustryViewPage         = lazy(() => import('./pages/inventory/IndustryViewPage'))
+const CompaniesPage            = lazy(() => import('./pages/inventory/CompaniesPage'))
+const CompanyFormPage          = lazy(() => import('./pages/inventory/CompanyFormPage'))
+const CompanyViewPage          = lazy(() => import('./pages/inventory/CompanyViewPage'))
+const LocationsPage            = lazy(() => import('./pages/inventory/LocationsPage'))
+const LocationFormPage         = lazy(() => import('./pages/inventory/LocationFormPage'))
+const LocationViewPage         = lazy(() => import('./pages/inventory/LocationViewPage'))
 const SuppliersPage            = lazy(() => import('./pages/inventory/SuppliersPage'))
 const SupplierFormPage         = lazy(() => import('./pages/inventory/SupplierFormPage'))
 const SupplierViewPage         = lazy(() => import('./pages/inventory/SupplierViewPage'))
@@ -63,6 +72,18 @@ export default function App() {
         <Route path="/inventory/sales-channels/create"         element={<Lazy component={SalesChannelFormPage} />} />
         <Route path="/inventory/sales-channels/:id"            element={<Lazy component={SalesChannelViewPage} />} />
         <Route path="/inventory/sales-channels/:id/edit"       element={<Lazy component={SalesChannelFormPage} />} />
+        <Route path="/inventory/industries"                    element={<Lazy component={IndustriesPage} />} />
+        <Route path="/inventory/industries/create"             element={<Lazy component={IndustryFormPage} />} />
+        <Route path="/inventory/industries/:id"                element={<Lazy component={IndustryViewPage} />} />
+        <Route path="/inventory/industries/:id/edit"           element={<Lazy component={IndustryFormPage} />} />
+        <Route path="/inventory/companies"                     element={<Lazy component={CompaniesPage} />} />
+        <Route path="/inventory/companies/create"              element={<Lazy component={CompanyFormPage} />} />
+        <Route path="/inventory/companies/:id"                 element={<Lazy component={CompanyViewPage} />} />
+        <Route path="/inventory/companies/:id/edit"            element={<Lazy component={CompanyFormPage} />} />
+        <Route path="/inventory/locations"                     element={<Lazy component={LocationsPage} />} />
+        <Route path="/inventory/locations/create"              element={<Lazy component={LocationFormPage} />} />
+        <Route path="/inventory/locations/:id"                 element={<Lazy component={LocationViewPage} />} />
+        <Route path="/inventory/locations/:id/edit"            element={<Lazy component={LocationFormPage} />} />
         <Route path="/inventory/suppliers"                     element={<Lazy component={SuppliersPage} />} />
         <Route path="/inventory/suppliers/create"              element={<Lazy component={SupplierFormPage} />} />
         <Route path="/inventory/suppliers/:id"                 element={<Lazy component={SupplierViewPage} />} />

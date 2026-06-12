@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   Box,
+  Building2,
   ChevronLeft,
   ChevronRight,
   DollarSign,
   LayoutDashboard,
   Lock,
+  MapPin,
   Package,
   Ruler,
   ShoppingCart,
@@ -40,8 +42,11 @@ const NAV_ITEMS = [
     moduleKey: 'inventory',
     children: [
       { label: 'Products',        to: '/inventory/products',          icon: Box },
+      { label: 'Companies',       to: '/inventory/companies',         icon: Building2 },
+      { label: 'Locations',       to: '/inventory/locations',         icon: MapPin },
       { label: 'Suppliers',       to: '/inventory/suppliers',         icon: Truck },
       { label: 'Sales Channels',  to: '/inventory/sales-channels',   icon: ShoppingCart },
+      { label: 'Industries',      to: '/inventory/industries',        icon: Building2 },
       { label: 'Unit Categories', to: '/inventory/unit-categories',  icon: Tag },
       { label: 'Unit Types',      to: '/inventory/unit-types',       icon: Ruler },
     ],

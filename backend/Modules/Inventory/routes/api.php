@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
+use Modules\Inventory\Http\Controllers\CompanyController;
+use Modules\Inventory\Http\Controllers\IndustryController;
+use Modules\Inventory\Http\Controllers\LocationController;
 use Modules\Inventory\Http\Controllers\ProductController;
 use Modules\Inventory\Http\Controllers\SalesChannelController;
 use Modules\Inventory\Http\Controllers\SupplierMasterController;
@@ -42,4 +45,19 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
 
     Route::apiResource('sales-channels', SalesChannelController::class)
         ->names('inventory.sales-channels');
+
+    Route::get('industries/all', [IndustryController::class, 'all'])
+        ->name('inventory.industries.all');
+
+    Route::apiResource('industries', IndustryController::class)
+        ->names('inventory.industries');
+
+    Route::apiResource('companies', CompanyController::class)
+        ->names('inventory.companies');
+
+    Route::get('locations/all', [LocationController::class, 'all'])
+        ->name('inventory.locations.all');
+
+    Route::apiResource('locations', LocationController::class)
+        ->names('inventory.locations');
 });
