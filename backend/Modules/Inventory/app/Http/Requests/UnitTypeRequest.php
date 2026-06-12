@@ -19,7 +19,7 @@ class UnitTypeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'unit_category_id' => ['required', 'integer', 'exists:unit_categories,id'],
+            'unit_category_id' => ['required', 'integer', 'exists:inv_unit_categories,id'],
             'name'             => ['required', 'string', 'max:100'],
             'symbol'           => ['required', 'string', 'max:45'],
             'country'          => ['nullable', 'string', 'max:45'],

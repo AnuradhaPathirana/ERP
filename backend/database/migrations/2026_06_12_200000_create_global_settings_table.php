@@ -10,16 +10,16 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('unit_categories', function (Blueprint $table): void {
+        Schema::create('global_settings', function (Blueprint $table): void {
             $table->id();
-            $table->string('name', 100);
-            $table->string('description', 255)->nullable();
+            $table->string('key', 100)->unique();
+            $table->text('value')->nullable();
             $table->timestamps();
         });
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('unit_categories');
+        Schema::dropIfExists('global_settings');
     }
 };

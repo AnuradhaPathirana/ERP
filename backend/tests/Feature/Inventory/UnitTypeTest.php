@@ -4,11 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Inventory;
 
-use App\Http\Middleware\InitializeTenancyByUser;
-use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Artisan;
 use Modules\Inventory\Enums\UnitPosition;
 use Modules\Inventory\Models\UnitCategory;
 use Modules\Inventory\Models\UnitType;
@@ -21,28 +18,11 @@ class UnitTypeTest extends TestCase
     private User $user;
     private UnitCategory $category;
 
-    /**
-     * Runs after RefreshDatabase restores the PDO snapshot but BEFORE the per-test
-     * transaction starts, so tenant table DDL is not rolled back with test data.
-     */
-    protected function afterRefreshingDatabase(): void
-    {
-        Artisan::call('migrate', [
-            '--path'  => 'database/migrations/tenant',
-            '--force' => true,
-        ]);
-    }
-
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->withoutMiddleware(InitializeTenancyByUser::class);
-
-        Tenant::withoutEvents(fn () => Tenant::create(['id' => 'test-tenant']));
-
         $this->user = User::factory()->create([
-            'tenant_id'      => 'test-tenant',
             'active_modules' => ['inventory'],
         ]);
 
@@ -95,7 +75,7 @@ class UnitTypeTest extends TestCase
             ->assertJsonPath('data.unit_position', 'suffix')
             ->assertJsonPath('data.category.name', 'Weight');
 
-        $this->assertDatabaseHas('unit_types', ['name' => 'Kilogram', 'symbol' => 'kg']);
+        $this->assertDatabaseHas('inv_unit_types', ['name' => 'Kilogram', 'symbol' => 'kg']);
     }
 
     public function test_store_requires_category_id(): void
@@ -193,7 +173,7 @@ class UnitTypeTest extends TestCase
             ->assertJsonPath('data.name', 'Gram')
             ->assertJsonPath('data.symbol', 'g');
 
-        $this->assertDatabaseHas('unit_types', ['id' => $unitType->id, 'name' => 'Gram']);
+        $this->assertDatabaseHas('inv_unit_types', ['id' => $unitType->id, 'name' => 'Gram']);
     }
 
     public function test_update_can_change_category(): void
@@ -221,6 +201,6 @@ class UnitTypeTest extends TestCase
             ->deleteJson("/api/v1/unit-types/{$unitType->id}")
             ->assertNoContent();
 
-        $this->assertDatabaseMissing('unit_types', ['id' => $unitType->id]);
+        $this->assertDatabaseMissing('inv_unit_types', ['id' => $unitType->id]);
     }
 }

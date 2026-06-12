@@ -12,7 +12,7 @@ use Illuminate\Support\Facades\Hash;
 class AuthService
 {
     /**
-     * @return array{token: string, tenant_id: string|null, active_modules: list<string>}
+     * @return array{token: string, active_modules: list<string>}
      * @throws AuthenticationException
      */
     public function login(LoginData $data): array
@@ -26,9 +26,9 @@ class AuthService
         $token = $user->createToken('api-token')->plainTextToken;
 
         return [
-            'token' => $token,
-            'tenant_id' => $user->tenant_id,
-            'active_modules' => $user->active_modules ?? ['inventory'],
+            'token'          => $token,
+            'active_modules' => $user->active_modules ?? [],
+            'roles'          => $user->getRoleNames()->values()->all(),
         ];
     }
 }

@@ -10,13 +10,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('unit_conversions', function (Blueprint $table): void {
+        Schema::create('inv_unit_conversions', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('from_unit_type_id')
-                ->constrained('unit_types')
+                ->constrained('inv_unit_types')
                 ->restrictOnDelete();
             $table->foreignId('to_unit_type_id')
-                ->constrained('unit_types')
+                ->constrained('inv_unit_types')
                 ->restrictOnDelete();
             $table->decimal('multiplier', 20, 10);
             $table->timestamps();
@@ -27,6 +27,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('unit_conversions');
+        Schema::dropIfExists('inv_unit_conversions');
     }
 };

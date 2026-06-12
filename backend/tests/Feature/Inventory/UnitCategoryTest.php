@@ -4,11 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Inventory;
 
-use App\Http\Middleware\InitializeTenancyByUser;
-use App\Models\Tenant;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Artisan;
 use Modules\Inventory\Models\UnitCategory;
 use Tests\TestCase;
 
@@ -18,29 +15,11 @@ class UnitCategoryTest extends TestCase
 
     private User $user;
 
-    /**
-     * Runs after RefreshDatabase restores the PDO snapshot but BEFORE the per-test
-     * transaction starts. This ensures tenant tables exist even though they are not
-     * part of the central migrations that are snapshotted by RefreshDatabase.
-     */
-    protected function afterRefreshingDatabase(): void
-    {
-        Artisan::call('migrate', [
-            '--path'  => 'database/migrations/tenant',
-            '--force' => true,
-        ]);
-    }
-
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->withoutMiddleware(InitializeTenancyByUser::class);
-
-        Tenant::withoutEvents(fn () => Tenant::create(['id' => 'test-tenant']));
-
         $this->user = User::factory()->create([
-            'tenant_id'      => 'test-tenant',
             'active_modules' => ['inventory'],
         ]);
     }
@@ -93,7 +72,7 @@ class UnitCategoryTest extends TestCase
             ->assertJsonPath('data.name', 'Weight')
             ->assertJsonPath('data.description', 'Measures of mass');
 
-        $this->assertDatabaseHas('unit_categories', ['name' => 'Weight']);
+        $this->assertDatabaseHas('inv_unit_categories', ['name' => 'Weight']);
     }
 
     public function test_store_accepts_null_description(): void
@@ -166,7 +145,7 @@ class UnitCategoryTest extends TestCase
             ->assertJsonPath('data.name', 'New')
             ->assertJsonPath('data.description', 'After');
 
-        $this->assertDatabaseHas('unit_categories', ['id' => $category->id, 'name' => 'New']);
+        $this->assertDatabaseHas('inv_unit_categories', ['id' => $category->id, 'name' => 'New']);
     }
 
     public function test_update_requires_name(): void
@@ -189,7 +168,7 @@ class UnitCategoryTest extends TestCase
             ->deleteJson("/api/v1/unit-categories/{$category->id}")
             ->assertNoContent();
 
-        $this->assertDatabaseMissing('unit_categories', ['id' => $category->id]);
+        $this->assertDatabaseMissing('inv_unit_categories', ['id' => $category->id]);
     }
 
     public function test_destroy_returns_404_for_missing_category(): void

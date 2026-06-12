@@ -15,6 +15,8 @@ class UnitType extends Model
 {
     use HasFactory;
 
+    protected $table = 'inv_unit_types';
+
     protected $fillable = [
         'unit_category_id',
         'name',

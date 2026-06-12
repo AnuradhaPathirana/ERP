@@ -11,14 +11,14 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table): void {
-            $table->string('tenant_id')->nullable()->after('id')->index();
+            $table->string('role', 20)->default('staff')->after('email');
         });
     }
 
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table): void {
-            $table->dropColumn('tenant_id');
+            $table->dropColumn('role');
         });
     }
 };

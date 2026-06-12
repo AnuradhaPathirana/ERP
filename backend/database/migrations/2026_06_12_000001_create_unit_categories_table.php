@@ -10,15 +10,16 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('users', function (Blueprint $table): void {
-            $table->json('active_modules')->nullable()->after('password');
+        Schema::create('inv_unit_categories', function (Blueprint $table): void {
+            $table->id();
+            $table->string('name', 100);
+            $table->string('description', 255)->nullable();
+            $table->timestamps();
         });
     }
 
     public function down(): void
     {
-        Schema::table('users', function (Blueprint $table): void {
-            $table->dropColumn('active_modules');
-        });
+        Schema::dropIfExists('inv_unit_categories');
     }
 };

@@ -10,10 +10,10 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('unit_types', function (Blueprint $table): void {
+        Schema::create('inv_unit_types', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('unit_category_id')
-                ->constrained('unit_categories')
+                ->constrained('inv_unit_categories')
                 ->restrictOnDelete();
             $table->string('name', 100);
             $table->string('symbol', 45);
@@ -25,6 +25,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('unit_types');
+        Schema::dropIfExists('inv_unit_types');
     }
 };

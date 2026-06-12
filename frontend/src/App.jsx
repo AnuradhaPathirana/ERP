@@ -9,6 +9,7 @@ const UnitCategoriesPage    = lazy(() => import('./pages/inventory/UnitCategorie
 const UnitCategoryFormPage  = lazy(() => import('./pages/inventory/UnitCategoryFormPage'))
 const UnitTypesPage         = lazy(() => import('./pages/inventory/UnitTypesPage'))
 const UnitTypeFormPage      = lazy(() => import('./pages/inventory/UnitTypeFormPage'))
+const UserManagementPage    = lazy(() => import('./pages/admin/UserManagementPage'))
 
 function PageLoader() {
   return (
@@ -34,7 +35,8 @@ export default function App() {
 
       {/* Protected shell */}
       <Route element={<Layout />}>
-        <Route path="/dashboard" element={<Lazy component={DashboardPage} />} />
+        <Route path="/dashboard"    element={<Lazy component={DashboardPage} />} />
+        <Route path="/admin/users" element={<Lazy component={UserManagementPage} />} />
 
         {/* Inventory module — only its own chunk is downloaded */}
         <Route path="/inventory" element={<Navigate to="/inventory/unit-categories" replace />} />

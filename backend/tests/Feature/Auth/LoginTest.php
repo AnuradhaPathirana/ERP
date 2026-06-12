@@ -7,7 +7,6 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
-use App\Models\Tenant;
 use Tests\TestCase;
 
 class LoginTest extends TestCase
@@ -15,19 +14,14 @@ class LoginTest extends TestCase
     use RefreshDatabase;
 
     private User $user;
-    private string $tenantId = 'test-tenant-001';
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        // Create tenant without triggering the CreateDatabase job
-        Tenant::withoutEvents(fn () => Tenant::create(['id' => $this->tenantId]));
-
         $this->user = User::factory()->create([
             'email' => 'admin@example.com',
             'password' => Hash::make('secret123'),
-            'tenant_id' => $this->tenantId,
         ]);
     }
 
@@ -39,8 +33,7 @@ class LoginTest extends TestCase
         ]);
 
         $response->assertOk()
-            ->assertJsonStructure(['token', 'tenant_id', 'active_modules'])
-            ->assertJsonFragment(['tenant_id' => $this->tenantId]);
+            ->assertJsonStructure(['token', 'active_modules']);
     }
 
     public function test_login_response_includes_active_modules_array(): void
@@ -70,7 +63,6 @@ class LoginTest extends TestCase
 
     public function test_login_defaults_to_inventory_module_when_active_modules_is_null(): void
     {
-        // User created in setUp has no active_modules (null)
         $response = $this->postJson('/api/login', [
             'email' => 'admin@example.com',
             'password' => 'secret123',

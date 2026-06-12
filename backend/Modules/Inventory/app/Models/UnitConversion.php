@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class UnitConversion extends Model
 {
+    protected $table = 'inv_unit_conversions';
+
     protected $fillable = [
         'from_unit_type_id',
         'to_unit_type_id',

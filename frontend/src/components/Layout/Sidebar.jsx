@@ -1,37 +1,57 @@
-import { useEffect, useState } from 'react'
-import { NavLink, useLocation, useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   DollarSign,
   LayoutDashboard,
   Lock,
   Package,
+  Ruler,
+  Tag,
+  UserCog,
   Users,
   X,
 } from 'lucide-react'
 import UpgradeModal from './UpgradeModal'
 
+// ── Nav definition ─────────────────────────────────────────────────────────
+// moduleKey  → guarded by active_modules in localStorage
+// roleGuard  → guarded by user_roles in localStorage (array: any match grants access)
+// children   → renders as a section header with always-visible child links
 const NAV_ITEMS = [
   {
     label: 'Dashboard',
     to: '/dashboard',
     icon: LayoutDashboard,
-    moduleKey: null,
+  },
+  {
+    label: 'Team Management',
+    to: '/admin/users',
+    icon: UserCog,
+    roleGuard: ['super_admin', 'client_admin'],
   },
   {
     label: 'Inventory',
-    to: '/inventory',
     icon: Package,
     moduleKey: 'inventory',
     children: [
-      { label: 'Unit Categories', to: '/inventory/unit-categories' },
-      { label: 'Unit Types',      to: '/inventory/unit-types' },
+      { label: 'Unit Categories', to: '/inventory/unit-categories', icon: Tag },
+      { label: 'Unit Types',      to: '/inventory/unit-types',      icon: Ruler },
     ],
   },
-  { label: 'Finance', to: '/finance', icon: DollarSign, moduleKey: 'finance' },
-  { label: 'HR',      to: '/hr',      icon: Users,      moduleKey: 'hr' },
+  {
+    label: 'Finance',
+    icon: DollarSign,
+    moduleKey: 'finance',
+    children: [],
+  },
+  {
+    label: 'HR',
+    icon: Users,
+    moduleKey: 'hr',
+    children: [],
+  },
 ]
 
 function readActiveModules() {
@@ -43,27 +63,21 @@ function readActiveModules() {
   }
 }
 
+function readUserRoles() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('user_roles') ?? '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClose }) {
   const activeModules = readActiveModules()
-  const { pathname }  = useLocation()
+  const userRoles     = readUserRoles()
   const navigate      = useNavigate()
 
-  const [lockedModule,   setLockedModule]   = useState(null)
-  const [expandedLabel,  setExpandedLabel]  = useState(() => {
-    // Pre-expand the parent whose child matches the initial path
-    const match = NAV_ITEMS.find(item =>
-      item.children?.some(c => pathname.startsWith(c.to))
-    )
-    return match?.label ?? null
-  })
-
-  // Auto-expand parent when navigating to a child route
-  useEffect(() => {
-    const match = NAV_ITEMS.find(item =>
-      item.children?.some(c => pathname.startsWith(c.to))
-    )
-    if (match) setExpandedLabel(match.label)
-  }, [pathname])
+  const [lockedModule, setLockedModule] = useState(null)
 
   return (
     <>
@@ -106,126 +120,152 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
         </div>
 
         {/* ── Navigation ── */}
-        <nav className="flex-1 space-y-0.5 overflow-y-auto px-2 py-4">
+        <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1">
           {NAV_ITEMS.map((item) => {
-            const { label, to, icon: Icon, moduleKey, children } = item
-            const isUnlocked    = moduleKey === null || activeModules.includes(moduleKey)
-            const isParentActive = pathname === to || pathname.startsWith(to + '/')
-            const isExpanded    = expandedLabel === label
+            const { label, to, icon: Icon, moduleKey, roleGuard, children } = item
 
-            if (!isUnlocked) {
-              // Locked module — lock icon, opens upgrade modal
+            // ── Role-gated standalone link (e.g. Team Management) ──
+            if (roleGuard) {
+              const hasAccess = roleGuard.some((r) => userRoles.includes(r))
+              if (!hasAccess) return null
+
               return (
-                <button
+                <NavLink
                   key={label}
-                  type="button"
-                  title={collapsed ? `${label} (locked)` : undefined}
-                  onClick={() => setLockedModule(item)}
-                  className={[
-                    'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium',
-                    'text-slate-500 hover:bg-slate-800/60 hover:text-slate-300 transition-colors duration-150',
-                    collapsed ? 'justify-center' : '',
-                  ].join(' ')}
+                  to={to}
+                  title={collapsed ? label : undefined}
+                  className={({ isActive }) =>
+                    [
+                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150',
+                      collapsed ? 'justify-center' : '',
+                      isActive
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+                    ].join(' ')
+                  }
                 >
                   <Icon size={20} className="shrink-0" />
-                  {!collapsed && (
-                    <>
-                      <span className="flex-1 text-left">{label}</span>
-                      <Lock size={14} className="shrink-0 text-slate-600" />
-                    </>
-                  )}
-                </button>
+                  {!collapsed && <span>{label}</span>}
+                </NavLink>
               )
             }
 
-            if (children?.length) {
-              // Unlocked parent with submenu
+            // ── Standard standalone link (no guard) ──
+            if (!moduleKey) {
+              return (
+                <NavLink
+                  key={label}
+                  to={to}
+                  title={collapsed ? label : undefined}
+                  className={({ isActive }) =>
+                    [
+                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150',
+                      collapsed ? 'justify-center' : '',
+                      isActive
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+                    ].join(' ')
+                  }
+                >
+                  <Icon size={20} className="shrink-0" />
+                  {!collapsed && <span>{label}</span>}
+                </NavLink>
+              )
+            }
+
+            const isUnlocked = activeModules.includes(moduleKey)
+
+            // ── Locked module ──
+            if (!isUnlocked) {
               return (
                 <div key={label}>
                   <button
                     type="button"
-                    title={collapsed ? label : undefined}
-                    onClick={() => {
-                      navigate(to)
-                      // Always expand when clicking; collapse only via chevron
-                      if (!isExpanded) setExpandedLabel(label)
-                    }}
+                    title={collapsed ? `${label} (locked)` : undefined}
+                    onClick={() => setLockedModule(item)}
                     className={[
-                      'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150',
+                      'flex w-full items-center gap-3 rounded-lg px-3 py-2 text-xs font-semibold uppercase tracking-wider',
+                      'text-slate-600 hover:text-slate-400 transition-colors duration-150',
                       collapsed ? 'justify-center' : '',
-                      isParentActive
-                        ? 'bg-indigo-600 text-white'
-                        : 'text-slate-400 hover:bg-slate-800 hover:text-white',
                     ].join(' ')}
                   >
-                    <Icon size={20} className="shrink-0" />
+                    <Icon size={18} className="shrink-0" />
                     {!collapsed && (
                       <>
                         <span className="flex-1 text-left">{label}</span>
-                        {/* Chevron toggles submenu without triggering parent navigate */}
-                        <span
-                          role="button"
-                          aria-label={isExpanded ? 'Collapse' : 'Expand'}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setExpandedLabel(prev => prev === label ? null : label)
-                          }}
-                          className="rounded p-0.5 hover:bg-white/10"
-                        >
-                          <ChevronDown
-                            size={14}
-                            className={`transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
-                          />
-                        </span>
+                        <Lock size={12} className="shrink-0" />
                       </>
                     )}
                   </button>
-
-                  {/* Submenu */}
-                  {!collapsed && isExpanded && (
-                    <div className="ml-3 mt-0.5 space-y-0.5 border-l border-slate-700/50 pl-3">
-                      {children.map(({ label: childLabel, to: childTo }) => (
-                        <NavLink
-                          key={childLabel}
-                          to={childTo}
-                          className={({ isActive }) =>
-                            [
-                              'flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors duration-150',
-                              isActive
-                                ? 'text-white font-medium'
-                                : 'text-slate-400 hover:text-white',
-                            ].join(' ')
-                          }
-                        >
-                          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
-                          {childLabel}
-                        </NavLink>
-                      ))}
-                    </div>
-                  )}
                 </div>
               )
             }
 
-            // Standard unlocked item (no children)
+            // ── Unlocked module — section header + always-visible children ──
             return (
-              <NavLink
-                key={label}
-                to={to}
-                title={collapsed ? label : undefined}
-                className={({ isActive }) =>
-                  [
-                    'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150',
-                    collapsed ? 'justify-center' : '',
-                    isActive
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-slate-400 hover:bg-slate-800 hover:text-white',
-                  ].join(' ')
-                }
-              >
-                <Icon size={20} className="shrink-0" />
-                {!collapsed && <span>{label}</span>}
-              </NavLink>
+              <div key={label} className="pt-2 first:pt-0">
+                {collapsed ? (
+                  <button
+                    type="button"
+                    title={label}
+                    onClick={() => children?.[0] && navigate(children[0].to)}
+                    className="flex w-full justify-center rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-800 hover:text-slate-300 transition-colors duration-150"
+                  >
+                    <Icon size={18} className="shrink-0" />
+                  </button>
+                ) : (
+                  <div className="flex items-center gap-2 px-3 pb-1">
+                    <Icon size={14} className="shrink-0 text-slate-500" />
+                    <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      {label}
+                    </span>
+                  </div>
+                )}
+
+                {/* Children — always visible when expanded */}
+                {!collapsed && children?.map(({ label: cl, to: ct, icon: CI }) => (
+                  <NavLink
+                    key={cl}
+                    to={ct}
+                    className={({ isActive }) =>
+                      [
+                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-150',
+                        isActive
+                          ? 'bg-indigo-600/20 text-indigo-400 font-medium'
+                          : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+                      ].join(' ')
+                    }
+                  >
+                    {CI
+                      ? <CI size={16} className="shrink-0" />
+                      : <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
+                    }
+                    <span>{cl}</span>
+                  </NavLink>
+                ))}
+
+                {/* Collapsed: show each child icon */}
+                {collapsed && children?.map(({ label: cl, to: ct, icon: CI }) => (
+                  <NavLink
+                    key={cl}
+                    to={ct}
+                    title={cl}
+                    className={({ isActive }) =>
+                      [
+                        'flex w-full justify-center rounded-lg px-3 py-2 transition-colors duration-150',
+                        isActive
+                          ? 'text-indigo-400'
+                          : 'text-slate-500 hover:bg-slate-800 hover:text-white',
+                      ].join(' ')
+                    }
+                  >
+                    {CI
+                      ? <CI size={16} className="shrink-0" />
+                      : <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />
+                    }
+                  </NavLink>
+                ))}
+              </div>
             )
           })}
         </nav>

@@ -1,10 +1,13 @@
-# 🏛️ Architecture Rules
+# 🏛️ Architecture Rules (Single-Tenant Modular Monolith)
 
-Act as an expert Full-Stack Software Engineer. We are building a multi-tenant SaaS ERP.
-Backend: Laravel 11 (API only). We are using stancl/tenancy for Database-per-Tenant multi-tenancy. We are using nWidart/laravel-modules for a Modular Monolith architecture.
-Frontend: React (Vite) as a separate Single Page Application (SPA).
-Auth: Token-based (Laravel Sanctum or JWT).
-Rule: Never mix tenant data with central data. Never tightly couple modules (Inventory, HR). Always write strict, strongly-typed PHP code using Services and Data Transfer Objects (DTOs).
+- **Deployment:** Single-tenant. One deployed server and ONE single database per client.
+- **NO `stancl/tenancy`:** We are using standard Laravel authentication.
+- **Modularity:** Strictly use `nWidart/laravel-modules`. We sell modules (Inventory, Finance) separately by toggling them via `.env` variables (e.g., `MODULE_INVENTORY_ENABLED=true`).
+- **Database:** All modules share ONE database. Use table prefixes (e.g., `inv_products`, `fin_invoices`).
+- **The Golden Rule for Migrations:** NEVER use hard Database Foreign Keys across module boundaries. Only use soft links (e.g., integer `reference_id` and string `reference_type`) so modules can operate 100% independently if another module is disabled.
+- **Modularity Toggles:** Module entitlements (Inventory, Finance) are controlled by a global_settings database table, NOT the .env file. These settings are heavily cached. Only users with the super_admin role can modify these settings.
+
+- **Authorization (RBAC):** Strictly use the spatie/laravel-permission package for roles and permissions. Do not build custom permission tables. The super_admin role manages system settings. The client_admin role manages the client's staff and assigns roles/permissions.
 
 ## Core Workflow
 
@@ -100,6 +103,8 @@ An ERP must feel instantaneous. Page changes and data loads should execute in un
 ## 3. Screen Optimization and Data Density
 
 ERPs require high data density. The interface must maximize screen real estate without cluttering the user experience.
+
+Don't use too much styles for the frontend, Use simple and fast loading UI, and use very small padding and margin and white spaces between components
 
 ### Layout Fluidity and Breakpoints
 

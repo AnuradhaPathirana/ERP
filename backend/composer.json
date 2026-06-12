@@ -11,7 +11,7 @@
         "laravel/sanctum": "^4.3",
         "laravel/tinker": "^2.10.1",
         "nwidart/laravel-modules": "^12.0",
-        "stancl/tenancy": "^3.10"
+        "spatie/laravel-permission": "^6.25"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",

@@ -13,6 +13,8 @@ class UnitCategory extends Model
 {
     use HasFactory;
 
+    protected $table = 'inv_unit_categories';
+
     protected $fillable = [
         'name',
         'description',
