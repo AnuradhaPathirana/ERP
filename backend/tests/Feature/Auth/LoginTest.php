@@ -7,7 +7,7 @@ namespace Tests\Feature\Auth;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
-use Stancl\Tenancy\Database\Models\Tenant;
+use App\Models\Tenant;
 use Tests\TestCase;
 
 class LoginTest extends TestCase
@@ -39,8 +39,45 @@ class LoginTest extends TestCase
         ]);
 
         $response->assertOk()
-            ->assertJsonStructure(['token', 'tenant_id'])
+            ->assertJsonStructure(['token', 'tenant_id', 'active_modules'])
             ->assertJsonFragment(['tenant_id' => $this->tenantId]);
+    }
+
+    public function test_login_response_includes_active_modules_array(): void
+    {
+        $response = $this->postJson('/api/login', [
+            'email' => 'admin@example.com',
+            'password' => 'secret123',
+        ]);
+
+        $response->assertOk();
+
+        $this->assertIsArray($response->json('active_modules'));
+    }
+
+    public function test_login_returns_user_active_modules_when_set(): void
+    {
+        $this->user->update(['active_modules' => ['inventory', 'finance']]);
+
+        $response = $this->postJson('/api/login', [
+            'email' => 'admin@example.com',
+            'password' => 'secret123',
+        ]);
+
+        $response->assertOk()
+            ->assertJson(['active_modules' => ['inventory', 'finance']]);
+    }
+
+    public function test_login_defaults_to_inventory_module_when_active_modules_is_null(): void
+    {
+        // User created in setUp has no active_modules (null)
+        $response = $this->postJson('/api/login', [
+            'email' => 'admin@example.com',
+            'password' => 'secret123',
+        ]);
+
+        $response->assertOk()
+            ->assertJson(['active_modules' => ['inventory']]);
     }
 
     public function test_login_response_includes_a_bearer_token(): void

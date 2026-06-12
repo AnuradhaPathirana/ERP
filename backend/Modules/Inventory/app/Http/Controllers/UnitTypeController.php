@@ -5,33 +5,67 @@ declare(strict_types=1);
 namespace Modules\Inventory\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Modules\Inventory\DTOs\UnitTypeData;
+use Modules\Inventory\Http\Requests\UnitTypeRequest;
+use Modules\Inventory\Http\Resources\UnitTypeResource;
+use Modules\Inventory\Models\UnitType;
+use Modules\Inventory\Services\UnitTypeService;
 
 class UnitTypeController extends Controller
 {
+    public function __construct(private readonly UnitTypeService $service) {}
+
     public function index(): JsonResponse
     {
-        return response()->json([]);
+        $paginator = $this->service->paginate();
+
+        return response()->json([
+            'data' => collect($paginator->items())
+                ->map(fn (UnitType $item) => (new UnitTypeResource($item))->toArray(request()))
+                ->values()
+                ->all(),
+            'meta' => [
+                'current_page' => $paginator->currentPage(),
+                'last_page'    => $paginator->lastPage(),
+                'per_page'     => $paginator->perPage(),
+                'total'        => $paginator->total(),
+            ],
+        ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(UnitTypeRequest $request): JsonResponse
     {
-        return response()->json([], 201);
+        $unitType = $this->service->create(UnitTypeData::fromRequest($request));
+
+        return response()->json(
+            ['data' => (new UnitTypeResource($unitType))->toArray(request())],
+            201,
+        );
     }
 
-    public function show(int $id): JsonResponse
+    public function show(UnitType $unitType): JsonResponse
     {
-        return response()->json([]);
+        $unitType->loadMissing('category');
+
+        return response()->json(
+            ['data' => (new UnitTypeResource($unitType))->toArray(request())],
+        );
     }
 
-    public function update(Request $request, int $id): JsonResponse
+    public function update(UnitTypeRequest $request, UnitType $unitType): JsonResponse
     {
-        return response()->json([]);
+        $unitType = $this->service->update($unitType, UnitTypeData::fromRequest($request));
+
+        return response()->json(
+            ['data' => (new UnitTypeResource($unitType))->toArray(request())],
+        );
     }
 
-    public function destroy(int $id): JsonResponse
+    public function destroy(UnitType $unitType): JsonResponse
     {
-        return response()->json([], 204);
+        $this->service->delete($unitType);
+
+        return response()->json(null, 204);
     }
 }

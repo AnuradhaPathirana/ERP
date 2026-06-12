@@ -4,12 +4,17 @@ declare(strict_types=1);
 
 namespace Modules\Inventory\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Modules\Inventory\Database\Factories\UnitTypeFactory;
+use Modules\Inventory\Enums\UnitPosition;
 
 class UnitType extends Model
 {
+    use HasFactory;
+
     protected $fillable = [
         'unit_category_id',
         'name',
@@ -22,6 +27,7 @@ class UnitType extends Model
     {
         return [
             'unit_category_id' => 'integer',
+            'unit_position'    => UnitPosition::class,
         ];
     }
 
@@ -38,5 +44,10 @@ class UnitType extends Model
     public function conversionsTo(): HasMany
     {
         return $this->hasMany(UnitConversion::class, 'to_unit_type_id');
+    }
+
+    protected static function newFactory(): UnitTypeFactory
+    {
+        return UnitTypeFactory::new();
     }
 }

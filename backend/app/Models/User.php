@@ -20,6 +20,7 @@ class User extends Authenticatable
         'email',
         'password',
         'tenant_id',
+        'active_modules',
     ];
 
     protected $hidden = [
@@ -32,6 +33,7 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
+            'active_modules' => 'array',
         ];
     }
 }

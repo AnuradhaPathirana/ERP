@@ -19,6 +19,7 @@ export default function LoginPage() {
       const { data } = await api.post('/api/login', { email, password })
       localStorage.setItem('auth_token', data.token)
       localStorage.setItem('tenant_id', data.tenant_id)
+      localStorage.setItem('active_modules', JSON.stringify(data.active_modules ?? []))
       navigate('/dashboard')
     } catch (err) {
       setError(err.response?.data?.message ?? 'An unexpected error occurred.')
