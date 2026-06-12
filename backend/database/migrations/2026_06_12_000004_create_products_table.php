@@ -26,6 +26,7 @@ return new class extends Migration
             $table->string('reorder_period', 50)->nullable();
             $table->string('stock_releasing_method', 50)->nullable();
             $table->enum('tracking_type', ['Batch', 'Serial'])->nullable();
+
             $table->boolean('lock_purchase')->default(false);
             $table->boolean('allow_complimentary_items')->default(false);
             $table->boolean('free_issue')->default(false);

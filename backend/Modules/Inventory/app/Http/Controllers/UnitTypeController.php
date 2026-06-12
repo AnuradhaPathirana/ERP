@@ -68,4 +68,20 @@ class UnitTypeController extends Controller
 
         return response()->json(null, 204);
     }
+
+    /** Flat list for dropdowns — id + name + symbol. */
+    public function all(): JsonResponse
+    {
+        $items = UnitType::orderBy('name')
+            ->get(['id', 'name', 'symbol'])
+            ->map(fn (UnitType $u) => [
+                'id'     => $u->id,
+                'name'   => $u->name,
+                'symbol' => $u->symbol,
+            ])
+            ->values()
+            ->all();
+
+        return response()->json(['data' => $items]);
+    }
 }

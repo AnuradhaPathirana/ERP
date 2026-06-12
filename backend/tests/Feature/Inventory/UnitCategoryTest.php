@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Feature\Inventory;
 
 use App\Models\User;
+use App\Services\SettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Modules\Inventory\Models\UnitCategory;
 use Tests\TestCase;
@@ -18,6 +19,8 @@ class UnitCategoryTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        app(SettingsService::class)->set('module.inventory', true);
 
         $this->user = User::factory()->create([
             'active_modules' => ['inventory'],

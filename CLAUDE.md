@@ -104,12 +104,20 @@ An ERP must feel instantaneous. Page changes and data loads should execute in un
 
 ERPs require high data density. The interface must maximize screen real estate without cluttering the user experience.
 
-Don't use too much styles for the frontend, Use simple and fast loading UI, and use very small padding and margin and white spaces between components
+Don't use too much styles for the frontend, Use simple and fast loading UI, and use very small padding and margin and white spaces between components.
+
+Use input field length with required width for the field data, Because I need to compact the whole UI
+
+- **Screen Utilization (Forms & Layouts):** All main content areas and forms must utilize the full width of the screen (`w-full`). Do not restrict the main app layout inside narrow, centered containers.
+- **Input Field Sizing & Grids:** While the form container is full-width, individual input fields MUST NOT stretch across the entire screen.
+- **Responsive Form Rows:** Use Tailwind CSS Grid to restrict the maximum number of input fields per row based on screen size (e.g., `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4`). This ensures a maximum of 3 or 4 fields per row on massive desktop monitors, keeping inputs at a readable, standardized width.
 
 ### Layout Fluidity and Breakpoints
 
 - **Desktop Maximization:** Optimize layouts for standard 1920x1080 and 1366x768 business monitors. Use a wide canvas with controlled container caps (`max-w-7xl` or dynamic viewports).
 - **Responsive Downscaling:** While complex data entry is built for desktops, dashboards and approval lists must degrade gracefully down to mobile screens using standard Tailwind breakpoints (`sm`, `md`, `lg`, `xl`).
+
+always the content should get the full width of the screen, but
 
 ### Standard Enterprise Data Tables
 

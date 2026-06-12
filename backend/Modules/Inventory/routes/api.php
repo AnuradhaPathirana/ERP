@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use Illuminate\Support\Facades\Route;
+use Modules\Inventory\Http\Controllers\ProductController;
+use Modules\Inventory\Http\Controllers\SalesChannelController;
 use Modules\Inventory\Http\Controllers\SupplierMasterController;
 use Modules\Inventory\Http\Controllers\UnitCategoryController;
 use Modules\Inventory\Http\Controllers\UnitConversionController;
@@ -16,15 +18,25 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
     Route::apiResource('unit-categories', UnitCategoryController::class)
         ->names('inventory.unit-categories');
 
+    Route::get('unit-types/all', [UnitTypeController::class, 'all'])
+        ->name('inventory.unit-types.all');
+
     Route::apiResource('unit-types', UnitTypeController::class)
         ->names('inventory.unit-types');
 
     Route::apiResource('unit-conversions', UnitConversionController::class)
         ->names('inventory.unit-conversions');
 
+    // Products — per-action permission middleware applied in ProductController constructor
+    Route::apiResource('products', ProductController::class)
+        ->names('inventory.products');
+
     Route::get('supplier-masters/all', [SupplierMasterController::class, 'all'])
         ->name('inventory.supplier-masters.all');
 
     Route::apiResource('supplier-masters', SupplierMasterController::class)
         ->names('inventory.supplier-masters');
+
+    Route::get('sales-channels/all', [SalesChannelController::class, 'all'])
+        ->name('inventory.sales-channels.all');
 });

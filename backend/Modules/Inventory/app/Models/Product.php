@@ -7,6 +7,9 @@ namespace Modules\Inventory\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Modules\Inventory\Database\Factories\ProductFactory;
+use Modules\Inventory\Models\SalesChannel;
+use Modules\Inventory\Models\SupplierMaster;
 
 class Product extends Model
 {
@@ -38,6 +41,8 @@ class Product extends Model
         'is_empty',
         'service_charge',
         'loyalty',
+        'is_batch',
+        'is_serial',
     ];
 
     protected $casts = [
@@ -52,11 +57,36 @@ class Product extends Model
         'is_empty'                  => 'boolean',
         'service_charge'            => 'boolean',
         'loyalty'                   => 'boolean',
+        'is_batch'                  => 'boolean',
+        'is_serial'                 => 'boolean',
     ];
 
     public function suppliers(): BelongsToMany
     {
         return $this->belongsToMany(SupplierMaster::class, 'inv_product_supplier')
             ->withTimestamps();
+    }
+
+    public function salesChannels(): BelongsToMany
+    {
+        return $this->belongsToMany(SalesChannel::class, 'inv_product_sales_channels')
+            ->withPivot([
+                'uom',
+                'num_of_units',
+                'cost_price',
+                'margin',
+                'selling_price',
+                'max_price',
+                'min_price',
+                'wholesale_price',
+                'sale_privileges_discount',
+                'purchasing_privileges_discount',
+            ])
+            ->withTimestamps();
+    }
+
+    protected static function newFactory(): ProductFactory
+    {
+        return ProductFactory::new();
     }
 }

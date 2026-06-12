@@ -16,3 +16,7 @@ export const updateUnitType = (id, payload) =>
 
 export const deleteUnitType = (id) =>
   api.delete(`${BASE}/${id}`)
+
+/** Flat list for dropdowns — { id, name, symbol }[] */
+export const getAllUnitTypes = () =>
+  api.get(`${BASE}/all`).then((r) => r.data.data)

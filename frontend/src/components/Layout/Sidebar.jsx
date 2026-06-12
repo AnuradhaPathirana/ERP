@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
+  Box,
   ChevronLeft,
   ChevronRight,
   DollarSign,
@@ -36,6 +37,7 @@ const NAV_ITEMS = [
     icon: Package,
     moduleKey: 'inventory',
     children: [
+      { label: 'Products',        to: '/inventory/products',         icon: Box },
       { label: 'Unit Categories', to: '/inventory/unit-categories', icon: Tag },
       { label: 'Unit Types',      to: '/inventory/unit-types',      icon: Ruler },
     ],

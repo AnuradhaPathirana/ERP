@@ -9,6 +9,9 @@ const UnitCategoriesPage    = lazy(() => import('./pages/inventory/UnitCategorie
 const UnitCategoryFormPage  = lazy(() => import('./pages/inventory/UnitCategoryFormPage'))
 const UnitTypesPage         = lazy(() => import('./pages/inventory/UnitTypesPage'))
 const UnitTypeFormPage      = lazy(() => import('./pages/inventory/UnitTypeFormPage'))
+const ProductsPage          = lazy(() => import('./pages/inventory/ProductsPage'))
+const ProductFormPage       = lazy(() => import('./pages/inventory/ProductFormPage'))
+const ProductViewPage       = lazy(() => import('./pages/inventory/ProductViewPage'))
 const UserManagementPage    = lazy(() => import('./pages/admin/UserManagementPage'))
 
 function PageLoader() {
@@ -46,6 +49,10 @@ export default function App() {
         <Route path="/inventory/unit-types"                   element={<Lazy component={UnitTypesPage} />} />
         <Route path="/inventory/unit-types/create"           element={<Lazy component={UnitTypeFormPage} />} />
         <Route path="/inventory/unit-types/:id/edit"         element={<Lazy component={UnitTypeFormPage} />} />
+        <Route path="/inventory/products"                    element={<Lazy component={ProductsPage} />} />
+        <Route path="/inventory/products/create"             element={<Lazy component={ProductFormPage} />} />
+        <Route path="/inventory/products/:id"                element={<Lazy component={ProductViewPage} />} />
+        <Route path="/inventory/products/:id/edit"           element={<Lazy component={ProductFormPage} />} />
       </Route>
 
       {/* Fallback */}
