@@ -12,7 +12,7 @@ return new class extends Migration
     {
         Schema::create('inv_sales_channels', function (Blueprint $table): void {
             $table->id();
-            $table->string('type', 50)->nullable();
+            $table->enum('type', ['Wholesale', 'e-commerce', 'Retail'])->nullable();
             $table->string('sales_channel_name', 100);
             $table->decimal('max_qty', 15, 4)->nullable();
             $table->date('applicable_from')->nullable();

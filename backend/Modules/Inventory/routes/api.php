@@ -39,4 +39,7 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
 
     Route::get('sales-channels/all', [SalesChannelController::class, 'all'])
         ->name('inventory.sales-channels.all');
+
+    Route::apiResource('sales-channels', SalesChannelController::class)
+        ->names('inventory.sales-channels');
 });

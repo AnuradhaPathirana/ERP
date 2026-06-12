@@ -71,6 +71,7 @@ Enterprise users interact with ERP systems for hours daily. The focus must be on
 - **Persistent Layout:** The left sidebar navigation and top navbar must remain fixed. Users should always know their exact location in the system.
 - **Standard Layout Patterns:** Place high-frequency actions (e.g., "Create Invoice", "Add Product") in consistent top-right button positions on all index screens.
 - **Breadcrumbs:** Include breadcrumbs on all sub-pages (e.g., Inventory > Products > Edit Product) for seamless back-navigation without losing application state.
+- reduce maximum component's margin and padding.
 
 ### Data Entry Efficiency
 
