@@ -19,7 +19,6 @@ class CustomerResource extends JsonResource
             'customer_type'                => $this->customer_type,
             'customer_name'                => $this->customer_name,
             'nic_passport_driving_licence' => $this->nic_passport_driving_licence,
-            'attachments'                  => $this->attachments,
             'br_no'                        => $this->br_no,
 
             'customer_mobile'              => $this->customer_mobile,
@@ -46,6 +45,18 @@ class CustomerResource extends JsonResource
             'sale_manager'                 => $this->sale_manager,
             'sales_executive'              => $this->sales_executive,
             'sales_person'                 => $this->sales_person,
+
+            'attachments'                  => $this->when(
+                $this->relationLoaded('attachmentFiles'),
+                fn () => $this->attachmentFiles->map(fn ($a) => [
+                    'id'        => $a->id,
+                    'file_name' => $a->file_name,
+                    'file_path' => $a->file_path,
+                    'file_size' => $a->file_size,
+                    'mime_type' => $a->mime_type,
+                    'url'       => '/storage/' . $a->file_path,
+                ]),
+            ),
 
             'created_at'                   => $this->created_at?->toISOString(),
             'updated_at'                   => $this->updated_at?->toISOString(),

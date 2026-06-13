@@ -120,87 +120,88 @@ export default function UnitCategoryFormPage() {
       </div>
 
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} noValidate>
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Category Details</h2>
-          </div>
-
-          {/* Name + Description side-by-side */}
-          <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-3">
-            {/* Name — 1 col */}
-            <div>
-              <label className="mb-0.5 block text-xs font-medium text-slate-600">
-                Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                ref={nameRef}
-                id="field-name"
-                name="name"
-                type="text"
-                value={form.name}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                placeholder="e.g. Weight, Length, Volume"
-                maxLength={100}
-                autoComplete="off"
-                className={errors.name && touched.name ? inputErr : inputBase}
-              />
-              {errors.name && touched.name && (
-                <p className="mt-0.5 text-[11px] text-red-600">{errors.name}</p>
-              )}
+        <div className="w-full max-w-sm">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Category Details</h2>
             </div>
 
-            {/* Description — 2 cols */}
-            <div className="md:col-span-2">
-              <label htmlFor="field-description" className="mb-0.5 block text-xs font-medium text-slate-600">
-                Description <span className="text-xs font-normal text-slate-400">(optional)</span>
-              </label>
-              <div className="relative">
-                <textarea
-                  id="field-description"
-                  name="description"
-                  value={form.description}
+            <div className="space-y-2.5 p-3">
+              {/* Name */}
+              <div>
+                <label className="mb-0.5 block text-xs font-medium text-slate-600">
+                  Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  ref={nameRef}
+                  id="field-name"
+                  name="name"
+                  type="text"
+                  value={form.name}
                   onChange={handleChange}
                   onBlur={handleBlur}
-                  placeholder="Briefly describe what this category covers…"
-                  maxLength={255}
-                  rows={2}
-                  className={`${errors.description && touched.description ? inputErr : inputBase} resize-none pr-14`}
+                  placeholder="e.g. Weight, Length, Volume"
+                  maxLength={100}
+                  autoComplete="off"
+                  className={errors.name && touched.name ? inputErr : inputBase}
                 />
-                <span className="absolute bottom-1.5 right-2 text-[10px] text-slate-400">
-                  {form.description.length}/255
-                </span>
+                {errors.name && touched.name && (
+                  <p className="mt-0.5 text-[11px] text-red-600">{errors.name}</p>
+                )}
               </div>
-              {errors.description && touched.description && (
-                <p className="mt-0.5 text-[11px] text-red-600">{errors.description}</p>
-              )}
+
+              {/* Description */}
+              <div>
+                <label htmlFor="field-description" className="mb-0.5 block text-xs font-medium text-slate-600">
+                  Description <span className="text-xs font-normal text-slate-400">(optional)</span>
+                </label>
+                <div className="relative">
+                  <textarea
+                    id="field-description"
+                    name="description"
+                    value={form.description}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    placeholder="Briefly describe what this category covers…"
+                    maxLength={255}
+                    rows={3}
+                    className={`${errors.description && touched.description ? inputErr : inputBase} resize-none pr-12`}
+                  />
+                  <span className="absolute bottom-1.5 right-2 text-[10px] text-slate-400">
+                    {form.description.length}/255
+                  </span>
+                </div>
+                {errors.description && touched.description && (
+                  <p className="mt-0.5 text-[11px] text-red-600">{errors.description}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2">
+              <Link
+                to="/inventory/unit-categories"
+                className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
+              >
+                Cancel
+              </Link>
+              <button
+                type="submit"
+                disabled={mutation.isPending}
+                className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={13} strokeWidth={2.5} />
+                {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Category'}
+              </button>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-2">
-            <Link
-              to="/inventory/unit-categories"
-              className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={mutation.isPending}
-              className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Save size={13} strokeWidth={2.5} />
-              {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Category'}
-            </button>
-          </div>
+          {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
+            <p className="mt-2 text-xs text-red-600">
+              {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
+            </p>
+          )}
         </div>
-
-        {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-          <p className="mt-2 text-xs text-red-600">
-            {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
-          </p>
-        )}
       </form>
     </div>
   )

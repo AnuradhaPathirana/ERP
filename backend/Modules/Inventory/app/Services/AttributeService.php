@@ -13,7 +13,7 @@ class AttributeService
 {
     public function paginate(int $perPage = 25): LengthAwarePaginator
     {
-        return Attribute::with('attributeType')
+        return Attribute::with('attributeType.category')
             ->orderBy('attribute_name')
             ->paginate($perPage);
     }

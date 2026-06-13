@@ -50,7 +50,7 @@ const EMPTY_FORM = {
 
 const REQUIRED_FIELDS = new Set([
   'supplier_code', 'supplier_type', 'supplier_name',
-  'check_writer_name', 'mobile', 'land_line', 'email',
+  'mobile', 'land_line', 'email',
   'bil_address_line_1',
   'contact_person_name', 'contact_person_mobile',
 ])
@@ -62,7 +62,6 @@ function validate(field, value) {
       supplier_code:          'Supplier code',
       supplier_type:          'Supplier type',
       supplier_name:          'Supplier name',
-      check_writer_name:      'Check writer name',
       mobile:                 'Mobile',
       land_line:              'Land line',
       email:                  'Email',
@@ -359,7 +358,7 @@ export default function SupplierFormPage() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label required>Check Writer Name</Label>
+                  <Label>Check Writer Name</Label>
                   <input type="text" placeholder="Name on cheques" maxLength={100} {...inp('check_writer_name')} />
                   <FieldError errors={errors} touched={touched} name="check_writer_name" />
                 </div>

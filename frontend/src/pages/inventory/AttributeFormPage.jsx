@@ -136,87 +136,89 @@ export default function AttributeFormPage() {
       </div>
 
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} noValidate>
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Attribute Details
-            </h2>
-          </div>
+        <div className="w-full max-w-sm">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Attribute Details
+              </h2>
+            </div>
 
-          <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2">
+            <div className="space-y-2.5 p-3">
 
-            {/* Attribute Type grouped by category */}
-            <div>
-              <label htmlFor="field-attribute_type_id" className="mb-0.5 block text-xs font-medium text-slate-600">
-                Attribute Type <span className="text-red-500">*</span>
-              </label>
-              <select
-                id="field-attribute_type_id"
-                name="attribute_type_id"
-                value={form.attribute_type_id}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={errors.attribute_type_id && touched.attribute_type_id ? inputErr : inputBase}
+              {/* Attribute Type */}
+              <div>
+                <label htmlFor="field-attribute_type_id" className="mb-0.5 block text-xs font-medium text-slate-600">
+                  Attribute Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="field-attribute_type_id"
+                  name="attribute_type_id"
+                  value={form.attribute_type_id}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  className={errors.attribute_type_id && touched.attribute_type_id ? inputErr : inputBase}
+                >
+                  <option value="">— Select attribute type —</option>
+                  {attributeTypes.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.attribute_type_name}{t.category_name ? ` — ${t.category_name}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {errors.attribute_type_id && touched.attribute_type_id && (
+                  <p className="mt-0.5 text-[11px] text-red-600">{errors.attribute_type_id}</p>
+                )}
+              </div>
+
+              {/* Attribute Name */}
+              <div>
+                <label htmlFor="field-attribute_name" className="mb-0.5 block text-xs font-medium text-slate-600">
+                  Attribute Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  ref={nameRef}
+                  id="field-attribute_name"
+                  name="attribute_name"
+                  type="text"
+                  value={form.attribute_name}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  placeholder="e.g. Red, XL, Cotton"
+                  maxLength={100}
+                  autoComplete="off"
+                  className={errors.attribute_name && touched.attribute_name ? inputErr : inputBase}
+                />
+                {errors.attribute_name && touched.attribute_name && (
+                  <p className="mt-0.5 text-[11px] text-red-600">{errors.attribute_name}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2">
+              <Link
+                to="/inventory/attributes"
+                className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
               >
-                <option value="">— Select attribute type —</option>
-                {attributeTypes.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.attribute_type_name}{t.category_name ? ` — ${t.category_name}` : ''}
-                  </option>
-                ))}
-              </select>
-              {errors.attribute_type_id && touched.attribute_type_id && (
-                <p className="mt-0.5 text-[11px] text-red-600">{errors.attribute_type_id}</p>
-              )}
-            </div>
-
-            {/* Attribute Name */}
-            <div>
-              <label htmlFor="field-attribute_name" className="mb-0.5 block text-xs font-medium text-slate-600">
-                Attribute Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                ref={nameRef}
-                id="field-attribute_name"
-                name="attribute_name"
-                type="text"
-                value={form.attribute_name}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                placeholder="e.g. Red, XL, Cotton"
-                maxLength={100}
-                autoComplete="off"
-                className={errors.attribute_name && touched.attribute_name ? inputErr : inputBase}
-              />
-              {errors.attribute_name && touched.attribute_name && (
-                <p className="mt-0.5 text-[11px] text-red-600">{errors.attribute_name}</p>
-              )}
+                Cancel
+              </Link>
+              <button
+                type="submit"
+                disabled={mutation.isPending}
+                className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={13} strokeWidth={2.5} />
+                {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Attribute'}
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-2">
-            <Link
-              to="/inventory/attributes"
-              className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={mutation.isPending}
-              className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Save size={13} strokeWidth={2.5} />
-              {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Attribute'}
-            </button>
-          </div>
+          {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
+            <p className="mt-2 text-xs text-red-600">
+              {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
+            </p>
+          )}
         </div>
-
-        {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-          <p className="mt-2 text-xs text-red-600">
-            {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
-          </p>
-        )}
       </form>
     </div>
   )

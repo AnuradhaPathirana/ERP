@@ -6,6 +6,7 @@ namespace Modules\Inventory\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CustomerMaster extends Model
 {
@@ -44,4 +45,9 @@ class CustomerMaster extends Model
         'sales_executive',
         'sales_person',
     ];
+
+    public function attachmentFiles(): HasMany
+    {
+        return $this->hasMany(CustomerAttachment::class, 'customer_master_id');
+    }
 }

@@ -298,136 +298,138 @@ export default function AttributeTypeFormPage() {
       </div>
 
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} noValidate>
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              Attribute Type Details
-            </h2>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 lg:grid-cols-4">
-
-            {/* Category — collapsible nested tree */}
-            <div>
-              <label htmlFor="field-category_id" className="mb-0.5 block text-xs font-medium text-slate-600">
-                Category <span className="text-red-500">*</span>
-              </label>
-              <NestedCategorySelect
-                value={form.category_id}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                categories={categories}
-                hasError={!!(errors.category_id && touched.category_id)}
-              />
-              {errors.category_id && touched.category_id && (
-                <p className="mt-0.5 text-[11px] text-red-600">{errors.category_id}</p>
-              )}
+        <div className="w-full max-w-sm">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Attribute Type Details
+              </h2>
             </div>
 
-            {/* Product / Service Type */}
-            <div>
-              <label className="mb-0.5 block text-xs font-medium text-slate-600">
-                Type <span className="text-red-500">*</span>
-              </label>
-              <div className={`flex items-center gap-4 rounded border px-2.5 py-1.5 ${
-                errors.product_service_type && touched.product_service_type
-                  ? 'border-red-400 bg-red-50'
-                  : 'border-slate-300 bg-white'
-              }`}>
-                {[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }].map(({ value, label }) => (
-                  <label key={value} className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700 select-none">
-                    <input
-                      type="radio"
-                      name="product_service_type"
-                      value={value}
-                      checked={form.product_service_type === value}
-                      onChange={handleChange}
-                      onBlur={handleBlur}
-                      className="accent-indigo-600"
-                    />
-                    {label}
-                  </label>
-                ))}
-              </div>
-              {errors.product_service_type && touched.product_service_type && (
-                <p className="mt-0.5 text-[11px] text-red-600">{errors.product_service_type}</p>
-              )}
-            </div>
+            <div className="space-y-2.5 p-3">
 
-            {/* Attribute Type Name */}
-            <div>
-              <label htmlFor="field-attribute_type_name" className="mb-0.5 block text-xs font-medium text-slate-600">
-                Attribute Type Name <span className="text-red-500">*</span>
-              </label>
-              <input
-                ref={nameRef}
-                id="field-attribute_type_name"
-                name="attribute_type_name"
-                type="text"
-                value={form.attribute_type_name}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                placeholder="e.g. Color, Size, Material"
-                maxLength={100}
-                autoComplete="off"
-                className={errors.attribute_type_name && touched.attribute_type_name ? inputErr : inputBase}
-              />
-              {errors.attribute_type_name && touched.attribute_type_name && (
-                <p className="mt-0.5 text-[11px] text-red-600">{errors.attribute_type_name}</p>
-              )}
-            </div>
-
-            {/* Description */}
-            <div>
-              <label htmlFor="field-description" className="mb-0.5 block text-xs font-medium text-slate-600">
-                Description{' '}
-                <span className="text-xs font-normal text-slate-400">(optional)</span>
-              </label>
-              <div className="relative">
-                <textarea
-                  id="field-description"
-                  name="description"
-                  value={form.description}
+              {/* Category — collapsible nested tree */}
+              <div>
+                <label htmlFor="field-category_id" className="mb-0.5 block text-xs font-medium text-slate-600">
+                  Category <span className="text-red-500">*</span>
+                </label>
+                <NestedCategorySelect
+                  value={form.category_id}
                   onChange={handleChange}
                   onBlur={handleBlur}
-                  placeholder="Briefly describe this attribute type…"
-                  maxLength={255}
-                  rows={2}
-                  className={`${errors.description && touched.description ? inputErr : inputBase} resize-none pr-14`}
+                  categories={categories}
+                  hasError={!!(errors.category_id && touched.category_id)}
                 />
-                <span className="absolute bottom-1.5 right-2 text-[10px] text-slate-400">
-                  {form.description.length}/255
-                </span>
+                {errors.category_id && touched.category_id && (
+                  <p className="mt-0.5 text-[11px] text-red-600">{errors.category_id}</p>
+                )}
               </div>
-              {errors.description && touched.description && (
-                <p className="mt-0.5 text-[11px] text-red-600">{errors.description}</p>
-              )}
+
+              {/* Product / Service Type */}
+              <div>
+                <label className="mb-0.5 block text-xs font-medium text-slate-600">
+                  Type <span className="text-red-500">*</span>
+                </label>
+                <div className={`flex items-center gap-4 rounded border px-2.5 py-1.5 ${
+                  errors.product_service_type && touched.product_service_type
+                    ? 'border-red-400 bg-red-50'
+                    : 'border-slate-300 bg-white'
+                }`}>
+                  {[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }].map(({ value, label }) => (
+                    <label key={value} className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700 select-none">
+                      <input
+                        type="radio"
+                        name="product_service_type"
+                        value={value}
+                        checked={form.product_service_type === value}
+                        onChange={handleChange}
+                        onBlur={handleBlur}
+                        className="accent-indigo-600"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+                {errors.product_service_type && touched.product_service_type && (
+                  <p className="mt-0.5 text-[11px] text-red-600">{errors.product_service_type}</p>
+                )}
+              </div>
+
+              {/* Attribute Type Name */}
+              <div>
+                <label htmlFor="field-attribute_type_name" className="mb-0.5 block text-xs font-medium text-slate-600">
+                  Attribute Type Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  ref={nameRef}
+                  id="field-attribute_type_name"
+                  name="attribute_type_name"
+                  type="text"
+                  value={form.attribute_type_name}
+                  onChange={handleChange}
+                  onBlur={handleBlur}
+                  placeholder="e.g. Color, Size, Material"
+                  maxLength={100}
+                  autoComplete="off"
+                  className={errors.attribute_type_name && touched.attribute_type_name ? inputErr : inputBase}
+                />
+                {errors.attribute_type_name && touched.attribute_type_name && (
+                  <p className="mt-0.5 text-[11px] text-red-600">{errors.attribute_type_name}</p>
+                )}
+              </div>
+
+              {/* Description */}
+              <div>
+                <label htmlFor="field-description" className="mb-0.5 block text-xs font-medium text-slate-600">
+                  Description{' '}
+                  <span className="text-xs font-normal text-slate-400">(optional)</span>
+                </label>
+                <div className="relative">
+                  <textarea
+                    id="field-description"
+                    name="description"
+                    value={form.description}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    placeholder="Briefly describe this attribute type…"
+                    maxLength={255}
+                    rows={3}
+                    className={`${errors.description && touched.description ? inputErr : inputBase} resize-none pr-12`}
+                  />
+                  <span className="absolute bottom-1.5 right-2 text-[10px] text-slate-400">
+                    {form.description.length}/255
+                  </span>
+                </div>
+                {errors.description && touched.description && (
+                  <p className="mt-0.5 text-[11px] text-red-600">{errors.description}</p>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2">
+              <Link
+                to="/inventory/attribute-types"
+                className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
+              >
+                Cancel
+              </Link>
+              <button
+                type="submit"
+                disabled={mutation.isPending}
+                className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={13} strokeWidth={2.5} />
+                {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Attribute Type'}
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-2">
-            <Link
-              to="/inventory/attribute-types"
-              className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={mutation.isPending}
-              className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Save size={13} strokeWidth={2.5} />
-              {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Attribute Type'}
-            </button>
-          </div>
+          {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
+            <p className="mt-2 text-xs text-red-600">
+              {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
+            </p>
+          )}
         </div>
-
-        {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-          <p className="mt-2 text-xs text-red-600">
-            {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
-          </p>
-        )}
       </form>
     </div>
   )

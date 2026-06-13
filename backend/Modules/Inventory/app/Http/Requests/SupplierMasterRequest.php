@@ -26,7 +26,7 @@ class SupplierMasterRequest extends FormRequest
             ],
             'reference_no'              => ['nullable', 'string', 'max:50'],
             'supplier_type'             => ['required', 'string', 'max:50'],
-            'check_writer_name'         => ['required', 'string', 'max:100'],
+            'check_writer_name'         => ['nullable', 'string', 'max:100'],
 
             // Contact
             'mobile'                    => ['required', 'string', 'max:20'],

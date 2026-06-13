@@ -164,16 +164,13 @@ export default function UnitTypeFormPage() {
       </div>
 
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} noValidate>
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Unit Type Details</h2>
-          </div>
+        <div className="w-full max-w-md">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Unit Type Details</h2>
+            </div>
 
-          {/* 2-column grid: fields left, position picker right */}
-          <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2">
-
-            {/* Left — fields */}
-            <div className="space-y-3">
+            <div className="space-y-2.5 p-3">
               {/* Category */}
               <div>
                 <label className="mb-0.5 block text-xs font-medium text-slate-600">
@@ -207,7 +204,7 @@ export default function UnitTypeFormPage() {
               </div>
 
               {/* Name + Symbol side-by-side */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label htmlFor="field-name" className="mb-0.5 block text-xs font-medium text-slate-600">
                     Name <span className="text-red-500">*</span>
@@ -272,73 +269,73 @@ export default function UnitTypeFormPage() {
                   <p className="mt-0.5 text-[11px] text-red-600">{errors.country}</p>
                 )}
               </div>
-            </div>
 
-            {/* Right — unit position picker */}
-            <div>
-              <p className="mb-0.5 text-xs font-medium text-slate-600">
-                Unit Position <span className="text-red-500">*</span>
-              </p>
-              <p className="mb-2 text-[11px] text-slate-400">Where the symbol appears relative to the value.</p>
-              <div className="grid grid-cols-2 gap-2">
-                {POSITION_OPTIONS.map((opt) => {
-                  const isSelected = form.unit_position === opt.value
-                  return (
-                    <label
-                      key={opt.value}
-                      className={[
-                        'flex cursor-pointer flex-col gap-1.5 rounded-lg border-2 p-3 transition-all',
-                        isSelected ? 'border-indigo-500 bg-indigo-50/60' : 'border-slate-200 hover:border-slate-300',
-                      ].join(' ')}
-                    >
-                      <input
-                        type="radio"
-                        name="unit_position"
-                        value={opt.value}
-                        checked={isSelected}
-                        onChange={handleChange}
-                        className="sr-only"
-                      />
-                      <div className="flex items-center justify-between">
-                        <span className={`text-xs font-semibold ${isSelected ? 'text-indigo-700' : 'text-slate-700'}`}>
-                          {opt.label}
-                        </span>
-                        <span className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 ${isSelected ? 'border-indigo-500' : 'border-slate-300'}`}>
-                          {isSelected && <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />}
-                        </span>
-                      </div>
-                      <code className="text-[11px] text-slate-500">{opt.example(form.symbol)}</code>
-                    </label>
-                  )
-                })}
+              {/* Unit Position */}
+              <div>
+                <p className="mb-0.5 text-xs font-medium text-slate-600">
+                  Unit Position <span className="text-red-500">*</span>
+                </p>
+                <p className="mb-1.5 text-[11px] text-slate-400">Where the symbol appears relative to the value.</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {POSITION_OPTIONS.map((opt) => {
+                    const isSelected = form.unit_position === opt.value
+                    return (
+                      <label
+                        key={opt.value}
+                        className={[
+                          'flex cursor-pointer flex-col gap-1.5 rounded-lg border-2 p-3 transition-all',
+                          isSelected ? 'border-indigo-500 bg-indigo-50/60' : 'border-slate-200 hover:border-slate-300',
+                        ].join(' ')}
+                      >
+                        <input
+                          type="radio"
+                          name="unit_position"
+                          value={opt.value}
+                          checked={isSelected}
+                          onChange={handleChange}
+                          className="sr-only"
+                        />
+                        <div className="flex items-center justify-between">
+                          <span className={`text-xs font-semibold ${isSelected ? 'text-indigo-700' : 'text-slate-700'}`}>
+                            {opt.label}
+                          </span>
+                          <span className={`flex h-3.5 w-3.5 items-center justify-center rounded-full border-2 ${isSelected ? 'border-indigo-500' : 'border-slate-300'}`}>
+                            {isSelected && <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />}
+                          </span>
+                        </div>
+                        <code className="text-[11px] text-slate-500">{opt.example(form.symbol)}</code>
+                      </label>
+                    )
+                  })}
+                </div>
               </div>
             </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-3 py-2">
+              <Link
+                to="/inventory/unit-types"
+                className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
+              >
+                Cancel
+              </Link>
+              <button
+                type="submit"
+                disabled={mutation.isPending || (categories.length === 0 && !isEditing)}
+                className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={13} strokeWidth={2.5} />
+                {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Unit Type'}
+              </button>
+            </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-2">
-            <Link
-              to="/inventory/unit-types"
-              className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={mutation.isPending || (categories.length === 0 && !isEditing)}
-              className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Save size={13} strokeWidth={2.5} />
-              {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Unit Type'}
-            </button>
-          </div>
+          {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
+            <p className="mt-2 text-xs text-red-600">
+              {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
+            </p>
+          )}
         </div>
-
-        {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-          <p className="mt-2 text-xs text-red-600">
-            {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
-          </p>
-        )}
       </form>
     </div>
   )

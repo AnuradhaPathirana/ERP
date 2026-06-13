@@ -7,6 +7,7 @@ use Modules\Inventory\Http\Controllers\AttributeController;
 use Modules\Inventory\Http\Controllers\AttributeTypeController;
 use Modules\Inventory\Http\Controllers\CategoryController;
 use Modules\Inventory\Http\Controllers\CompanyController;
+use Modules\Inventory\Http\Controllers\CustomerAttachmentController;
 use Modules\Inventory\Http\Controllers\CustomerController;
 use Modules\Inventory\Http\Controllers\IndustryController;
 use Modules\Inventory\Http\Controllers\LocationController;
@@ -108,6 +109,12 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
 
     Route::apiResource('customer-masters', CustomerController::class)
         ->names('inventory.customer-masters');
+
+    Route::post('customer-masters/{customer_master}/attachments', [CustomerAttachmentController::class, 'store'])
+        ->name('inventory.customer-masters.attachments.store');
+
+    Route::delete('customer-masters/{customer_master}/attachments/{attachment}', [CustomerAttachmentController::class, 'destroy'])
+        ->name('inventory.customer-masters.attachments.destroy');
 
     Route::get('store-types/all', [StoreTypeController::class, 'all'])
         ->name('inventory.store-types.all');

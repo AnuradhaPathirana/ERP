@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { RefreshCw, Save } from 'lucide-react'
+import { RefreshCw, Save, Paperclip, X, FileText, Image, Download, Trash2 } from 'lucide-react'
 import { checkCustomerCode, createCustomer, getCustomer, updateCustomer } from '../../api/customers'
+import { deleteCustomerAttachment, uploadCustomerAttachments } from '../../api/customerAttachments'
 import Breadcrumb from '../../components/Breadcrumb'
 import { showError, showSuccess } from '../../utils/alerts'
 
@@ -21,7 +22,6 @@ const EMPTY_FORM = {
   customer_type:                '',
   customer_name:                '',
   nic_passport_driving_licence: '',
-  attachments:                  '',
   br_no:                        '',
   customer_mobile:              '',
   customer_land_line:           '',
@@ -110,22 +110,40 @@ function SectionCard({ title, action, children }) {
   )
 }
 
+function formatFileSize(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function fileIcon(mimeType) {
+  if (!mimeType) return <FileText size={14} className="text-slate-400" />
+  if (mimeType.startsWith('image/')) return <Image size={14} className="text-blue-400" />
+  return <FileText size={14} className="text-slate-400" />
+}
+
 export default function CustomerFormPage() {
   const { id }      = useParams()
   const isEditing   = Boolean(id)
   const navigate    = useNavigate()
   const queryClient = useQueryClient()
   const nameRef     = useRef(null)
+  const fileInputRef = useRef(null)
 
-  const [form,          setForm]          = useState(() => ({
+  const [form,             setForm]             = useState(() => ({
     ...EMPTY_FORM,
     customer_code: isEditing ? '' : generateCustomerCode(),
   }))
-  const [errors,        setErrors]        = useState({})
-  const [touched,       setTouched]       = useState({})
-  const [sameAsBilling, setSameAsBilling] = useState(false)
-  // 'idle' | 'checking' | 'available' | 'taken'
-  const [codeStatus,    setCodeStatus]    = useState('idle')
+  const [errors,           setErrors]           = useState({})
+  const [touched,          setTouched]          = useState({})
+  const [sameAsBilling,    setSameAsBilling]    = useState(false)
+  const [codeStatus,       setCodeStatus]       = useState('idle')
+  // File upload state
+  const [newFiles,         setNewFiles]         = useState([])
+  const [existingFiles,    setExistingFiles]    = useState([])
+  const [deletingIds,      setDeletingIds]      = useState(new Set())
+  const [isDragOver,       setIsDragOver]       = useState(false)
 
   const BILLING_TO_SHIPPING = {
     billing_address_line1:  'shipping_address_line1',
@@ -168,13 +186,13 @@ export default function CustomerFormPage() {
           Object.keys(EMPTY_FORM).map((k) => [k, c[k] != null ? String(c[k]) : ''])
         )
       )
+      setExistingFiles(Array.isArray(c.attachments) ? c.attachments : [])
       initialized.current = true
     }
   }, [fetchedData])
 
   useEffect(() => { nameRef.current?.focus() }, [])
 
-  // Auto-check the generated code on create mount
   useEffect(() => {
     if (!isEditing && form.customer_code) runCodeCheck(form.customer_code, null)
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -209,10 +227,55 @@ export default function CustomerFormPage() {
     }
   }
 
+  // File handling
+  const addFiles = (fileList) => {
+    const incoming = Array.from(fileList)
+    setNewFiles((prev) => {
+      const existingNames = new Set(prev.map((f) => f.name))
+      return [...prev, ...incoming.filter((f) => !existingNames.has(f.name))]
+    })
+  }
+
+  const handleFileInput = (e) => {
+    addFiles(e.target.files)
+    e.target.value = ''
+  }
+
+  const handleDrop = (e) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    addFiles(e.dataTransfer.files)
+  }
+
+  const removeNewFile = (index) => {
+    setNewFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const handleDeleteExisting = async (attachment) => {
+    setDeletingIds((prev) => new Set(prev).add(attachment.id))
+    try {
+      await deleteCustomerAttachment(id, attachment.id)
+      setExistingFiles((prev) => prev.filter((a) => a.id !== attachment.id))
+    } catch {
+      showError('Failed to delete attachment.')
+    } finally {
+      setDeletingIds((prev) => { const s = new Set(prev); s.delete(attachment.id); return s })
+    }
+  }
+
   const mutation = useMutation({
     mutationFn: (payload) =>
       isEditing ? updateCustomer(id, payload) : createCustomer(payload),
-    onSuccess: () => {
+    onSuccess: async (res) => {
+      const customerId = res.data?.id ?? id
+      if (newFiles.length > 0) {
+        try {
+          await uploadCustomerAttachments(customerId, newFiles)
+          setNewFiles([])
+        } catch {
+          showError('Customer saved, but some attachments failed to upload.')
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ['customers'] })
       queryClient.invalidateQueries({ queryKey: ['customers-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['customer', id] })
@@ -247,7 +310,6 @@ export default function CustomerFormPage() {
       customer_type:                str(form.customer_type),
       customer_name:                form.customer_name.trim(),
       nic_passport_driving_licence: str(form.nic_passport_driving_licence),
-      attachments:                  str(form.attachments),
       br_no:                        str(form.br_no),
       customer_mobile:              str(form.customer_mobile),
       customer_land_line:           str(form.customer_land_line),
@@ -301,7 +363,6 @@ export default function CustomerFormPage() {
       </div>
 
       <form onSubmit={handleSubmit} noValidate>
-        {/* ── 2-column section grid ──────────────────────────────────── */}
         <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
 
           {/* ── LEFT column ─────────────────────────────────────────── */}
@@ -375,17 +436,10 @@ export default function CustomerFormPage() {
                   <FieldError errors={errors} touched={touched} name="nic_passport_driving_licence" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <Label>BR Number</Label>
-                  <input type="text" placeholder="Business reg. no." maxLength={50} {...inp('br_no')} />
-                  <FieldError errors={errors} touched={touched} name="br_no" />
-                </div>
-                <div>
-                  <Label>Attachments</Label>
-                  <input type="text" placeholder="Attachment path or URL" maxLength={255} {...inp('attachments')} />
-                  <FieldError errors={errors} touched={touched} name="attachments" />
-                </div>
+              <div>
+                <Label>BR Number</Label>
+                <input type="text" placeholder="Business reg. no." maxLength={50} {...inp('br_no')} />
+                <FieldError errors={errors} touched={touched} name="br_no" />
               </div>
             </SectionCard>
 
@@ -568,32 +622,136 @@ export default function CustomerFormPage() {
               </div>
             </SectionCard>
 
+            {/* Attachments */}
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Attachments</h2>
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex items-center gap-1 rounded border border-slate-300 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-600 transition hover:border-indigo-400 hover:text-indigo-600"
+                >
+                  <Paperclip size={11} strokeWidth={2.5} />
+                  Add Files
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                  onChange={handleFileInput}
+                  className="hidden"
+                />
+              </div>
+
+              <div className="p-3 space-y-2">
+                {/* Drop zone */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
+                  onDragLeave={() => setIsDragOver(false)}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={[
+                    'flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed py-4 text-center transition-colors',
+                    isDragOver
+                      ? 'border-indigo-400 bg-indigo-50'
+                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50',
+                  ].join(' ')}
+                >
+                  <Paperclip size={18} className={isDragOver ? 'text-indigo-400' : 'text-slate-300'} />
+                  <p className="text-[11px] text-slate-400">
+                    Drag & drop files here, or <span className="text-indigo-500">click to browse</span>
+                  </p>
+                  <p className="text-[10px] text-slate-300">Images, PDF, Word, Excel — max 10 MB each</p>
+                </div>
+
+                {/* Queued new files */}
+                {newFiles.length > 0 && (
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-medium text-slate-500">
+                      Queued ({newFiles.length}) — will upload on save
+                    </p>
+                    {newFiles.map((file, i) => (
+                      <div key={i} className="flex items-center gap-2 rounded border border-indigo-100 bg-indigo-50 px-2 py-1">
+                        <Image size={13} className="shrink-0 text-indigo-400" />
+                        <span className="min-w-0 flex-1 truncate text-[11px] text-indigo-700">{file.name}</span>
+                        <span className="shrink-0 text-[10px] text-indigo-400">{formatFileSize(file.size)}</span>
+                        <button
+                          type="button"
+                          onClick={() => removeNewFile(i)}
+                          className="shrink-0 rounded p-0.5 text-indigo-400 transition hover:bg-indigo-100 hover:text-indigo-600"
+                        >
+                          <X size={11} strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Existing saved attachments */}
+                {existingFiles.length > 0 && (
+                  <div className="space-y-1">
+                    {newFiles.length > 0 && <div className="border-t border-slate-100" />}
+                    <p className="text-[11px] font-medium text-slate-500">Saved ({existingFiles.length})</p>
+                    {existingFiles.map((att) => (
+                      <div key={att.id} className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1">
+                        {fileIcon(att.mime_type)}
+                        <span className="min-w-0 flex-1 truncate text-[11px] text-slate-700">{att.file_name}</span>
+                        <span className="shrink-0 text-[10px] text-slate-400">{formatFileSize(att.file_size)}</span>
+                        <a
+                          href={att.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="shrink-0 rounded p-0.5 text-slate-400 transition hover:text-indigo-600"
+                          title="Download"
+                        >
+                          <Download size={11} strokeWidth={2.5} />
+                        </a>
+                        <button
+                          type="button"
+                          disabled={deletingIds.has(att.id)}
+                          onClick={() => handleDeleteExisting(att)}
+                          className="shrink-0 rounded p-0.5 text-slate-400 transition hover:text-red-500 disabled:opacity-40"
+                          title="Delete"
+                        >
+                          <Trash2 size={11} strokeWidth={2.5} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {newFiles.length === 0 && existingFiles.length === 0 && (
+                  <p className="text-center text-[11px] text-slate-300">No attachments yet.</p>
+                )}
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white p-3 flex flex-col gap-2">
+              <button
+                type="submit"
+                disabled={mutation.isPending}
+                className="flex w-full items-center justify-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={13} strokeWidth={2.5} />
+                {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Customer'}
+              </button>
+              <Link
+                to="/inventory/customers"
+                className="block w-full rounded border border-slate-200 px-3 py-1.5 text-center text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+              >
+                Cancel
+              </Link>
+              {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
+                <p className="text-xs text-red-600">
+                  {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
+                </p>
+              )}
+            </div>
+
           </div>
         </div>
-
-        {/* ── Footer ──────────────────────────────────────────────────── */}
-        <div className="mt-2.5 flex items-center justify-end gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2">
-          <Link
-            to="/inventory/customers"
-            className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
-          >
-            Cancel
-          </Link>
-          <button
-            type="submit"
-            disabled={mutation.isPending}
-            className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Save size={13} strokeWidth={2.5} />
-            {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Customer'}
-          </button>
-        </div>
-
-        {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-          <p className="mt-1.5 text-xs text-red-600">
-            {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
-          </p>
-        )}
       </form>
     </div>
   )

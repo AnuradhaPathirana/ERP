@@ -81,6 +81,7 @@ export default function AttributesPage() {
                     <th className="w-10 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">#</th>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Attribute Name</th>
                     <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Attribute Type</th>
+                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Category</th>
                     <th className="w-32 px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Created</th>
                     <th className="w-20 px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                   </tr>
@@ -89,7 +90,7 @@ export default function AttributesPage() {
                 <tbody className="divide-y divide-slate-100">
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="px-4 py-14 text-center text-sm text-slate-400">
+                      <td colSpan={6} className="px-4 py-14 text-center text-sm text-slate-400">
                         No attributes yet.{' '}
                         {can('create_attributes') && (
                           <Link
@@ -114,6 +115,10 @@ export default function AttributesPage() {
 
                         <td className="px-4 py-2.5 text-slate-600">
                           {row.attribute_type_name ?? <span className="italic text-slate-300">—</span>}
+                        </td>
+
+                        <td className="px-4 py-2.5 text-slate-600">
+                          {row.attribute_type_category_name ?? <span className="italic text-slate-300">—</span>}
                         </td>
 
                         <td className="whitespace-nowrap px-4 py-2.5 text-slate-400">

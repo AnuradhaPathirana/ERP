@@ -44,6 +44,7 @@ class CustomerController extends Controller
     public function store(CustomerRequest $request): JsonResponse
     {
         $customer = $this->service->create(CustomerData::fromRequest($request));
+        $customer->load('attachmentFiles');
 
         return response()->json(
             ['data' => (new CustomerResource($customer))->toArray(request())],
@@ -53,6 +54,8 @@ class CustomerController extends Controller
 
     public function show(CustomerMaster $customerMaster): JsonResponse
     {
+        $customerMaster->load('attachmentFiles');
+
         return response()->json(
             ['data' => (new CustomerResource($customerMaster))->toArray(request())],
         );
@@ -61,6 +64,7 @@ class CustomerController extends Controller
     public function update(CustomerRequest $request, CustomerMaster $customerMaster): JsonResponse
     {
         $customer = $this->service->update($customerMaster, CustomerData::fromRequest($request));
+        $customer->load('attachmentFiles');
 
         return response()->json(
             ['data' => (new CustomerResource($customer))->toArray(request())],

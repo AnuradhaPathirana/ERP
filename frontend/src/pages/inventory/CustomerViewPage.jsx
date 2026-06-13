@@ -1,6 +1,6 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Trash2 } from 'lucide-react'
+import { Edit2, Trash2, FileText, Image, Download } from 'lucide-react'
 import { deleteCustomer, getCustomer } from '../../api/customers'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
@@ -22,6 +22,18 @@ function Row({ label, value, mono }) {
       </span>
     </div>
   )
+}
+
+function formatFileSize(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function fileIcon(mimeType) {
+  if (mimeType?.startsWith('image/')) return <Image size={13} className="shrink-0 text-blue-400" />
+  return <FileText size={13} className="shrink-0 text-slate-400" />
 }
 
 function SectionCard({ title, children }) {
@@ -128,7 +140,6 @@ export default function CustomerViewPage() {
               <Row label="Customer Name"              value={fmt(c?.customer_name)} />
               <Row label="NIC / Passport / DL"        value={fmt(c?.nic_passport_driving_licence)} mono />
               <Row label="BR Number"                  value={fmt(c?.br_no)} mono />
-              <Row label="Attachments"                value={fmt(c?.attachments)} />
             </div>
           </SectionCard>
 
@@ -177,6 +188,41 @@ export default function CustomerViewPage() {
               <Row label="Sales Person"    value={fmt(c?.sales_person)} />
             </div>
           </SectionCard>
+
+          {/* Attachments */}
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                Attachments {Array.isArray(c?.attachments) && c.attachments.length > 0 && (
+                  <span className="ml-1 text-slate-400">({c.attachments.length})</span>
+                )}
+              </h2>
+            </div>
+            <div className="px-3 py-2">
+              {Array.isArray(c?.attachments) && c.attachments.length > 0 ? (
+                <div className="space-y-1">
+                  {c.attachments.map((att) => (
+                    <div key={att.id} className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1">
+                      {fileIcon(att.mime_type)}
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-slate-700">{att.file_name}</span>
+                      <span className="shrink-0 text-[10px] text-slate-400">{formatFileSize(att.file_size)}</span>
+                      <a
+                        href={att.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="shrink-0 rounded p-0.5 text-slate-400 transition hover:text-indigo-600"
+                        title="Download"
+                      >
+                        <Download size={11} strokeWidth={2.5} />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="py-2 text-center text-[11px] text-slate-300">No attachments.</p>
+              )}
+            </div>
+          </div>
 
           <SectionCard title="Record Info">
             <div className="divide-y divide-slate-50">
