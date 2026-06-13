@@ -427,19 +427,6 @@ export default function StoreFormPage() {
               </div>
             </SectionCard>
 
-            {/* Description */}
-            <SectionCard title="Description">
-              <textarea
-                rows={3}
-                placeholder="Additional notes about this store…"
-                className={`${inputBase} resize-none`}
-                name="description"
-                value={form.description}
-                onChange={handleChange}
-                onBlur={handleBlur}
-              />
-            </SectionCard>
-
           </div>
 
           {/* ── RIGHT column ────────────────────────────────────── */}
@@ -465,32 +452,44 @@ export default function StoreFormPage() {
                 Inactive stores are hidden from stock movement dropdowns.
               </p>
             </SectionCard>
+
+            {/* Description */}
+            <SectionCard title="Description">
+              <textarea
+                rows={5}
+                placeholder="Additional notes about this store…"
+                className={`${inputBase} resize-none`}
+                name="description"
+                value={form.description}
+                onChange={handleChange}
+                onBlur={handleBlur}
+              />
+            </SectionCard>
+
+            {/* Actions */}
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white p-3 flex flex-col gap-2">
+              <button
+                type="submit"
+                disabled={mutation.isPending}
+                className="flex w-full items-center justify-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={13} strokeWidth={2.5} />
+                {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Store'}
+              </button>
+              <Link
+                to="/inventory/stores"
+                className="block w-full rounded border border-slate-200 px-3 py-1.5 text-center text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+              >
+                Cancel
+              </Link>
+              {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
+                <p className="text-xs text-red-600">
+                  {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
+                </p>
+              )}
+            </div>
           </div>
         </div>
-
-        {/* ── Action bar ─────────────────────────────────────────── */}
-        <div className="mt-2.5 flex items-center justify-end gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2">
-          <Link
-            to="/inventory/stores"
-            className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
-          >
-            Cancel
-          </Link>
-          <button
-            type="submit"
-            disabled={mutation.isPending}
-            className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <Save size={13} strokeWidth={2.5} />
-            {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Store'}
-          </button>
-        </div>
-
-        {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-          <p className="mt-1.5 text-xs text-red-600">
-            {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
-          </p>
-        )}
       </form>
     </div>
   )

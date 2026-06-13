@@ -42,7 +42,7 @@ const EMPTY_FORM = {
   fax: '', website: '', longitude: '', latitude: '', map_url: '',
   // Advanced
   date_format: 'M d, Y', number_format: '#,###.##', time_format: 'H:i:s',
-  float_precision: '3', base_currency: 'USD', time_zone: 'Asia/Colombo',
+  float_precision: '3', base_currency: 'LKR', time_zone: 'Asia/Colombo',
   financial_year: '', open_hours_from: '09:00', open_hours_to: '18:00',
   // Modules & stock
   available_modules: [], stock_releasing_method: 'FIFO',
@@ -197,7 +197,7 @@ export default function LocationFormPage() {
         number_format:             d.number_format           ?? '#,###.##',
         time_format:               d.time_format             ?? 'H:i:s',
         float_precision:           d.float_precision         != null ? String(d.float_precision) : '3',
-        base_currency:             d.base_currency           ?? 'USD',
+        base_currency:             d.base_currency           ?? 'LKR',
         time_zone:                 d.time_zone               ?? 'Asia/Colombo',
         financial_year:            d.financial_year          ?? '',
         open_hours_from:           d.open_hours_from         ?? '09:00',

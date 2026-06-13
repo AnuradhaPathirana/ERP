@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Layers,
   Lock,
+  LogOut,
   MapPin,
   Package,
   Ruler,
@@ -125,6 +126,23 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
   const navigate        = useNavigate()
 
   const [lockedModule, setLockedModule] = useState(null)
+
+  const userName    = localStorage.getItem('user_name')  || ''
+  const userEmail   = localStorage.getItem('user_email') || ''
+  const displayName = userName || userEmail || 'User'
+  const initials    = userName
+    ? userName.split(/\s+/).map((w) => w[0]?.toUpperCase() ?? '').slice(0, 2).join('')
+    : (userEmail[0]?.toUpperCase() ?? 'U')
+
+  const handleLogout = () => {
+    localStorage.removeItem('auth_token')
+    localStorage.removeItem('user_name')
+    localStorage.removeItem('user_email')
+    localStorage.removeItem('active_modules')
+    localStorage.removeItem('user_roles')
+    localStorage.removeItem('user_permissions')
+    navigate('/login')
+  }
 
   return (
     <>
@@ -321,14 +339,42 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
           })}
         </nav>
 
-        {/* ── Footer ── */}
-        {!collapsed && (
-          <div className="shrink-0 border-t border-slate-700/60 px-4 py-3">
-            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-500">
-              v1.0.0
-            </p>
-          </div>
-        )}
+        {/* ── Footer: user info + sign out ── */}
+        <div className="shrink-0 border-t border-slate-700/60">
+          {collapsed ? (
+            <div className="flex flex-col items-center gap-2 py-3">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
+                {initials}
+              </span>
+              <button
+                onClick={handleLogout}
+                title="Sign out"
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-700 hover:text-red-400 transition-colors"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-3 py-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-xs font-bold text-white">
+                {initials}
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-white">{displayName}</p>
+                {userEmail && (
+                  <p className="truncate text-[11px] text-slate-400">{userEmail}</p>
+                )}
+              </div>
+              <button
+                onClick={handleLogout}
+                title="Sign out"
+                className="shrink-0 rounded-lg p-1.5 text-slate-400 hover:bg-slate-700 hover:text-red-400 transition-colors"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          )}
+        </div>
       </aside>
 
       <UpgradeModal module={lockedModule} onClose={() => setLockedModule(null)} />
