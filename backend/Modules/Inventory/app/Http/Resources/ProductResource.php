@@ -28,8 +28,10 @@ class ProductResource extends JsonResource
             'description'  => $this->description,
 
             // Classification
-            'category'     => $this->category,
-            'location'     => $this->location,
+            'category_id'   => $this->category_id,
+            'category_name' => $this->whenLoaded('category', fn () => $this->category?->category_name),
+            'location_id'   => $this->location_id,
+            'location_name' => $this->whenLoaded('location', fn () => $this->location?->location_name),
 
             // Reorder
             'reorder_level'  => $this->reorder_level !== null ? (float) $this->reorder_level : null,

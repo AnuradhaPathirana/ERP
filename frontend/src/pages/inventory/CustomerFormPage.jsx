@@ -1,9 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save } from 'lucide-react'
-import { createCustomer, getCustomer, updateCustomer } from '../../api/customers'
+import { RefreshCw, Save } from 'lucide-react'
+import { checkCustomerCode, createCustomer, getCustomer, updateCustomer } from '../../api/customers'
 import Breadcrumb from '../../components/Breadcrumb'
+
+function generateCustomerCode() {
+  const num = Math.floor(Math.random() * 9999) + 1
+  return `CUS-${String(num).padStart(4, '0')}`
+}
 
 const TITLES         = ['Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Rev.']
 const CUSTOMER_TYPES = ['Trade', 'Retail', 'Wholesale', 'Corporate']
@@ -111,10 +116,15 @@ export default function CustomerFormPage() {
   const queryClient = useQueryClient()
   const nameRef     = useRef(null)
 
-  const [form,          setForm]          = useState(EMPTY_FORM)
+  const [form,          setForm]          = useState(() => ({
+    ...EMPTY_FORM,
+    customer_code: isEditing ? '' : generateCustomerCode(),
+  }))
   const [errors,        setErrors]        = useState({})
   const [touched,       setTouched]       = useState({})
   const [sameAsBilling, setSameAsBilling] = useState(false)
+  // 'idle' | 'checking' | 'available' | 'taken'
+  const [codeStatus,    setCodeStatus]    = useState('idle')
 
   const BILLING_TO_SHIPPING = {
     billing_address_line1:  'shipping_address_line1',
@@ -163,6 +173,19 @@ export default function CustomerFormPage() {
 
   useEffect(() => { nameRef.current?.focus() }, [])
 
+  // Auto-check the generated code on create mount
+  useEffect(() => {
+    if (!isEditing && form.customer_code) runCodeCheck(form.customer_code, null)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const runCodeCheck = (code, excludeId) => {
+    if (!code.trim()) { setCodeStatus('idle'); return }
+    setCodeStatus('checking')
+    checkCustomerCode(code.trim(), excludeId)
+      .then((res) => setCodeStatus(res.available ? 'available' : 'taken'))
+      .catch(() => setCodeStatus('idle'))
+  }
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setForm((prev) => {
@@ -172,6 +195,7 @@ export default function CustomerFormPage() {
       }
       return next
     })
+    if (name === 'customer_code') setCodeStatus('idle')
     if (touched[name]) setErrors((prev) => ({ ...prev, [name]: validate(name, value) }))
   }
 
@@ -179,6 +203,9 @@ export default function CustomerFormPage() {
     const { name, value } = e.target
     setTouched((prev) => ({ ...prev, [name]: true }))
     setErrors((prev) => ({ ...prev, [name]: validate(name, value) }))
+    if (name === 'customer_code' && value.trim()) {
+      runCodeCheck(value, isEditing ? id : null)
+    }
   }
 
   const mutation = useMutation({
@@ -206,6 +233,7 @@ export default function CustomerFormPage() {
     setErrors(newErrors)
     setTouched(Object.fromEntries(fields.map((f) => [f, true])))
     if (Object.values(newErrors).some(Boolean)) return
+    if (codeStatus === 'taken') return
 
     const str = (v) => (v.trim() === '' ? null : v.trim())
 
@@ -281,8 +309,34 @@ export default function CustomerFormPage() {
               <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
                 <div>
                   <Label required>Customer Code</Label>
-                  <input type="text" placeholder="CUS-001" maxLength={50} {...inp('customer_code')} />
+                  <div className="flex items-center gap-1">
+                    <input type="text" placeholder="CUS-0001" maxLength={50} {...inp('customer_code')} />
+                    {!isEditing && (
+                      <button
+                        type="button"
+                        title="Generate new code"
+                        onClick={() => {
+                          const code = generateCustomerCode()
+                          setForm((prev) => ({ ...prev, customer_code: code }))
+                          setErrors((prev) => ({ ...prev, customer_code: '' }))
+                          runCodeCheck(code, null)
+                        }}
+                        className="shrink-0 rounded border border-slate-300 bg-white p-1 text-slate-500 transition hover:border-indigo-400 hover:text-indigo-600"
+                      >
+                        <RefreshCw size={12} strokeWidth={2.5} className={codeStatus === 'checking' ? 'animate-spin' : ''} />
+                      </button>
+                    )}
+                  </div>
                   <FieldError errors={errors} touched={touched} name="customer_code" />
+                  {form.customer_code.trim() && codeStatus === 'checking' && (
+                    <p className="mt-0.5 text-[11px] text-slate-400">Checking availability…</p>
+                  )}
+                  {form.customer_code.trim() && codeStatus === 'available' && (
+                    <p className="mt-0.5 text-[11px] text-emerald-600">Code is available.</p>
+                  )}
+                  {form.customer_code.trim() && codeStatus === 'taken' && (
+                    <p className="mt-0.5 text-[11px] text-red-600">Code already in use.</p>
+                  )}
                 </div>
                 <div>
                   <Label>Reference No.</Label>

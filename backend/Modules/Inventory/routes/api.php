@@ -43,11 +43,17 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.unit-conversions.save-rates');
 
     // Products — per-action permission middleware applied in ProductController constructor
+    Route::get('products/check-code', [ProductController::class, 'checkCode'])
+        ->name('inventory.products.check-code');
+
     Route::apiResource('products', ProductController::class)
         ->names('inventory.products');
 
     Route::get('supplier-masters/all', [SupplierMasterController::class, 'all'])
         ->name('inventory.supplier-masters.all');
+
+    Route::get('supplier-masters/check-code', [SupplierMasterController::class, 'checkCode'])
+        ->name('inventory.supplier-masters.check-code');
 
     Route::apiResource('supplier-masters', SupplierMasterController::class)
         ->names('inventory.supplier-masters');
@@ -96,6 +102,9 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
 
     Route::get('customer-masters/all', [CustomerController::class, 'all'])
         ->name('inventory.customer-masters.all');
+
+    Route::get('customer-masters/check-code', [CustomerController::class, 'checkCode'])
+        ->name('inventory.customer-masters.check-code');
 
     Route::apiResource('customer-masters', CustomerController::class)
         ->names('inventory.customer-masters');

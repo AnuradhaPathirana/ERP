@@ -1,7 +1,8 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save } from 'lucide-react'
+import { ChevronDown, ChevronRight, Save } from 'lucide-react'
 import { createAttributeType, getAttributeType, updateAttributeType } from '../../api/attributeTypes'
 import { getAllCategories } from '../../api/categories'
 import Breadcrumb from '../../components/Breadcrumb'
@@ -22,6 +23,154 @@ function validate(field, value) {
   }
   if (field === 'description' && value.length > 255) return 'Max 255 characters.'
   return ''
+}
+
+function buildTree(categories, parentId = null) {
+  return categories
+    .filter((c) => (c.parent_category_id ?? null) === parentId)
+    .map((c) => ({ ...c, children: buildTree(categories, c.id) }))
+}
+
+function NestedCategorySelect({ value, onChange, onBlur, categories, hasError }) {
+  const [open, setOpen]         = useState(false)
+  const [expanded, setExpanded] = useState({})
+  const [panelStyle, setPanelStyle] = useState({})
+  const triggerRef = useRef(null)
+  const panelRef   = useRef(null)
+
+  const tree = useMemo(() => buildTree(categories), [categories])
+
+  const selectedLabel = useMemo(
+    () => categories.find((c) => String(c.id) === String(value))?.category_name ?? null,
+    [categories, value],
+  )
+
+  const openDropdown = () => {
+    if (triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect()
+      setPanelStyle({
+        position: 'fixed',
+        top:   rect.bottom + 2,
+        left:  rect.left,
+        width: rect.width,
+        zIndex: 9999,
+      })
+    }
+    // Auto-expand ancestors of the currently selected item
+    if (value) {
+      const pathIds = {}
+      let cur = categories.find((c) => String(c.id) === String(value))
+      while (cur?.parent_category_id) {
+        pathIds[cur.parent_category_id] = true
+        cur = categories.find((c) => c.id === cur.parent_category_id)
+      }
+      setExpanded((prev) => ({ ...prev, ...pathIds }))
+    }
+    setOpen(true)
+  }
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      if (triggerRef.current?.contains(e.target) || panelRef.current?.contains(e.target)) return
+      setOpen(false)
+      onBlur?.({ target: { name: 'category_id', value } })
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open, onBlur, value])
+
+  // Close when page scrolls (trigger position would drift)
+  useEffect(() => {
+    if (!open) return
+    const handler = () => setOpen(false)
+    window.addEventListener('scroll', handler, true)
+    return () => window.removeEventListener('scroll', handler, true)
+  }, [open])
+
+  const toggleExpand = (id) =>
+    setExpanded((prev) => ({ ...prev, [id]: !prev[id] }))
+
+  const handleSelect = (id) => {
+    onChange({ target: { name: 'category_id', value: String(id) } })
+    setOpen(false)
+  }
+
+  const renderNode = (node, depth = 0) => {
+    const hasChildren = node.children.length > 0
+    const isExpanded  = !!expanded[node.id]
+    const isSelected  = String(node.id) === String(value)
+
+    return (
+      <div key={node.id}>
+        <div
+          style={{ paddingLeft: `${6 + depth * 14}px` }}
+          className={`flex items-center gap-0.5 py-1 pr-2 text-xs ${
+            isSelected ? 'bg-indigo-50 text-indigo-700 font-medium' : 'text-slate-700'
+          }`}
+        >
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={(e) => { e.stopPropagation(); if (hasChildren) toggleExpand(node.id) }}
+            className={`flex w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:text-slate-600 ${
+              hasChildren ? 'cursor-pointer' : 'cursor-default opacity-0 pointer-events-none'
+            }`}
+          >
+            {isExpanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+          </button>
+          <button
+            type="button"
+            tabIndex={-1}
+            onClick={() => handleSelect(node.id)}
+            className={`flex-1 truncate text-left hover:text-indigo-600 ${isSelected ? 'text-indigo-700' : ''}`}
+          >
+            {node.category_name}
+          </button>
+        </div>
+        {hasChildren && isExpanded && node.children.map((child) => renderNode(child, depth + 1))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <button
+        ref={triggerRef}
+        type="button"
+        id="field-category_id"
+        onClick={() => (open ? setOpen(false) : openDropdown())}
+        onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
+        className={`flex w-full items-center justify-between rounded border bg-white px-2.5 py-1.5 text-xs outline-none transition focus:ring-2 ${
+          hasError
+            ? 'border-red-400 focus:border-red-400 focus:ring-red-500/20'
+            : 'border-slate-300 focus:border-indigo-400 focus:ring-indigo-500/20'
+        }`}
+      >
+        <span className={selectedLabel ? 'text-slate-800' : 'text-slate-400'}>
+          {selectedLabel ?? '— Select category —'}
+        </span>
+        <ChevronDown
+          size={12}
+          className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {open && createPortal(
+        <div ref={panelRef} style={panelStyle} className="rounded border border-slate-200 bg-white shadow-lg">
+          <div className="max-h-60 overflow-y-auto py-1">
+            {tree.length === 0 ? (
+              <p className="px-3 py-2 text-xs text-slate-400">No categories available</p>
+            ) : (
+              tree.map((node) => renderNode(node))
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
+    </div>
+  )
 }
 
 const inputBase =
@@ -82,7 +231,7 @@ export default function AttributeTypeFormPage() {
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter') {
-      const order = ['category_id', 'product_service_type', 'attribute_type_name', 'description']
+      const order = ['product_service_type', 'attribute_type_name', 'description']
       const idx   = order.indexOf(e.target.name)
       if (idx !== -1 && idx < order.length - 1) {
         e.preventDefault()
@@ -112,7 +261,7 @@ export default function AttributeTypeFormPage() {
   const handleSubmit = (e) => {
     e.preventDefault()
     const fields = ['category_id', 'product_service_type', 'attribute_type_name', 'description']
-    const newErrors = Object.fromEntries(fields.map((f) => [f, validate(f, form[f])]))
+    const newErrors  = Object.fromEntries(fields.map((f) => [f, validate(f, form[f])]))
     const newTouched = Object.fromEntries(fields.map((f) => [f, true]))
     setErrors(newErrors)
     setTouched(newTouched)
@@ -155,26 +304,18 @@ export default function AttributeTypeFormPage() {
 
           <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 lg:grid-cols-4">
 
-            {/* Category */}
+            {/* Category — collapsible nested tree */}
             <div>
               <label htmlFor="field-category_id" className="mb-0.5 block text-xs font-medium text-slate-600">
                 Category <span className="text-red-500">*</span>
               </label>
-              <select
-                id="field-category_id"
-                name="category_id"
+              <NestedCategorySelect
                 value={form.category_id}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                className={errors.category_id && touched.category_id ? inputErr : inputBase}
-              >
-                <option value="">— Select category —</option>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.category_name}
-                  </option>
-                ))}
-              </select>
+                categories={categories}
+                hasError={!!(errors.category_id && touched.category_id)}
+              />
               {errors.category_id && touched.category_id && (
                 <p className="mt-0.5 text-[11px] text-red-600">{errors.category_id}</p>
               )}
@@ -182,20 +323,29 @@ export default function AttributeTypeFormPage() {
 
             {/* Product / Service Type */}
             <div>
-              <label htmlFor="field-product_service_type" className="mb-0.5 block text-xs font-medium text-slate-600">
+              <label className="mb-0.5 block text-xs font-medium text-slate-600">
                 Type <span className="text-red-500">*</span>
               </label>
-              <select
-                id="field-product_service_type"
-                name="product_service_type"
-                value={form.product_service_type}
-                onChange={handleChange}
-                onBlur={handleBlur}
-                className={errors.product_service_type && touched.product_service_type ? inputErr : inputBase}
-              >
-                <option value="product">Product</option>
-                <option value="service">Service</option>
-              </select>
+              <div className={`flex items-center gap-4 rounded border px-2.5 py-1.5 ${
+                errors.product_service_type && touched.product_service_type
+                  ? 'border-red-400 bg-red-50'
+                  : 'border-slate-300 bg-white'
+              }`}>
+                {[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }].map(({ value, label }) => (
+                  <label key={value} className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700 select-none">
+                    <input
+                      type="radio"
+                      name="product_service_type"
+                      value={value}
+                      checked={form.product_service_type === value}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                      className="accent-indigo-600"
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
               {errors.product_service_type && touched.product_service_type && (
                 <p className="mt-0.5 text-[11px] text-red-600">{errors.product_service_type}</p>
               )}

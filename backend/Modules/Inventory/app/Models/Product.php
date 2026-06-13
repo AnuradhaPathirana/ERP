@@ -6,8 +6,11 @@ namespace Modules\Inventory\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Modules\Inventory\Database\Factories\ProductFactory;
+use Modules\Inventory\Models\Category;
+use Modules\Inventory\Models\Location;
 use Modules\Inventory\Models\SalesChannel;
 use Modules\Inventory\Models\SupplierMaster;
 
@@ -25,8 +28,8 @@ class Product extends Model
         'display_name',
         'product_type',
         'description',
-        'category',
-        'location',
+        'category_id',
+        'location_id',
         'reorder_level',
         'reorder_qty',
         'reorder_period',
@@ -46,6 +49,8 @@ class Product extends Model
     ];
 
     protected $casts = [
+        'category_id'               => 'integer',
+        'location_id'               => 'integer',
         'reorder_level'             => 'decimal:4',
         'reorder_qty'               => 'decimal:4',
         'lock_purchase'             => 'boolean',
@@ -60,6 +65,16 @@ class Product extends Model
         'is_batch'                  => 'boolean',
         'is_serial'                 => 'boolean',
     ];
+
+    public function category(): BelongsTo
+    {
+        return $this->belongsTo(Category::class, 'category_id');
+    }
+
+    public function location(): BelongsTo
+    {
+        return $this->belongsTo(Location::class, 'location_id');
+    }
 
     public function suppliers(): BelongsToMany
     {

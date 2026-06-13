@@ -1,14 +1,21 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { HelpCircle, Plus, Save, X } from 'lucide-react'
-import { createProduct, getProduct, updateProduct } from '../../api/products'
+import { ChevronDown, ChevronRight, HelpCircle, Plus, RefreshCw, Save, X } from 'lucide-react'
+import { checkProductCode, createProduct, getProduct, updateProduct } from '../../api/products'
+import { getAllCategories } from '../../api/categories'
+import { getAllLocations } from '../../api/locations'
 import { getAllSalesChannels } from '../../api/salesChannels'
 import { getAllSuppliers } from '../../api/suppliers'
 import { getAllUnitTypes } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
 
-const PRODUCT_TYPES   = ['Product', 'Service', 'Bundle', 'Raw Material']
+function generateProductCode() {
+  const num = Math.floor(Math.random() * 9999) + 1
+  return `PRD-${String(num).padStart(4, '0')}`
+}
+
+const PRODUCT_TYPES   = ['Inventory', 'Raw Material', 'Service']
 const STOCK_METHODS   = ['FIFO', 'LIFO', 'FEFO']
 const TRACKING_TYPES  = ['Batch', 'Serial']
 const REORDER_PERIODS = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly']
@@ -49,8 +56,8 @@ const EMPTY_FORM = {
   display_name:              '',
   product_type:              '',
   description:               '',
-  category:                  '',
-  location:                  '',
+  category_id:               '',
+  location_id:               '',
   reorder_level:             '',
   reorder_qty:               '',
   reorder_period:            '',
@@ -85,11 +92,10 @@ function validateField(field, value) {
     if (String(value).length > 100) return 'Max 100 chars.'
   }
   if (field === 'product_type' && !value) return 'Required.'
+  if (field === 'category_id'  && !value) return 'Required.'
   if (field === 'supplier_ids' && (!value || value.length === 0)) return 'At least one supplier required.'
   if (field === 'reference_no' && value && String(value).length > 50) return 'Max 50 chars.'
   if (field === 'ean_13' && value && String(value).length > 50) return 'Max 50 chars.'
-  if (field === 'category' && value && String(value).length > 100) return 'Max 100 chars.'
-  if (field === 'location' && value && String(value).length > 100) return 'Max 100 chars.'
   if ((field === 'reorder_level' || field === 'reorder_qty') && value !== '' && (isNaN(Number(value)) || Number(value) < 0)) {
     return 'Must be a positive number.'
   }
@@ -202,6 +208,145 @@ function CostSelect({ value, onChange, children, placeholder }) {
       <option value="">{placeholder ?? '— Select —'}</option>
       {children}
     </select>
+  )
+}
+
+// ── Generic collapsible tree select ─────────────────────────────────────────
+
+function buildTree(flat, parentField) {
+  const map = {}
+  flat.forEach((item) => { map[item.id] = { ...item, children: [] } })
+  const roots = []
+  flat.forEach((item) => {
+    const pid = item[parentField]
+    if (pid && map[pid]) {
+      map[pid].children.push(map[item.id])
+    } else {
+      roots.push(map[item.id])
+    }
+  })
+  return roots
+}
+
+function TreeNode({ node, labelField, selectedValue, onSelect, depth }) {
+  const [expanded, setExpanded] = useState(true)
+  const hasChildren = node.children.length > 0
+  const isSelected  = String(node.id) === String(selectedValue)
+
+  return (
+    <div>
+      <div
+        className={[
+          'flex items-center gap-1 rounded cursor-pointer select-none',
+          isSelected ? 'bg-indigo-50 text-indigo-700' : 'text-slate-700 hover:bg-slate-100',
+        ].join(' ')}
+        style={{ paddingLeft: `${6 + depth * 14}px`, paddingRight: 6, paddingTop: 3, paddingBottom: 3 }}
+      >
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={() => hasChildren && setExpanded((v) => !v)}
+          className="shrink-0 flex items-center justify-center w-3.5 h-3.5 text-slate-400"
+        >
+          {hasChildren
+            ? expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />
+            : <span className="w-3.5" />}
+        </button>
+        <span
+          className={['flex-1 text-xs truncate', isSelected ? 'font-semibold' : ''].join(' ')}
+          onClick={() => onSelect(String(node.id))}
+        >
+          {node[labelField]}
+        </span>
+      </div>
+
+      {hasChildren && expanded && (
+        <div>
+          {node.children.map((child) => (
+            <TreeNode
+              key={child.id}
+              node={child}
+              labelField={labelField}
+              selectedValue={selectedValue}
+              onSelect={onSelect}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TreeSelect({ name, value, onChange, items, parentField, labelField, error, touched, placeholder, emptyText }) {
+  const [open, setOpen] = useState(false)
+  const containerRef    = useRef(null)
+  const tree            = buildTree(items, parentField)
+  const selectedName    = items.find((item) => String(item.id) === String(value))?.[labelField]
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const handleSelect = (id) => {
+    onChange({ target: { name, value: id } })
+    setOpen(false)
+  }
+
+  const handleClear = (e) => {
+    e.stopPropagation()
+    onChange({ target: { name, value: '' } })
+  }
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={[
+          'flex w-full items-center justify-between gap-1 rounded border px-2 py-1 text-sm text-left bg-white outline-none transition-all',
+          'focus:ring-1 focus:ring-indigo-500/30',
+          error && touched
+            ? 'border-red-400 focus:border-red-400'
+            : 'border-slate-300 focus:border-indigo-400',
+        ].join(' ')}
+      >
+        <span className={['truncate text-sm', selectedName ? 'text-slate-800' : 'text-slate-400'].join(' ')}>
+          {selectedName ?? placeholder ?? '— Select —'}
+        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          {value && (
+            <span onClick={handleClear} title="Clear" className="cursor-pointer text-slate-400 hover:text-slate-600">
+              <X size={11} />
+            </span>
+          )}
+          <ChevronDown size={12} className={['text-slate-400 transition-transform duration-150', open ? 'rotate-180' : ''].join(' ')} />
+        </div>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 z-20 mt-1 w-full min-w-[180px] rounded-lg border border-slate-200 bg-white shadow-lg max-h-56 overflow-y-auto py-1">
+          {tree.length === 0
+            ? <p className="px-3 py-2 text-xs italic text-slate-400">{emptyText ?? 'No options available.'}</p>
+            : tree.map((node) => (
+                <TreeNode
+                  key={node.id}
+                  node={node}
+                  labelField={labelField}
+                  selectedValue={value}
+                  onSelect={handleSelect}
+                  depth={0}
+                />
+              ))
+          }
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -360,10 +505,34 @@ export default function ProductFormPage() {
   const navigate    = useNavigate()
   const queryClient = useQueryClient()
 
-  const [form,    setForm]    = useState(EMPTY_FORM)
-  const [errors,  setErrors]  = useState({})
-  const [touched, setTouched] = useState({})
+  const [form,       setForm]       = useState(() => ({
+    ...EMPTY_FORM,
+    product_code: isEditing ? '' : generateProductCode(),
+  }))
+  const [errors,     setErrors]     = useState({})
+  const [touched,    setTouched]    = useState({})
+  const [codeStatus, setCodeStatus] = useState('idle') // 'idle' | 'checking' | 'available' | 'taken'
 
+  const runCodeCheck = (code, excludeId) => {
+    setCodeStatus('checking')
+    checkProductCode(code, excludeId)
+      .then(({ available }) => setCodeStatus(available ? 'available' : 'taken'))
+      .catch(() => setCodeStatus('idle'))
+  }
+
+  // Auto-check the generated code on create mount
+  useEffect(() => {
+    if (!isEditing && form.product_code) runCodeCheck(form.product_code, null)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const { data: categoriesData } = useQuery({
+    queryKey: ['categories-all'],
+    queryFn:  getAllCategories,
+  })
+  const { data: locationsData } = useQuery({
+    queryKey: ['locations-all'],
+    queryFn:  getAllLocations,
+  })
   const { data: suppliersData } = useQuery({
     queryKey: ['suppliers-all'],
     queryFn:  getAllSuppliers,
@@ -377,6 +546,8 @@ export default function ProductFormPage() {
     queryFn:  getAllUnitTypes,
   })
 
+  const categories    = categoriesData ?? []
+  const locations     = locationsData  ?? []
   const suppliers     = suppliersData ?? []
   const salesChannels = channelsData  ?? []
   const unitTypes     = unitTypesData ?? []
@@ -399,8 +570,8 @@ export default function ProductFormPage() {
         display_name:              p.display_name             ?? '',
         product_type:              p.product_type             ?? '',
         description:               p.description              ?? '',
-        category:                  p.category                 ?? '',
-        location:                  p.location                 ?? '',
+        category_id:               p.category_id  != null ? String(p.category_id)  : '',
+        location_id:               p.location_id  != null ? String(p.location_id)  : '',
         reorder_level:             p.reorder_level            != null ? String(p.reorder_level) : '',
         reorder_qty:               p.reorder_qty              != null ? String(p.reorder_qty) : '',
         reorder_period:            p.reorder_period           ?? '',
@@ -439,6 +610,7 @@ export default function ProductFormPage() {
   const handleChange = (e) => {
     const { name, value } = e.target
     setForm((prev) => ({ ...prev, [name]: value }))
+    if (name === 'product_code') setCodeStatus('idle')
     if (touched[name]) {
       setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }))
     }
@@ -448,6 +620,9 @@ export default function ProductFormPage() {
     const { name, value } = e.target
     setTouched((prev) => ({ ...prev, [name]: true }))
     setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }))
+    if (name === 'product_code' && value.trim()) {
+      runCodeCheck(value, isEditing ? id : null)
+    }
   }
 
   const handleCheck = (key) => setForm((prev) => ({ ...prev, [key]: !prev[key] }))
@@ -498,7 +673,7 @@ export default function ProductFormPage() {
     e.preventDefault()
     const fieldErrors = {}
     const allTouched  = {}
-    const validateFields = ['name', 'product_code', 'display_name', 'product_type', 'supplier_ids', 'reference_no', 'ean_13', 'category', 'location', 'reorder_level', 'reorder_qty']
+    const validateFields = ['name', 'product_code', 'display_name', 'product_type', 'category_id', 'supplier_ids', 'reference_no', 'ean_13', 'reorder_level', 'reorder_qty']
     validateFields.forEach((f) => {
       fieldErrors[f] = validateField(f, form[f])
       allTouched[f]  = true
@@ -517,8 +692,8 @@ export default function ProductFormPage() {
       display_name:           form.display_name.trim(),
       product_type:           form.product_type,
       description:            form.description.trim() || null,
-      category:               form.category.trim() || null,
-      location:               form.location.trim() || null,
+      category_id:            form.category_id !== '' ? Number(form.category_id) : null,
+      location_id:            form.location_id  !== '' ? Number(form.location_id)  : null,
       reorder_level:          toNum(form.reorder_level),
       reorder_qty:            toNum(form.reorder_qty),
       reorder_period:         form.reorder_period || null,
@@ -587,8 +762,34 @@ export default function ProductFormPage() {
             <div className="space-y-2 p-3">
               <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
                 <Field label="Product Code" required error={e.product_code} touched={t.product_code}>
-                  <Input name="product_code" value={f.product_code} onChange={handleChange} onBlur={handleBlur}
-                    error={e.product_code} touched={t.product_code} placeholder="e.g. PRD-0001" maxLength={50} />
+                  <div className="flex items-center gap-1">
+                    <Input name="product_code" value={f.product_code} onChange={handleChange} onBlur={handleBlur}
+                      error={e.product_code} touched={t.product_code} placeholder="PRD-0001" maxLength={50} />
+                    {!isEditing && (
+                      <button
+                        type="button"
+                        title="Generate new code"
+                        onClick={() => {
+                          const code = generateProductCode()
+                          setForm((prev) => ({ ...prev, product_code: code }))
+                          setErrors((prev) => ({ ...prev, product_code: '' }))
+                          runCodeCheck(code, null)
+                        }}
+                        className="shrink-0 rounded border border-slate-300 bg-white p-1 text-slate-500 transition hover:border-indigo-400 hover:text-indigo-600"
+                      >
+                        <RefreshCw size={13} />
+                      </button>
+                    )}
+                  </div>
+                  {f.product_code.trim() && codeStatus === 'checking' && (
+                    <p className="mt-0.5 text-[11px] text-slate-400">Checking availability…</p>
+                  )}
+                  {f.product_code.trim() && codeStatus === 'available' && (
+                    <p className="mt-0.5 text-[11px] text-emerald-600">Code is available.</p>
+                  )}
+                  {f.product_code.trim() && codeStatus === 'taken' && (
+                    <p className="mt-0.5 text-[11px] text-red-600">Code already in use.</p>
+                  )}
                 </Field>
                 <Field label="Reference No" error={e.reference_no} touched={t.reference_no}>
                   <Input name="reference_no" value={f.reference_no} onChange={handleChange} onBlur={handleBlur}
@@ -613,13 +814,33 @@ export default function ProductFormPage() {
                   <Input name="display_name" value={f.display_name} onChange={handleChange} onBlur={handleBlur}
                     error={e.display_name} touched={t.display_name} placeholder="Short / POS name" maxLength={100} />
                 </Field>
-                <Field label="Category" error={e.category} touched={t.category}>
-                  <Input name="category" value={f.category} onChange={handleChange} onBlur={handleBlur}
-                    error={e.category} touched={t.category} placeholder="e.g. Electronics" maxLength={100} />
+                <Field label="Category" required error={e.category_id} touched={t.category_id}>
+                  <TreeSelect
+                    name="category_id"
+                    value={f.category_id}
+                    onChange={handleChange}
+                    items={categories}
+                    parentField="parent_category_id"
+                    labelField="category_name"
+                    error={e.category_id}
+                    touched={t.category_id}
+                    placeholder="— Select category —"
+                    emptyText="No categories available."
+                  />
                 </Field>
-                <Field label="Location" error={e.location} touched={t.location}>
-                  <Input name="location" value={f.location} onChange={handleChange} onBlur={handleBlur}
-                    error={e.location} touched={t.location} placeholder="Warehouse / shelf" maxLength={100} />
+                <Field label="Location" error={e.location_id} touched={t.location_id}>
+                  <TreeSelect
+                    name="location_id"
+                    value={f.location_id}
+                    onChange={handleChange}
+                    items={locations}
+                    parentField="parent_location_id"
+                    labelField="location_name"
+                    error={e.location_id}
+                    touched={t.location_id}
+                    placeholder="— Select location —"
+                    emptyText="No locations available."
+                  />
                 </Field>
               </div>
 
@@ -698,42 +919,41 @@ export default function ProductFormPage() {
           </div>
         </div>
 
-        {/* ── Cost Details — full width ── */}
+        {/* ── Channels — full width ── */}
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Cost Details</h2>
+          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5 flex items-center justify-between">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Channels</h2>
+            <button
+              type="button"
+              onClick={addCostRow}
+              disabled={salesChannels.length === 0 || f.cost_details.length >= salesChannels.length}
+              title="Add channel"
+              className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
+            >
+              <Plus size={13} strokeWidth={2.5} />
+            </button>
           </div>
-          <div className="p-3 space-y-2.5">
-            {f.cost_details.length === 0 && (
+          <div className="p-3">
+            {f.cost_details.length === 0 ? (
               <p className="text-xs italic text-slate-400">
-                No cost details added. Click <strong>+</strong> to configure pricing per sales channel.
+                No channels added. Click <strong>+</strong> to configure pricing per sales channel.
               </p>
+            ) : (
+              <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
+                {f.cost_details.map((row, idx) => (
+                  <CostDetailCard
+                    key={idx}
+                    row={row}
+                    idx={idx}
+                    salesChannels={salesChannels}
+                    unitTypes={unitTypes}
+                    usedChannelIds={usedChannelIds}
+                    onChange={handleCostChange}
+                    onRemove={removeCostRow}
+                  />
+                ))}
+              </div>
             )}
-
-            {f.cost_details.map((row, idx) => (
-              <CostDetailCard
-                key={idx}
-                row={row}
-                idx={idx}
-                salesChannels={salesChannels}
-                unitTypes={unitTypes}
-                usedChannelIds={usedChannelIds}
-                onChange={handleCostChange}
-                onRemove={removeCostRow}
-              />
-            ))}
-
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={addCostRow}
-                disabled={salesChannels.length === 0 || f.cost_details.length >= salesChannels.length}
-                title="Add sales channel"
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50 transition-colors"
-              >
-                <Plus size={16} strokeWidth={2.5} />
-              </button>
-            </div>
           </div>
         </section>
 

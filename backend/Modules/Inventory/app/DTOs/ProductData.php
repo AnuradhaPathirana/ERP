@@ -21,8 +21,8 @@ final class ProductData
         public readonly ?string $referenceNo,
         public readonly ?string $ean13,
         public readonly ?string $description,
-        public readonly ?string $category,
-        public readonly ?string $location,
+        public readonly int     $categoryId,
+        public readonly ?int    $locationId,
         public readonly ?float  $reorderLevel,
         public readonly ?float  $reorderQty,
         public readonly ?string $reorderPeriod,
@@ -53,8 +53,10 @@ final class ProductData
             referenceNo:             $request->validated('reference_no'),
             ean13:                   $request->validated('ean_13'),
             description:             $request->validated('description'),
-            category:                $request->validated('category'),
-            location:                $request->validated('location'),
+            categoryId:              (int) $request->validated('category_id'),
+            locationId:              $request->validated('location_id') !== null
+                                         ? (int) $request->validated('location_id')
+                                         : null,
             reorderLevel:            $request->validated('reorder_level') !== null
                                          ? (float) $request->validated('reorder_level')
                                          : null,

@@ -55,10 +55,10 @@ class AttributeTypeService
         $type->delete();
     }
 
-    /** Lightweight list for dropdowns — returns only id + attribute_type_name. */
+    /** Lightweight list for dropdowns — returns id, attribute_type_name, and category_id. */
     public function all(): Collection
     {
         return AttributeType::orderBy('attribute_type_name')
-            ->get(['id', 'attribute_type_name']);
+            ->get(['id', 'attribute_type_name', 'category_id']);
     }
 }

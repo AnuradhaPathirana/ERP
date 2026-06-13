@@ -34,8 +34,8 @@ class StoreProductRequest extends FormRequest
             'description'            => ['nullable', 'string'],
 
             // Classification
-            'category'               => ['nullable', 'string', 'max:100'],
-            'location'               => ['nullable', 'string', 'max:100'],
+            'category_id'            => ['required', 'integer', 'exists:inv_categories,id'],
+            'location_id'            => ['nullable', 'integer', 'exists:inv_locations,id'],
 
             // Reorder
             'reorder_level'          => ['nullable', 'numeric', 'min:0'],

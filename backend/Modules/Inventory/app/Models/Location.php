@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Modules\Inventory\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Modules\Inventory\Models\Product;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Location extends Model
@@ -79,5 +81,10 @@ class Location extends Model
     public function parentLocation(): BelongsTo
     {
         return $this->belongsTo(self::class, 'parent_location_id');
+    }
+
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class, 'location_id');
     }
 }

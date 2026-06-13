@@ -19,7 +19,7 @@ class LocationService
 
     public function all(): \Illuminate\Database\Eloquent\Collection
     {
-        return Location::select('id', 'location_code', 'location_name')
+        return Location::select('id', 'location_code', 'location_name', 'parent_location_id')
             ->orderBy('location_name')
             ->get();
     }

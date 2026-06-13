@@ -17,3 +17,8 @@ export const updateSupplier = (id, data) =>
 
 export const deleteSupplier = (id) =>
   api.delete(`/api/v1/supplier-masters/${id}`)
+
+export const checkSupplierCode = (code, excludeId = null) =>
+  api.get('/api/v1/supplier-masters/check-code', {
+    params: { code, ...(excludeId ? { exclude_id: excludeId } : {}) },
+  }).then((r) => r.data)

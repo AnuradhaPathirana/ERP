@@ -271,7 +271,7 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
                     to={ct}
                     className={({ isActive }) =>
                       [
-                        'flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-150',
+                        'flex items-center gap-3 rounded-lg pl-5 pr-3 py-2 text-sm transition-colors duration-150',
                         isActive
                           ? 'bg-indigo-600/20 text-indigo-400 font-medium'
                           : 'text-slate-400 hover:bg-slate-800 hover:text-white',

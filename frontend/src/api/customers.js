@@ -17,3 +17,8 @@ export const updateCustomer = (id, data) =>
 
 export const deleteCustomer = (id) =>
   api.delete(`/api/v1/customer-masters/${id}`)
+
+export const checkCustomerCode = (code, excludeId = null) =>
+  api.get('/api/v1/customer-masters/check-code', {
+    params: { code, ...(excludeId ? { exclude_id: excludeId } : {}) },
+  }).then((r) => r.data)

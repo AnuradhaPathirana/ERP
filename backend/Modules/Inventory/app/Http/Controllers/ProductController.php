@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Inventory\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Inventory\DTOs\ProductData;
 use Modules\Inventory\Http\Requests\StoreProductRequest;
@@ -74,5 +75,22 @@ class ProductController extends Controller
         $this->service->delete($product);
 
         return response()->json(null, 204);
+    }
+
+    /** Check whether a product_code is available (unique). */
+    public function checkCode(Request $request): JsonResponse
+    {
+        $code      = trim((string) $request->query('code', ''));
+        $excludeId = $request->query('exclude_id');
+
+        if ($code === '') {
+            return response()->json(['available' => false]);
+        }
+
+        $taken = Product::where('product_code', $code)
+            ->when($excludeId, fn ($q) => $q->where('id', '!=', (int) $excludeId))
+            ->exists();
+
+        return response()->json(['available' => !$taken]);
     }
 }

@@ -1,9 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save } from 'lucide-react'
-import { createSupplier, getSupplier, updateSupplier } from '../../api/suppliers'
+import { RefreshCw, Save } from 'lucide-react'
+import { checkSupplierCode, createSupplier, getSupplier, updateSupplier } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
+
+function generateSupplierCode() {
+  const num = Math.floor(Math.random() * 9999) + 1
+  return `SUP-${String(num).padStart(4, '0')}`
+}
 
 const SUPPLIER_TYPES = ['Local', 'Foreign', 'Service', 'Manufacturer', 'Distributor', 'Other']
 
@@ -135,9 +140,14 @@ export default function SupplierFormPage() {
   const queryClient = useQueryClient()
   const nameRef     = useRef(null)
 
-  const [form,    setForm]    = useState(EMPTY_FORM)
-  const [errors,  setErrors]  = useState({})
-  const [touched, setTouched] = useState({})
+  const [form,       setForm]       = useState(() => ({
+    ...EMPTY_FORM,
+    supplier_code: isEditing ? '' : generateSupplierCode(),
+  }))
+  const [errors,     setErrors]     = useState({})
+  const [touched,    setTouched]    = useState({})
+  // 'idle' | 'checking' | 'available' | 'taken'
+  const [codeStatus, setCodeStatus] = useState('idle')
 
   const { isLoading: isFetching, data: fetchedData } = useQuery({
     queryKey: ['supplier', id],
@@ -160,9 +170,23 @@ export default function SupplierFormPage() {
 
   useEffect(() => { nameRef.current?.focus() }, [])
 
+  // Auto-check the generated code on create mount
+  useEffect(() => {
+    if (!isEditing && form.supplier_code) runCodeCheck(form.supplier_code, null)
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const runCodeCheck = (code, excludeId) => {
+    if (!code.trim()) { setCodeStatus('idle'); return }
+    setCodeStatus('checking')
+    checkSupplierCode(code.trim(), excludeId)
+      .then((res) => setCodeStatus(res.available ? 'available' : 'taken'))
+      .catch(() => setCodeStatus('idle'))
+  }
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setForm((prev) => ({ ...prev, [name]: value }))
+    if (name === 'supplier_code') setCodeStatus('idle')
     if (touched[name]) setErrors((prev) => ({ ...prev, [name]: validate(name, value) }))
   }
 
@@ -170,6 +194,9 @@ export default function SupplierFormPage() {
     const { name, value } = e.target
     setTouched((prev) => ({ ...prev, [name]: true }))
     setErrors((prev) => ({ ...prev, [name]: validate(name, value) }))
+    if (name === 'supplier_code' && value.trim()) {
+      runCodeCheck(value, isEditing ? id : null)
+    }
   }
 
   const mutation = useMutation({
@@ -197,6 +224,7 @@ export default function SupplierFormPage() {
     setErrors(newErrors)
     setTouched(Object.fromEntries(fields.map((f) => [f, true])))
     if (Object.values(newErrors).some(Boolean)) return
+    if (codeStatus === 'taken') return
 
     const str = (v) => (v.trim() === '' ? null : v.trim())
     const num = (v) => (v === '' ? null : Number(v))
@@ -277,7 +305,34 @@ export default function SupplierFormPage() {
               <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
                 <div>
                   <Label required>Supplier Code</Label>
-                  <input type="text" placeholder="SUP-001" maxLength={50} {...inp('supplier_code')} />
+                  <div className="flex items-center gap-1">
+                    <input type="text" placeholder="SUP-0001" maxLength={50} {...inp('supplier_code')} />
+                    {!isEditing && (
+                      <button
+                        type="button"
+                        title="Generate new code"
+                        onClick={() => {
+                          const code = generateSupplierCode()
+                          setForm((prev) => ({ ...prev, supplier_code: code }))
+                          setErrors((prev) => ({ ...prev, supplier_code: '' }))
+                          setCodeStatus('idle')
+                          runCodeCheck(code, null)
+                        }}
+                        className="shrink-0 rounded border border-slate-300 bg-white p-1 text-slate-500 transition hover:border-indigo-400 hover:text-indigo-600"
+                      >
+                        <RefreshCw size={12} strokeWidth={2.5} />
+                      </button>
+                    )}
+                  </div>
+                  {codeStatus === 'checking' && (
+                    <p className="mt-0.5 text-[11px] text-slate-400">Checking…</p>
+                  )}
+                  {codeStatus === 'available' && (
+                    <p className="mt-0.5 text-[11px] text-emerald-600">Code is available.</p>
+                  )}
+                  {codeStatus === 'taken' && (
+                    <p className="mt-0.5 text-[11px] text-red-600">Code already in use.</p>
+                  )}
                   <FieldError errors={errors} touched={touched} name="supplier_code" />
                 </div>
                 <div>

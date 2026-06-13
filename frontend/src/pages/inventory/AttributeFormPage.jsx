@@ -100,7 +100,7 @@ export default function AttributeFormPage() {
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    const fields = ['attribute_type_id', 'attribute_name']
+    const fields     = ['attribute_type_id', 'attribute_name']
     const newErrors  = Object.fromEntries(fields.map((f) => [f, validate(f, form[f])]))
     const newTouched = Object.fromEntries(fields.map((f) => [f, true]))
     setErrors(newErrors)
@@ -140,9 +140,9 @@ export default function AttributeFormPage() {
             </h2>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2">
 
-            {/* Attribute Type */}
+            {/* Attribute Type grouped by category */}
             <div>
               <label htmlFor="field-attribute_type_id" className="mb-0.5 block text-xs font-medium text-slate-600">
                 Attribute Type <span className="text-red-500">*</span>
@@ -158,7 +158,7 @@ export default function AttributeFormPage() {
                 <option value="">— Select attribute type —</option>
                 {attributeTypes.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.attribute_type_name}
+                    {t.attribute_type_name}{t.category_name ? ` — ${t.category_name}` : ''}
                   </option>
                 ))}
               </select>

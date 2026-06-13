@@ -69,11 +69,19 @@ class AttributeTypeController extends Controller
         return response()->json(null, 204);
     }
 
-    /** Flat list for <select> dropdowns — no pagination, id+attribute_type_name only. */
+    /** Flat list for <select> dropdowns — id, attribute_type_name, and related category_name. */
     public function all(): JsonResponse
     {
-        $items = $this->service->all()
-            ->map(fn (AttributeType $t) => ['id' => $t->id, 'attribute_type_name' => $t->attribute_type_name])
+        $collection = $this->service->all();
+        $collection->load('category');
+
+        $items = $collection
+            ->map(fn (AttributeType $t) => [
+                'id'                  => $t->id,
+                'attribute_type_name' => $t->attribute_type_name,
+                'category_id'         => $t->category_id,
+                'category_name'       => $t->category?->category_name,
+            ])
             ->values()
             ->all();
 

@@ -19,7 +19,7 @@ class ProductService
 
     public function find(int $id): Product
     {
-        return Product::with(['suppliers', 'salesChannels'])->findOrFail($id);
+        return Product::with(['suppliers', 'salesChannels', 'category', 'location'])->findOrFail($id);
     }
 
     public function create(ProductData $data): Product
@@ -95,8 +95,8 @@ class ProductService
             'display_name'             => $data->displayName,
             'product_type'             => $data->productType,
             'description'              => $data->description,
-            'category'                 => $data->category,
-            'location'                 => $data->location,
+            'category_id'              => $data->categoryId,
+            'location_id'              => $data->locationId,
             'reorder_level'            => $data->reorderLevel,
             'reorder_qty'              => $data->reorderQty,
             'reorder_period'           => $data->reorderPeriod,

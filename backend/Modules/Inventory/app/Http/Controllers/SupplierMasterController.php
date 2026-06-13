@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Inventory\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Inventory\DTOs\SupplierMasterData;
 use Modules\Inventory\Http\Requests\SupplierMasterRequest;
@@ -65,6 +66,23 @@ class SupplierMasterController extends Controller
         $this->service->delete($supplierMaster);
 
         return response()->json(null, 204);
+    }
+
+    /** Check whether a supplier_code is available (unique). */
+    public function checkCode(Request $request): JsonResponse
+    {
+        $code      = trim((string) $request->query('code', ''));
+        $excludeId = $request->query('exclude_id');
+
+        if ($code === '') {
+            return response()->json(['available' => false]);
+        }
+
+        $taken = SupplierMaster::where('supplier_code', $code)
+            ->when($excludeId, fn ($q) => $q->where('id', '!=', (int) $excludeId))
+            ->exists();
+
+        return response()->json(['available' => !$taken]);
     }
 
     /** Flat list for <select> dropdowns — no pagination, id + name only. */
