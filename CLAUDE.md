@@ -130,6 +130,11 @@ always the content should get the full width of the screen, but
 - **Sticky Elements:** Table headers must remain sticky at the top when scrolling vertically. Action columns (Edit/Delete) must remain sticky on the right during horizontal scrolling on smaller displays.
 - **Text Truncation:** Use text truncation (`truncate` or `line-clamp-1`) for long text fields like product descriptions, supplemented by hover tooltips to show the full content.
 
+## Action & Alerts
+
+Use sweet alerts for each operations Done or Error Messages, Avery alerts will disappear after related seconds that can be readable time.
+Every delete any record ask Yes or No with a smart popup
+
 ---
 
 ## 4. Visual Standards and Component Rules

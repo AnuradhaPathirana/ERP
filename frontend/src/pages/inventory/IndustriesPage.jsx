@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Eye, Plus, Trash2 } from 'lucide-react'
 import { deleteIndustry, getIndustries } from '../../api/industries'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -22,13 +23,16 @@ export default function IndustriesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteIndustry,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['industries'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['industries'] })
+      showSuccess('Industry deleted.')
+    },
+    onError: () => showError('Failed to delete. The industry may be in use.'),
   })
 
-  const handleDelete = (id, name) => {
-    if (window.confirm(`Delete industry "${name}"? This cannot be undone.`)) {
-      deleteMutation.mutate(id)
-    }
+  const handleDelete = async (id, name) => {
+    const ok = await confirmDelete(name)
+    if (ok) deleteMutation.mutate(id)
   }
 
   const meta = data?.meta

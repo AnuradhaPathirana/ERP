@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Plus, Trash2 } from 'lucide-react'
 import { deleteStore, getStores } from '../../api/stores'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/stores' },
@@ -22,13 +23,16 @@ export default function StoresPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteStore,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['stores'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['stores'] })
+      showSuccess('Store deleted.')
+    },
+    onError: () => showError('Failed to delete. The store may be in use.'),
   })
 
-  const handleDelete = (id, name) => {
-    if (window.confirm(`Delete store "${name}"? This cannot be undone.`)) {
-      deleteMutation.mutate(id)
-    }
+  const handleDelete = async (id, name) => {
+    const ok = await confirmDelete(name)
+    if (ok) deleteMutation.mutate(id)
   }
 
   const meta = data?.meta

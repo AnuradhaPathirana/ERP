@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Eye, Plus, Search, Trash2 } from 'lucide-react'
 import { deleteCustomer, getCustomers } from '../../api/customers'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -31,7 +32,11 @@ export default function CustomersPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteCustomer,
-    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['customers'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['customers'] })
+      showSuccess('Customer deleted.')
+    },
+    onError: () => showError('Failed to delete. The customer may be in use.'),
   })
 
   const handleSearch = (e) => {
@@ -40,10 +45,9 @@ export default function CustomersPage() {
     setPage(1)
   }
 
-  const handleDelete = (id, name) => {
-    if (window.confirm(`Delete customer "${name}"? This cannot be undone.`)) {
-      deleteMutation.mutate(id)
-    }
+  const handleDelete = async (id, name) => {
+    const ok = await confirmDelete(name)
+    if (ok) deleteMutation.mutate(id)
   }
 
   const meta = data?.meta
