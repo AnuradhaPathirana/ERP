@@ -27,8 +27,11 @@ class AuthService
 
         return [
             'token'          => $token,
+            'user_name'      => $user->name,
+            'user_email'     => $user->email,
             'active_modules' => $user->active_modules ?? [],
             'roles'          => $user->getRoleNames()->values()->all(),
+            'permissions'    => $user->getAllPermissions()->pluck('name')->values()->all(),
         ];
     }
 }

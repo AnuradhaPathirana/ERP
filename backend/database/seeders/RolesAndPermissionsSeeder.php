@@ -11,41 +11,62 @@ use Spatie\Permission\PermissionRegistrar;
 
 class RolesAndPermissionsSeeder extends Seeder
 {
+    /** All Inventory module resources that have CRUD permissions. */
+    private const INVENTORY_RESOURCES = [
+        'products',
+        'categories',
+        'unit_categories',
+        'unit_types',
+        'unit_conversions',
+        'supplier_masters',
+        'sales_channels',
+        'industries',
+        'companies',
+        'locations',
+        'attribute_types',
+        'attributes',
+        'customer_masters',
+        'store_types',
+        'stores',
+        'drivers',
+        'vehicle_masters',
+    ];
+
     public function run(): void
     {
-        // Clear cached permissions so freshly created ones are available immediately
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        // ── Permissions ────────────────────────────────────────────────
-        $permissions = [
-            // Inventory – Products
-            'view_products',
-            'create_products',
-            'edit_products',
-            'delete_products',
-        ];
+        // ── Build all permissions ──────────────────────────────────────────
+        $allPermissions   = [];
+        $viewPermissions  = [];
+        $crudPermissions  = [];
 
-        foreach ($permissions as $name) {
-            Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']);
+        foreach (self::INVENTORY_RESOURCES as $resource) {
+            $view   = "view_{$resource}";
+            $create = "create_{$resource}";
+            $edit   = "edit_{$resource}";
+            $delete = "delete_{$resource}";
+
+            foreach ([$view, $create, $edit, $delete] as $perm) {
+                Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
+                $allPermissions[]  = $perm;
+                $crudPermissions[] = $perm;
+            }
+
+            $viewPermissions[] = $view;
         }
 
-        // ── Roles ──────────────────────────────────────────────────────
+        // ── Roles ──────────────────────────────────────────────────────────
 
-        // super_admin: no explicit permissions — bypasses all gates via
-        // the Gate::before() hook registered in AppServiceProvider.
+        // super_admin: bypasses all gates via Gate::before() in AppServiceProvider
         Role::firstOrCreate(['name' => 'super_admin', 'guard_name' => 'web']);
 
-        // client_admin: full CRUD on products
-        $clientAdmin = Role::firstOrCreate(['name' => 'client_admin', 'guard_name' => 'web']);
-        $clientAdmin->syncPermissions([
-            'view_products',
-            'create_products',
-            'edit_products',
-            'delete_products',
-        ]);
+        // admin: full access to everything by default
+        $clientAdmin = Role::firstOrCreate(['name' => 'admin', 'guard_name' => 'web']);
+        $clientAdmin->syncPermissions($crudPermissions);
 
-        // staff: read-only
+        // staff: read-only access by default
         $staff = Role::firstOrCreate(['name' => 'staff', 'guard_name' => 'web']);
-        $staff->syncPermissions(['view_products']);
+        $staff->syncPermissions($viewPermissions);
     }
 }

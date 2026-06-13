@@ -5,6 +5,7 @@ import { Edit2, Eye, Plus, Trash2 } from 'lucide-react'
 import { deleteIndustry, getIndustries } from '../../api/industries'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -14,6 +15,7 @@ const CRUMBS = [
 export default function IndustriesPage() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['industries', page],
@@ -49,13 +51,15 @@ export default function IndustriesPage() {
             Manage industry classifications for suppliers and products.
           </p>
         </div>
-        <Link
-          to="/inventory/industries/create"
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-        >
-          <Plus size={14} strokeWidth={2.5} />
-          New Industry
-        </Link>
+        {can('create_industries') && (
+          <Link
+            to="/inventory/industries/create"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            New Industry
+          </Link>
+        )}
       </div>
 
       <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -86,9 +90,11 @@ export default function IndustriesPage() {
                     <tr>
                       <td colSpan={5} className="px-4 py-12 text-center text-sm text-slate-400">
                         No industries yet.{' '}
-                        <Link to="/inventory/industries/create" className="font-medium text-indigo-600 hover:underline">
-                          Create the first one.
-                        </Link>
+                        {can('create_industries') && (
+                          <Link to="/inventory/industries/create" className="font-medium text-indigo-600 hover:underline">
+                            Create the first one.
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -119,22 +125,26 @@ export default function IndustriesPage() {
                             >
                               <Eye size={13} />
                             </Link>
-                            <Link
-                              to={`/inventory/industries/${industry.id}/edit`}
-                              title="Edit"
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              <Edit2 size={13} />
-                            </Link>
-                            <button
-                              type="button"
-                              title="Delete"
-                              onClick={() => handleDelete(industry.id, industry.name)}
-                              disabled={deleteMutation.isPending}
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            {can('edit_industries') && (
+                              <Link
+                                to={`/inventory/industries/${industry.id}/edit`}
+                                title="Edit"
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <Edit2 size={13} />
+                              </Link>
+                            )}
+                            {can('delete_industries') && (
+                              <button
+                                type="button"
+                                title="Delete"
+                                onClick={() => handleDelete(industry.id, industry.name)}
+                                disabled={deleteMutation.isPending}
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

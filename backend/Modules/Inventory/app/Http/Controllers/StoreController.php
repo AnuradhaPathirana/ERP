@@ -17,8 +17,10 @@ class StoreController extends Controller
 {
     public function __construct(private readonly StoreService $service)
     {
-        $this->middleware('permission:view_stores')->only(['index', 'show']);
-        $this->middleware('permission:manage_stores')->only(['store', 'update', 'destroy']);
+        $this->middleware('permission:view_stores')->only(['index', 'show', 'all']);
+        $this->middleware('permission:create_stores')->only(['store']);
+        $this->middleware('permission:edit_stores')->only(['update']);
+        $this->middleware('permission:delete_stores')->only(['destroy']);
     }
 
     public function index(): JsonResponse

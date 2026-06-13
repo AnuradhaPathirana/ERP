@@ -17,8 +17,10 @@ class VehicleController extends Controller
 {
     public function __construct(private readonly VehicleService $service)
     {
-        $this->middleware('permission:view_vehicles')->only(['index', 'show']);
-        $this->middleware('permission:manage_vehicles')->only(['store', 'update', 'destroy']);
+        $this->middleware('permission:view_vehicle_masters')->only(['index', 'show', 'all']);
+        $this->middleware('permission:create_vehicle_masters')->only(['store']);
+        $this->middleware('permission:edit_vehicle_masters')->only(['update']);
+        $this->middleware('permission:delete_vehicle_masters')->only(['destroy']);
     }
 
     public function index(): JsonResponse

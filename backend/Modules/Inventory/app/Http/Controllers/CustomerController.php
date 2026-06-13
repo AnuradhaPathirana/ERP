@@ -17,8 +17,10 @@ class CustomerController extends Controller
 {
     public function __construct(private readonly CustomerService $service)
     {
-        $this->middleware('permission:view_customers')->only(['index', 'show']);
-        $this->middleware('permission:manage_customers')->only(['store', 'update', 'destroy']);
+        $this->middleware('permission:view_customer_masters')->only(['index', 'show', 'all', 'checkCode']);
+        $this->middleware('permission:create_customer_masters')->only(['store']);
+        $this->middleware('permission:edit_customer_masters')->only(['update']);
+        $this->middleware('permission:delete_customer_masters')->only(['destroy']);
     }
 
     public function index(): JsonResponse

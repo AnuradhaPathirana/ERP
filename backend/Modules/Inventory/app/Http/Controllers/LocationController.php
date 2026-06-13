@@ -14,7 +14,13 @@ use Modules\Inventory\Services\LocationService;
 
 class LocationController extends Controller
 {
-    public function __construct(private readonly LocationService $service) {}
+    public function __construct(private readonly LocationService $service)
+    {
+        $this->middleware('permission:view_locations')->only(['index', 'show', 'all']);
+        $this->middleware('permission:create_locations')->only(['store']);
+        $this->middleware('permission:edit_locations')->only(['update']);
+        $this->middleware('permission:delete_locations')->only(['destroy']);
+    }
 
     public function index(): JsonResponse
     {

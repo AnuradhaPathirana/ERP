@@ -5,6 +5,7 @@ import { Edit2, Plus, Trash2 } from 'lucide-react'
 import { deleteAttribute, getAttributes } from '../../api/attributes'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/attributes' },
@@ -14,6 +15,7 @@ const CRUMBS = [
 export default function AttributesPage() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['attributes', page],
@@ -49,13 +51,15 @@ export default function AttributesPage() {
             Individual attribute values grouped under attribute types (e.g. Red, XL, Cotton).
           </p>
         </div>
-        <Link
-          to="/inventory/attributes/create"
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-        >
-          <Plus size={15} strokeWidth={2.5} />
-          New Attribute
-        </Link>
+        {can('create_attributes') && (
+          <Link
+            to="/inventory/attributes/create"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            <Plus size={15} strokeWidth={2.5} />
+            New Attribute
+          </Link>
+        )}
       </div>
 
       <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -87,12 +91,14 @@ export default function AttributesPage() {
                     <tr>
                       <td colSpan={5} className="px-4 py-14 text-center text-sm text-slate-400">
                         No attributes yet.{' '}
-                        <Link
-                          to="/inventory/attributes/create"
-                          className="font-medium text-indigo-600 hover:underline"
-                        >
-                          Create the first one.
-                        </Link>
+                        {can('create_attributes') && (
+                          <Link
+                            to="/inventory/attributes/create"
+                            className="font-medium text-indigo-600 hover:underline"
+                          >
+                            Create the first one.
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -116,22 +122,26 @@ export default function AttributesPage() {
 
                         <td className="px-4 py-2.5">
                           <div className="flex items-center justify-end gap-1">
-                            <Link
-                              to={`/inventory/attributes/${row.id}/edit`}
-                              title="Edit"
-                              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              <Edit2 size={14} />
-                            </Link>
-                            <button
-                              type="button"
-                              title="Delete"
-                              onClick={() => handleDelete(row.id, row.attribute_name)}
-                              disabled={deleteMutation.isPending}
-                              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            {can('edit_attributes') && (
+                              <Link
+                                to={`/inventory/attributes/${row.id}/edit`}
+                                title="Edit"
+                                className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <Edit2 size={14} />
+                              </Link>
+                            )}
+                            {can('delete_attributes') && (
+                              <button
+                                type="button"
+                                title="Delete"
+                                onClick={() => handleDelete(row.id, row.attribute_name)}
+                                disabled={deleteMutation.isPending}
+                                className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

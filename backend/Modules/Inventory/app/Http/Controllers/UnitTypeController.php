@@ -14,7 +14,13 @@ use Modules\Inventory\Services\UnitTypeService;
 
 class UnitTypeController extends Controller
 {
-    public function __construct(private readonly UnitTypeService $service) {}
+    public function __construct(private readonly UnitTypeService $service)
+    {
+        $this->middleware('permission:view_unit_types')->only(['index', 'show', 'all']);
+        $this->middleware('permission:create_unit_types')->only(['store']);
+        $this->middleware('permission:edit_unit_types')->only(['update']);
+        $this->middleware('permission:delete_unit_types')->only(['destroy']);
+    }
 
     public function index(): JsonResponse
     {

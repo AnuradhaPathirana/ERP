@@ -5,6 +5,7 @@ import { Edit2, Eye, Plus, Trash2 } from 'lucide-react'
 import { deleteSalesChannel, getSalesChannels } from '../../api/salesChannels'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -25,6 +26,7 @@ const STATUS_BADGE = {
 export default function SalesChannelsPage() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['sales-channels', page],
@@ -60,13 +62,15 @@ export default function SalesChannelsPage() {
             Manage wholesale, retail, and e-commerce pricing channels.
           </p>
         </div>
-        <Link
-          to="/inventory/sales-channels/create"
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-        >
-          <Plus size={14} strokeWidth={2.5} />
-          New Channel
-        </Link>
+        {can('create_sales_channels') && (
+          <Link
+            to="/inventory/sales-channels/create"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            New Channel
+          </Link>
+        )}
       </div>
 
       <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -101,9 +105,11 @@ export default function SalesChannelsPage() {
                     <tr>
                       <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">
                         No sales channels yet.{' '}
-                        <Link to="/inventory/sales-channels/create" className="font-medium text-indigo-600 hover:underline">
-                          Create the first one.
-                        </Link>
+                        {can('create_sales_channels') && (
+                          <Link to="/inventory/sales-channels/create" className="font-medium text-indigo-600 hover:underline">
+                            Create the first one.
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -155,22 +161,26 @@ export default function SalesChannelsPage() {
                               >
                                 <Eye size={13} />
                               </Link>
-                              <Link
-                                to={`/inventory/sales-channels/${c.id}/edit`}
-                                title="Edit"
-                                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                              >
-                                <Edit2 size={13} />
-                              </Link>
-                              <button
-                                type="button"
-                                title="Delete"
-                                onClick={() => handleDelete(c.id, c.sales_channel_name)}
-                                disabled={deleteMutation.isPending}
-                                className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              {can('edit_sales_channels') && (
+                                <Link
+                                  to={`/inventory/sales-channels/${c.id}/edit`}
+                                  title="Edit"
+                                  className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                                >
+                                  <Edit2 size={13} />
+                                </Link>
+                              )}
+                              {can('delete_sales_channels') && (
+                                <button
+                                  type="button"
+                                  title="Delete"
+                                  onClick={() => handleDelete(c.id, c.sales_channel_name)}
+                                  disabled={deleteMutation.isPending}
+                                  className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

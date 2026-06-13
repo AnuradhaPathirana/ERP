@@ -14,7 +14,13 @@ use Modules\Inventory\Services\AttributeTypeService;
 
 class AttributeTypeController extends Controller
 {
-    public function __construct(private readonly AttributeTypeService $service) {}
+    public function __construct(private readonly AttributeTypeService $service)
+    {
+        $this->middleware('permission:view_attribute_types')->only(['index', 'show', 'all']);
+        $this->middleware('permission:create_attribute_types')->only(['store']);
+        $this->middleware('permission:edit_attribute_types')->only(['update']);
+        $this->middleware('permission:delete_attribute_types')->only(['destroy']);
+    }
 
     public function index(): JsonResponse
     {

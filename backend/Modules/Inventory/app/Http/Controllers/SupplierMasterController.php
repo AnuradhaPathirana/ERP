@@ -15,7 +15,13 @@ use Modules\Inventory\Services\SupplierMasterService;
 
 class SupplierMasterController extends Controller
 {
-    public function __construct(private readonly SupplierMasterService $service) {}
+    public function __construct(private readonly SupplierMasterService $service)
+    {
+        $this->middleware('permission:view_supplier_masters')->only(['index', 'show', 'all', 'checkCode']);
+        $this->middleware('permission:create_supplier_masters')->only(['store']);
+        $this->middleware('permission:edit_supplier_masters')->only(['update']);
+        $this->middleware('permission:delete_supplier_masters')->only(['destroy']);
+    }
 
     public function index(): JsonResponse
     {

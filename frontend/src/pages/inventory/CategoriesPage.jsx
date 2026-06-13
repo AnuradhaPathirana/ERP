@@ -5,6 +5,7 @@ import { Edit2, Eye, Plus, Trash2 } from 'lucide-react'
 import { deleteCategory, getCategories } from '../../api/categories'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -19,6 +20,7 @@ const TYPE_BADGE = {
 export default function CategoriesPage() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['categories', page],
@@ -55,13 +57,15 @@ export default function CategoriesPage() {
             Manage product and service category hierarchy.
           </p>
         </div>
-        <Link
-          to="/inventory/categories/create"
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-        >
-          <Plus size={14} strokeWidth={2.5} />
-          New Category
-        </Link>
+        {can('create_categories') && (
+          <Link
+            to="/inventory/categories/create"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            New Category
+          </Link>
+        )}
       </div>
 
       <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -94,9 +98,11 @@ export default function CategoriesPage() {
                     <tr>
                       <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-400">
                         No categories yet.{' '}
-                        <Link to="/inventory/categories/create" className="font-medium text-indigo-600 hover:underline">
-                          Create the first one.
-                        </Link>
+                        {can('create_categories') && (
+                          <Link to="/inventory/categories/create" className="font-medium text-indigo-600 hover:underline">
+                            Create the first one.
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -137,22 +143,26 @@ export default function CategoriesPage() {
                             >
                               <Eye size={13} />
                             </Link>
-                            <Link
-                              to={`/inventory/categories/${cat.id}/edit`}
-                              title="Edit"
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              <Edit2 size={13} />
-                            </Link>
-                            <button
-                              type="button"
-                              title="Delete"
-                              onClick={() => handleDelete(cat.id, cat.category_name)}
-                              disabled={deleteMutation.isPending}
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            {can('edit_categories') && (
+                              <Link
+                                to={`/inventory/categories/${cat.id}/edit`}
+                                title="Edit"
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <Edit2 size={13} />
+                              </Link>
+                            )}
+                            {can('delete_categories') && (
+                              <button
+                                type="button"
+                                title="Delete"
+                                onClick={() => handleDelete(cat.id, cat.category_name)}
+                                disabled={deleteMutation.isPending}
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

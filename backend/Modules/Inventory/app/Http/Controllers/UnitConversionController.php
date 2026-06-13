@@ -11,7 +11,11 @@ use Modules\Inventory\Services\UnitConversionService;
 
 class UnitConversionController extends Controller
 {
-    public function __construct(private readonly UnitConversionService $service) {}
+    public function __construct(private readonly UnitConversionService $service)
+    {
+        $this->middleware('permission:view_unit_conversions')->only(['byCategory']);
+        $this->middleware('permission:edit_unit_conversions')->only(['saveRates']);
+    }
 
     /** Return all unit types in the category with their current conversion rates. */
     public function byCategory(int $categoryId): JsonResponse

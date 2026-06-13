@@ -5,6 +5,7 @@ import { Edit2, Eye, Plus, Trash2 } from 'lucide-react'
 import { deleteProduct, getProducts } from '../../api/products'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -26,6 +27,7 @@ const TRACKING_COLORS = {
 export default function ProductsPage() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['products', page],
@@ -61,13 +63,15 @@ export default function ProductsPage() {
             Manage your inventory product master list.
           </p>
         </div>
-        <Link
-          to="/inventory/products/create"
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-        >
-          <Plus size={15} strokeWidth={2.5} />
-          New Product
-        </Link>
+        {can('create_products') && (
+          <Link
+            to="/inventory/products/create"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            <Plus size={15} strokeWidth={2.5} />
+            New Product
+          </Link>
+        )}
       </div>
 
       <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -106,12 +110,14 @@ export default function ProductsPage() {
                     <tr>
                       <td colSpan={9} className="px-4 py-14 text-center text-sm text-slate-400">
                         No products yet.{' '}
-                        <Link
-                          to="/inventory/products/create"
-                          className="font-medium text-indigo-600 hover:underline"
-                        >
-                          Create the first one.
-                        </Link>
+                        {can('create_products') && (
+                          <Link
+                            to="/inventory/products/create"
+                            className="font-medium text-indigo-600 hover:underline"
+                          >
+                            Create the first one.
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -179,22 +185,26 @@ export default function ProductsPage() {
                             >
                               <Eye size={14} />
                             </Link>
-                            <Link
-                              to={`/inventory/products/${prod.id}/edit`}
-                              title="Edit"
-                              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              <Edit2 size={14} />
-                            </Link>
-                            <button
-                              type="button"
-                              title="Delete"
-                              onClick={() => handleDelete(prod.id, prod.name)}
-                              disabled={deleteMutation.isPending}
-                              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            {can('edit_products') && (
+                              <Link
+                                to={`/inventory/products/${prod.id}/edit`}
+                                title="Edit"
+                                className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <Edit2 size={14} />
+                              </Link>
+                            )}
+                            {can('delete_products') && (
+                              <button
+                                type="button"
+                                title="Delete"
+                                onClick={() => handleDelete(prod.id, prod.name)}
+                                disabled={deleteMutation.isPending}
+                                className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

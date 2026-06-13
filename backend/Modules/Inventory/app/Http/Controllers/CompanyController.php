@@ -14,7 +14,13 @@ use Modules\Inventory\Services\CompanyService;
 
 class CompanyController extends Controller
 {
-    public function __construct(private readonly CompanyService $service) {}
+    public function __construct(private readonly CompanyService $service)
+    {
+        $this->middleware('permission:view_companies')->only(['index', 'show', 'all']);
+        $this->middleware('permission:create_companies')->only(['store']);
+        $this->middleware('permission:edit_companies')->only(['update']);
+        $this->middleware('permission:delete_companies')->only(['destroy']);
+    }
 
     public function index(): JsonResponse
     {

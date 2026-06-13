@@ -14,7 +14,13 @@ use Modules\Inventory\Services\UnitCategoryService;
 
 class UnitCategoryController extends Controller
 {
-    public function __construct(private readonly UnitCategoryService $service) {}
+    public function __construct(private readonly UnitCategoryService $service)
+    {
+        $this->middleware('permission:view_unit_categories')->only(['index', 'show', 'all']);
+        $this->middleware('permission:create_unit_categories')->only(['store']);
+        $this->middleware('permission:edit_unit_categories')->only(['update']);
+        $this->middleware('permission:delete_unit_categories')->only(['destroy']);
+    }
 
     public function index(): JsonResponse
     {

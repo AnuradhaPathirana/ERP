@@ -5,6 +5,7 @@ import { Edit2, Eye, MapPin, Plus, Trash2 } from 'lucide-react'
 import { deleteLocation, getLocations } from '../../api/locations'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -14,6 +15,7 @@ const CRUMBS = [
 export default function LocationsPage() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['locations', page],
@@ -49,13 +51,15 @@ export default function LocationsPage() {
             Manage company locations and branches.
           </p>
         </div>
-        <Link
-          to="/inventory/locations/create"
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-        >
-          <Plus size={14} strokeWidth={2.5} />
-          New Location
-        </Link>
+        {can('create_locations') && (
+          <Link
+            to="/inventory/locations/create"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            New Location
+          </Link>
+        )}
       </div>
 
       <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -91,9 +95,11 @@ export default function LocationsPage() {
                     <tr>
                       <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-400">
                         No locations yet.{' '}
-                        <Link to="/inventory/locations/create" className="font-medium text-indigo-600 hover:underline">
-                          Create the first one.
-                        </Link>
+                        {can('create_locations') && (
+                          <Link to="/inventory/locations/create" className="font-medium text-indigo-600 hover:underline">
+                            Create the first one.
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -141,22 +147,26 @@ export default function LocationsPage() {
                             >
                               <Eye size={13} />
                             </Link>
-                            <Link
-                              to={`/inventory/locations/${loc.id}/edit`}
-                              title="Edit"
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              <Edit2 size={13} />
-                            </Link>
-                            <button
-                              type="button"
-                              title="Delete"
-                              onClick={() => handleDelete(loc.id, loc.location_name)}
-                              disabled={deleteMutation.isPending}
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            {can('edit_locations') && (
+                              <Link
+                                to={`/inventory/locations/${loc.id}/edit`}
+                                title="Edit"
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <Edit2 size={13} />
+                              </Link>
+                            )}
+                            {can('delete_locations') && (
+                              <button
+                                type="button"
+                                title="Delete"
+                                onClick={() => handleDelete(loc.id, loc.location_name)}
+                                disabled={deleteMutation.isPending}
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

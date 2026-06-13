@@ -5,6 +5,7 @@ import { Edit2, Eye, Plus, Trash2 } from 'lucide-react'
 import { deleteSupplier, getSuppliers } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -14,6 +15,7 @@ const CRUMBS = [
 export default function SuppliersPage() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['suppliers', page],
@@ -47,13 +49,15 @@ export default function SuppliersPage() {
           <h1 className="text-xl font-bold text-slate-800">Suppliers</h1>
           <p className="mt-0.5 text-sm text-slate-500">Manage your supplier master records.</p>
         </div>
-        <Link
-          to="/inventory/suppliers/create"
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-        >
-          <Plus size={14} strokeWidth={2.5} />
-          New Supplier
-        </Link>
+        {can('create_supplier_masters') && (
+          <Link
+            to="/inventory/suppliers/create"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            New Supplier
+          </Link>
+        )}
       </div>
 
       <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -87,9 +91,11 @@ export default function SuppliersPage() {
                     <tr>
                       <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
                         No suppliers yet.{' '}
-                        <Link to="/inventory/suppliers/create" className="font-medium text-indigo-600 hover:underline">
-                          Add the first one.
-                        </Link>
+                        {can('create_supplier_masters') && (
+                          <Link to="/inventory/suppliers/create" className="font-medium text-indigo-600 hover:underline">
+                            Add the first one.
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -130,22 +136,26 @@ export default function SuppliersPage() {
                             >
                               <Eye size={13} />
                             </Link>
-                            <Link
-                              to={`/inventory/suppliers/${s.id}/edit`}
-                              title="Edit"
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              <Edit2 size={13} />
-                            </Link>
-                            <button
-                              type="button"
-                              title="Delete"
-                              onClick={() => handleDelete(s.id, s.supplier_name)}
-                              disabled={deleteMutation.isPending}
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            {can('edit_supplier_masters') && (
+                              <Link
+                                to={`/inventory/suppliers/${s.id}/edit`}
+                                title="Edit"
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <Edit2 size={13} />
+                              </Link>
+                            )}
+                            {can('delete_supplier_masters') && (
+                              <button
+                                type="button"
+                                title="Delete"
+                                onClick={() => handleDelete(s.id, s.supplier_name)}
+                                disabled={deleteMutation.isPending}
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

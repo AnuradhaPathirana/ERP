@@ -1,18 +1,25 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Loader2, Plus, Trash2, X } from 'lucide-react'
-import { createUser, deleteUser, getRoles, getUsers, updateUser } from '../../api/users'
+import { createUser, deleteUser, getUsers, updateUser } from '../../api/users'
+import { getRoles } from '../../api/roles'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 const CRUMBS = [{ label: 'Team Management' }]
 
-const EMPTY_FORM = { name: '', email: '', password: '', role: '' }
+const EMPTY_FORM = { name: '', email: '', password: '', role: '', modules: ['inventory'] }
+
+const AVAILABLE_MODULES = [
+  { key: 'inventory', label: 'Inventory' },
+  { key: 'finance',   label: 'Finance' },
+  { key: 'hr',        label: 'HR' },
+]
 
 // ── Role badge ────────────────────────────────────────────────────────────────
 const ROLE_COLOURS = {
   super_admin:  'bg-purple-100 text-purple-700',
-  client_admin: 'bg-indigo-100 text-indigo-700',
+  admin: 'bg-indigo-100 text-indigo-700',
   staff:        'bg-slate-100  text-slate-600',
 }
 
@@ -26,7 +33,7 @@ function RoleBadge({ role }) {
 }
 
 // ── Modal ─────────────────────────────────────────────────────────────────────
-function UserModal({ open, onClose, editing, roles, onSuccess }) {
+function UserModal({ open, onClose, editing, roles, onSuccess, isSuperAdmin }) {
   const queryClient = useQueryClient()
   const [form, setForm]     = useState(EMPTY_FORM)
   const [errors, setErrors] = useState({})
@@ -40,6 +47,7 @@ function UserModal({ open, onClose, editing, roles, onSuccess }) {
         email:    editing.email,
         password: '',
         role:     editing.roles?.[0] ?? '',
+        modules:  editing.active_modules ?? [],
       })
     } else {
       setForm(EMPTY_FORM)
@@ -77,7 +85,7 @@ function UserModal({ open, onClose, editing, roles, onSuccess }) {
       name:           form.name,
       email:          form.email,
       roles:          form.role ? [form.role] : [],
-      active_modules: editing?.active_modules ?? [],
+      active_modules: form.modules,
     }
     if (form.password) payload.password = form.password
 
@@ -192,16 +200,54 @@ function UserModal({ open, onClose, editing, roles, onSuccess }) {
               ].join(' ')}
             >
               <option value="">Select a role…</option>
-              {roles.map((r) => (
-                <option key={r.name} value={r.name}>
-                  {r.label}
-                </option>
-              ))}
+              {roles
+                .filter((r) => isSuperAdmin || r.name !== 'super_admin')
+                .map((r) => (
+                  <option key={r.name} value={r.name}>
+                    {r.label}
+                  </option>
+                ))}
             </select>
             {errors.roles && (
               <p className="mt-1 text-xs text-red-600">{errors.roles[0]}</p>
             )}
           </div>
+
+          {/* Module Access — super_admin only */}
+          {isSuperAdmin ? (
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-slate-700">
+                Module Access
+              </label>
+              <div className="flex flex-wrap gap-3">
+                {AVAILABLE_MODULES.map(({ key, label }) => (
+                  <label key={key} className="flex cursor-pointer items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={form.modules.includes(key)}
+                      onChange={(e) => {
+                        const next = e.target.checked
+                          ? [...form.modules, key]
+                          : form.modules.filter((m) => m !== key)
+                        setForm((prev) => ({ ...prev, modules: next }))
+                      }}
+                      className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30"
+                    />
+                    <span className="text-slate-700">{label}</span>
+                  </label>
+                ))}
+              </div>
+              <p className="mt-1 text-xs text-slate-400">
+                Controls which modules appear in the sidebar for this user.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2.5">
+              <p className="text-xs text-slate-400">
+                <span className="font-medium text-slate-500">Module Access</span> can only be configured by a Super Admin.
+              </p>
+            </div>
+          )}
 
           {/* Generic server error */}
           {mutation.isError && !Object.keys(errors).length && (
@@ -234,9 +280,19 @@ function UserModal({ open, onClose, editing, roles, onSuccess }) {
   )
 }
 
+function readIsSuperAdmin() {
+  try {
+    const roles = JSON.parse(localStorage.getItem('user_roles') ?? '[]')
+    return Array.isArray(roles) && roles.includes('super_admin')
+  } catch {
+    return false
+  }
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function UserManagementPage() {
   const queryClient = useQueryClient()
+  const isSuperAdmin = readIsSuperAdmin()
   const [page,         setPage]         = useState(1)
   const [modalOpen,    setModalOpen]    = useState(false)
   const [editingUser,  setEditingUser]  = useState(null)
@@ -436,6 +492,7 @@ export default function UserManagementPage() {
         editing={editingUser}
         roles={roles}
         onSuccess={closeModal}
+        isSuperAdmin={isSuperAdmin}
       />
     </div>
   )

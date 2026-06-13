@@ -5,6 +5,7 @@ import { Edit2, Eye, Plus, Search, Trash2 } from 'lucide-react'
 import { deleteCustomer, getCustomers } from '../../api/customers'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -23,6 +24,7 @@ export default function CustomersPage() {
   const [search, setSearch] = useState('')
   const [q, setQ]           = useState('')
   const queryClient         = useQueryClient()
+  const { can }             = usePermissions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['customers', page, q],
@@ -62,13 +64,15 @@ export default function CustomersPage() {
           <h1 className="text-xl font-bold text-slate-800">Customers</h1>
           <p className="mt-0.5 text-sm text-slate-500">Manage your customer master records.</p>
         </div>
-        <Link
-          to="/inventory/customers/create"
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-        >
-          <Plus size={14} strokeWidth={2.5} />
-          New Customer
-        </Link>
+        {can('create_customer_masters') && (
+          <Link
+            to="/inventory/customers/create"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            New Customer
+          </Link>
+        )}
       </div>
 
       {/* Search bar */}
@@ -131,7 +135,7 @@ export default function CustomersPage() {
                     <tr>
                       <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
                         {q ? `No customers found for "${q}".` : 'No customers yet.'}{' '}
-                        {!q && (
+                        {!q && can('create_customer_masters') && (
                           <Link to="/inventory/customers/create" className="font-medium text-indigo-600 hover:underline">
                             Add the first one.
                           </Link>
@@ -180,22 +184,26 @@ export default function CustomersPage() {
                             >
                               <Eye size={13} />
                             </Link>
-                            <Link
-                              to={`/inventory/customers/${c.id}/edit`}
-                              title="Edit"
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              <Edit2 size={13} />
-                            </Link>
-                            <button
-                              type="button"
-                              title="Delete"
-                              onClick={() => handleDelete(c.id, c.customer_name)}
-                              disabled={deleteMutation.isPending}
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            {can('edit_customer_masters') && (
+                              <Link
+                                to={`/inventory/customers/${c.id}/edit`}
+                                title="Edit"
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <Edit2 size={13} />
+                              </Link>
+                            )}
+                            {can('delete_customer_masters') && (
+                              <button
+                                type="button"
+                                title="Delete"
+                                onClick={() => handleDelete(c.id, c.customer_name)}
+                                disabled={deleteMutation.isPending}
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

@@ -5,6 +5,7 @@ import { getAllUnitCategories } from '../../api/unitCategories'
 import { getUnitConversionsByCategory, saveUnitConversionRates } from '../../api/unitConversions'
 import { computeStandardRates, isKnownUnit } from '../../utils/unitConversionStandards'
 import Breadcrumb from '../../components/Breadcrumb'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/unit-categories' },
@@ -14,9 +15,10 @@ const CRUMBS = [
 export default function UnitConversionsPage() {
   const [selectedCategoryId, setSelectedCategoryId] = useState('')
   const [baseUnitId, setBaseUnitId]   = useState(null)
-  const [rates, setRates]             = useState({})       // { [unit_type_id]: string }
-  const [autoIds, setAutoIds]         = useState(new Set()) // ids auto-filled from standards
+  const [rates, setRates]             = useState({})
+  const [autoIds, setAutoIds]         = useState(new Set())
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const { data: categoriesData } = useQuery({
     queryKey: ['unit-categories-all'],
@@ -296,7 +298,7 @@ export default function UnitConversionsPage() {
               </div>
 
               <div className="flex items-center gap-2">
-                {standardsAvailable && (
+                {standardsAvailable && can('edit_unit_conversions') && (
                   <button
                     type="button"
                     onClick={() => applyStandards()}
@@ -306,21 +308,25 @@ export default function UnitConversionsPage() {
                     Reapply Standards
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className="rounded-md bg-red-500 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-red-600"
-                >
-                  CLEAR
-                </button>
-                <button
-                  type="button"
-                  onClick={handleSave}
-                  disabled={!baseUnitId || saveMutation.isPending}
-                  className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {saveMutation.isPending ? 'Saving…' : 'Set Rates'}
-                </button>
+                {can('edit_unit_conversions') && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={handleClear}
+                      className="rounded-md bg-red-500 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-red-600"
+                    >
+                      CLEAR
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSave}
+                      disabled={!baseUnitId || saveMutation.isPending}
+                      className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {saveMutation.isPending ? 'Saving…' : 'Set Rates'}
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </>

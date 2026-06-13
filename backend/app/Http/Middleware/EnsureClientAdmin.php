@@ -12,8 +12,8 @@ class EnsureClientAdmin
 {
     public function handle(Request $request, Closure $next): Response
     {
-        // super_admin can do everything client_admin can
-        if (! $request->user()?->hasAnyRole(['super_admin', 'client_admin'])) {
+        // super_admin can do everything admin can
+        if (! $request->user()?->hasAnyRole(['super_admin', 'admin'])) {
             return response()->json(
                 ['message' => 'This action requires client admin privileges.'],
                 Response::HTTP_FORBIDDEN,

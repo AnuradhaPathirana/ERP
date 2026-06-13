@@ -14,7 +14,13 @@ use Modules\Inventory\Services\IndustryService;
 
 class IndustryController extends Controller
 {
-    public function __construct(private readonly IndustryService $service) {}
+    public function __construct(private readonly IndustryService $service)
+    {
+        $this->middleware('permission:view_industries')->only(['index', 'show', 'all']);
+        $this->middleware('permission:create_industries')->only(['store']);
+        $this->middleware('permission:edit_industries')->only(['update']);
+        $this->middleware('permission:delete_industries')->only(['destroy']);
+    }
 
     public function index(): JsonResponse
     {

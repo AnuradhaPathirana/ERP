@@ -5,6 +5,7 @@ import { Edit2, Plus, Trash2 } from 'lucide-react'
 import { deleteStore, getStores } from '../../api/stores'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/stores' },
@@ -14,6 +15,7 @@ const CRUMBS = [
 export default function StoresPage() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['stores', page],
@@ -49,13 +51,15 @@ export default function StoresPage() {
             Manage warehouses and storage locations.
           </p>
         </div>
-        <Link
-          to="/inventory/stores/create"
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-        >
-          <Plus size={14} strokeWidth={2.5} />
-          New Store
-        </Link>
+        {can('create_stores') && (
+          <Link
+            to="/inventory/stores/create"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            <Plus size={14} strokeWidth={2.5} />
+            New Store
+          </Link>
+        )}
       </div>
 
       <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -92,9 +96,11 @@ export default function StoresPage() {
                     <tr>
                       <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-400">
                         No stores yet.{' '}
-                        <Link to="/inventory/stores/create" className="font-medium text-indigo-600 hover:underline">
-                          Create the first one.
-                        </Link>
+                        {can('create_stores') && (
+                          <Link to="/inventory/stores/create" className="font-medium text-indigo-600 hover:underline">
+                            Create the first one.
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -105,12 +111,16 @@ export default function StoresPage() {
                         </td>
                         <td className="px-3 py-2 font-mono text-slate-500">{row.store_code}</td>
                         <td className="max-w-[200px] px-3 py-2 font-medium text-slate-800">
-                          <Link
-                            to={`/inventory/stores/${row.id}/edit`}
-                            className="truncate hover:text-indigo-600 hover:underline"
-                          >
-                            {row.store_name}
-                          </Link>
+                          {can('edit_stores') ? (
+                            <Link
+                              to={`/inventory/stores/${row.id}/edit`}
+                              className="truncate hover:text-indigo-600 hover:underline"
+                            >
+                              {row.store_name}
+                            </Link>
+                          ) : (
+                            <span className="truncate">{row.store_name}</span>
+                          )}
                         </td>
                         <td className="px-3 py-2 text-slate-500">
                           {row.store_type?.name ?? <span className="italic text-slate-300">—</span>}
@@ -134,22 +144,26 @@ export default function StoresPage() {
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex items-center justify-end gap-1">
-                            <Link
-                              to={`/inventory/stores/${row.id}/edit`}
-                              title="Edit"
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              <Edit2 size={13} />
-                            </Link>
-                            <button
-                              type="button"
-                              title="Delete"
-                              onClick={() => handleDelete(row.id, row.store_name)}
-                              disabled={deleteMutation.isPending}
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                            >
-                              <Trash2 size={13} />
-                            </button>
+                            {can('edit_stores') && (
+                              <Link
+                                to={`/inventory/stores/${row.id}/edit`}
+                                title="Edit"
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <Edit2 size={13} />
+                              </Link>
+                            )}
+                            {can('delete_stores') && (
+                              <button
+                                type="button"
+                                title="Delete"
+                                onClick={() => handleDelete(row.id, row.store_name)}
+                                disabled={deleteMutation.isPending}
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>

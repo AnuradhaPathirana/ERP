@@ -5,6 +5,7 @@ import { Edit2, Plus, Trash2 } from 'lucide-react'
 import { deleteUnitType, getUnitTypes } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/unit-categories' },
@@ -19,6 +20,7 @@ const POSITION_BADGE = {
 export default function UnitTypesPage() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
+  const { can } = usePermissions()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['unit-types', page],
@@ -55,13 +57,15 @@ export default function UnitTypesPage() {
             Individual units (kg, m, pcs) with their symbols and conversion references.
           </p>
         </div>
-        <Link
-          to="/inventory/unit-types/create"
-          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-        >
-          <Plus size={15} strokeWidth={2.5} />
-          New Unit Type
-        </Link>
+        {can('create_unit_types') && (
+          <Link
+            to="/inventory/unit-types/create"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            <Plus size={15} strokeWidth={2.5} />
+            New Unit Type
+          </Link>
+        )}
       </div>
 
       {/* Table card */}
@@ -100,12 +104,14 @@ export default function UnitTypesPage() {
                     <tr>
                       <td colSpan={8} className="px-4 py-14 text-center text-sm text-slate-400">
                         No unit types yet.{' '}
-                        <Link
-                          to="/inventory/unit-types/create"
-                          className="font-medium text-indigo-600 hover:underline"
-                        >
-                          Create the first one.
-                        </Link>
+                        {can('create_unit_types') && (
+                          <Link
+                            to="/inventory/unit-types/create"
+                            className="font-medium text-indigo-600 hover:underline"
+                          >
+                            Create the first one.
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   ) : (
@@ -138,22 +144,26 @@ export default function UnitTypesPage() {
                           </td>
                           <td className="px-4 py-2.5">
                             <div className="flex items-center justify-end gap-1">
-                              <Link
-                                to={`/inventory/unit-types/${ut.id}/edit`}
-                                title="Edit"
-                                className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                              >
-                                <Edit2 size={14} />
-                              </Link>
-                              <button
-                                type="button"
-                                title="Delete"
-                                onClick={() => handleDelete(ut.id, ut.name)}
-                                disabled={deleteMutation.isPending}
-                                className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                              >
-                                <Trash2 size={14} />
-                              </button>
+                              {can('edit_unit_types') && (
+                                <Link
+                                  to={`/inventory/unit-types/${ut.id}/edit`}
+                                  title="Edit"
+                                  className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                                >
+                                  <Edit2 size={14} />
+                                </Link>
+                              )}
+                              {can('delete_unit_types') && (
+                                <button
+                                  type="button"
+                                  title="Delete"
+                                  onClick={() => handleDelete(ut.id, ut.name)}
+                                  disabled={deleteMutation.isPending}
+                                  className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>

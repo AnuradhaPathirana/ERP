@@ -17,8 +17,10 @@ class StoreTypeController extends Controller
 {
     public function __construct(private readonly StoreTypeService $service)
     {
-        $this->middleware('permission:view_store_types')->only(['index', 'show']);
-        $this->middleware('permission:manage_store_types')->only(['store', 'update', 'destroy']);
+        $this->middleware('permission:view_store_types')->only(['index', 'show', 'all']);
+        $this->middleware('permission:create_store_types')->only(['store']);
+        $this->middleware('permission:edit_store_types')->only(['update']);
+        $this->middleware('permission:delete_store_types')->only(['destroy']);
     }
 
     public function index(): JsonResponse

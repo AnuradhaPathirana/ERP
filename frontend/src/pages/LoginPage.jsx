@@ -18,6 +18,8 @@ export default function LoginPage() {
     try {
       const { data } = await api.post('/api/login', { email, password })
       localStorage.setItem('auth_token', data.token)
+      localStorage.setItem('user_name', data.user_name ?? '')
+      localStorage.setItem('user_email', data.user_email ?? '')
       localStorage.setItem('active_modules', JSON.stringify(data.active_modules ?? []))
       localStorage.setItem('user_roles', JSON.stringify(data.roles ?? []))
       localStorage.setItem('user_permissions', JSON.stringify(data.permissions ?? []))

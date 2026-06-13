@@ -17,8 +17,10 @@ class DriverController extends Controller
 {
     public function __construct(private readonly DriverService $service)
     {
-        $this->middleware('permission:view_drivers')->only(['index', 'show']);
-        $this->middleware('permission:manage_drivers')->only(['store', 'update', 'destroy']);
+        $this->middleware('permission:view_drivers')->only(['index', 'show', 'all']);
+        $this->middleware('permission:create_drivers')->only(['store']);
+        $this->middleware('permission:edit_drivers')->only(['update']);
+        $this->middleware('permission:delete_drivers')->only(['destroy']);
     }
 
     public function index(): JsonResponse

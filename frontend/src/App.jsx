@@ -49,6 +49,8 @@ const VehiclesPage             = lazy(() => import('./pages/inventory/VehiclesPa
 const VehicleFormPage          = lazy(() => import('./pages/inventory/VehicleFormPage'))
 const VehicleViewPage          = lazy(() => import('./pages/inventory/VehicleViewPage'))
 const UserManagementPage    = lazy(() => import('./pages/admin/UserManagementPage'))
+const RolesPage             = lazy(() => import('./pages/admin/RolesPage'))
+const RoleFormPage          = lazy(() => import('./pages/admin/RoleFormPage'))
 
 function PageLoader() {
   return (
@@ -75,7 +77,10 @@ export default function App() {
       {/* Protected shell */}
       <Route element={<Layout />}>
         <Route path="/dashboard"    element={<Lazy component={DashboardPage} />} />
-        <Route path="/admin/users" element={<Lazy component={UserManagementPage} />} />
+        <Route path="/admin/users"              element={<Lazy component={UserManagementPage} />} />
+        <Route path="/admin/roles"              element={<Lazy component={RolesPage} />} />
+        <Route path="/admin/roles/create"       element={<Lazy component={RoleFormPage} />} />
+        <Route path="/admin/roles/:id/edit"     element={<Lazy component={RoleFormPage} />} />
 
         {/* Inventory module — only its own chunk is downloaded */}
         <Route path="/inventory" element={<Navigate to="/inventory/unit-categories" replace />} />

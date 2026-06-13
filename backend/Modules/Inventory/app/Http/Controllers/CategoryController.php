@@ -14,7 +14,13 @@ use Modules\Inventory\Services\CategoryService;
 
 class CategoryController extends Controller
 {
-    public function __construct(private readonly CategoryService $service) {}
+    public function __construct(private readonly CategoryService $service)
+    {
+        $this->middleware('permission:view_categories')->only(['index', 'show', 'all']);
+        $this->middleware('permission:create_categories')->only(['store']);
+        $this->middleware('permission:edit_categories')->only(['update']);
+        $this->middleware('permission:delete_categories')->only(['destroy']);
+    }
 
     public function index(): JsonResponse
     {

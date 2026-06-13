@@ -14,7 +14,13 @@ use Modules\Inventory\Services\SalesChannelService;
 
 class SalesChannelController extends Controller
 {
-    public function __construct(private readonly SalesChannelService $service) {}
+    public function __construct(private readonly SalesChannelService $service)
+    {
+        $this->middleware('permission:view_sales_channels')->only(['index', 'show', 'all']);
+        $this->middleware('permission:create_sales_channels')->only(['store']);
+        $this->middleware('permission:edit_sales_channels')->only(['update']);
+        $this->middleware('permission:delete_sales_channels')->only(['destroy']);
+    }
 
     public function index(): JsonResponse
     {

@@ -12,5 +12,3 @@ export const updateUser = (id, payload) =>
 export const deleteUser = (id) =>
   api.delete(`/api/users/${id}`)
 
-export const getRoles = () =>
-  api.get('/api/roles').then((r) => r.data)
