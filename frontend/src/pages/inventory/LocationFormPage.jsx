@@ -139,21 +139,18 @@ export default function LocationFormPage() {
   const { data: companiesData } = useQuery({
     queryKey: ['companies-all-list'],
     queryFn:  () => getCompanies(1).then((r) => r.data ?? []),
-    staleTime: 5 * 60 * 1000,
   })
   const companies = companiesData ?? []
 
   const { data: industriesData } = useQuery({
     queryKey: ['industries-all'],
     queryFn:  getAllIndustries,
-    staleTime: 5 * 60 * 1000,
   })
   const industries = industriesData ?? []
 
   const { data: locationsData } = useQuery({
     queryKey: ['locations-all'],
     queryFn:  getAllLocations,
-    staleTime: 5 * 60 * 1000,
   })
   const parentLocations = (locationsData ?? []).filter((l) => String(l.id) !== String(id))
 
@@ -251,6 +248,7 @@ export default function LocationFormPage() {
       isEditing ? updateLocation(id, payload) : createLocation(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['locations'] })
+      queryClient.invalidateQueries({ queryKey: ['locations-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['location', id] })
       navigate('/inventory/locations')
     },

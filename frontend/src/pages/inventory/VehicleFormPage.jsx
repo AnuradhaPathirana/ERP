@@ -122,7 +122,6 @@ export default function VehicleFormPage() {
   const { data: driversData } = useQuery({
     queryKey: ['drivers-all'],
     queryFn:  getAllDrivers,
-    staleTime: 5 * 60 * 1000,
   })
   const drivers = driversData ?? []
 

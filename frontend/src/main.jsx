@@ -8,7 +8,7 @@ import App from './App.jsx'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 1000 * 60 * 5, // 5 min — suits mostly-static ERP reference data
+      staleTime: 0,
       retry: 1,
     },
   },

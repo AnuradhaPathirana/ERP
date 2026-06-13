@@ -96,6 +96,7 @@ export default function AttributeTypeFormPage() {
       isEditing ? updateAttributeType(id, payload) : createAttributeType(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attribute-types'] })
+      queryClient.invalidateQueries({ queryKey: ['attribute-types-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['attribute-type', id] })
       navigate('/inventory/attribute-types')
     },

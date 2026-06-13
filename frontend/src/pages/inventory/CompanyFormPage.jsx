@@ -118,7 +118,6 @@ export default function CompanyFormPage() {
   const { data: industriesData } = useQuery({
     queryKey: ['industries-all'],
     queryFn:  getAllIndustries,
-    staleTime: 5 * 60 * 1000,
   })
   const industries = industriesData ?? []
 
@@ -169,6 +168,8 @@ export default function CompanyFormPage() {
       isEditing ? updateCompany(id, payload) : createCompany(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['companies'] })
+      queryClient.invalidateQueries({ queryKey: ['companies-all'] })
+      queryClient.invalidateQueries({ queryKey: ['companies-all-list'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['company', id] })
       navigate('/inventory/companies')
     },

@@ -61,7 +61,6 @@ export default function UnitTypeFormPage() {
   const { data: categoriesData, isLoading: loadingCategories } = useQuery({
     queryKey: ['unit-categories-all'],
     queryFn:  getAllUnitCategories,
-    staleTime: 1000 * 60 * 10,
   })
   const categories = categoriesData?.data ?? []
 
@@ -112,6 +111,7 @@ export default function UnitTypeFormPage() {
       isEditing ? updateUnitType(id, payload) : createUnitType(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['unit-types'] })
+      queryClient.invalidateQueries({ queryKey: ['unit-types-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['unit-type', id] })
       navigate('/inventory/unit-types')
     },

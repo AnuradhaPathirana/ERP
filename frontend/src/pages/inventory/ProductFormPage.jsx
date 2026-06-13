@@ -367,17 +367,14 @@ export default function ProductFormPage() {
   const { data: suppliersData } = useQuery({
     queryKey: ['suppliers-all'],
     queryFn:  getAllSuppliers,
-    staleTime: 5 * 60 * 1000,
   })
   const { data: channelsData } = useQuery({
     queryKey: ['sales-channels-all'],
     queryFn:  getAllSalesChannels,
-    staleTime: 5 * 60 * 1000,
   })
   const { data: unitTypesData } = useQuery({
     queryKey: ['unit-types-all'],
     queryFn:  getAllUnitTypes,
-    staleTime: 5 * 60 * 1000,
   })
 
   const suppliers     = suppliersData ?? []
