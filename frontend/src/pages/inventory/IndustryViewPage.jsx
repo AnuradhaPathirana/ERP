@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Trash2 } from 'lucide-react'
 import { deleteIndustry, getIndustry } from '../../api/industries'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 function Row({ label, value }) {
   const empty = value === null || value === undefined || value === ''
@@ -31,8 +32,10 @@ export default function IndustryViewPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['industries'] })
       queryClient.invalidateQueries({ queryKey: ['industries-all'] })
+      showSuccess('Industry deleted.')
       navigate('/inventory/industries')
     },
+    onError: () => showError('Failed to delete. The industry may be in use.'),
   })
 
   const crumbs = [
@@ -46,10 +49,9 @@ export default function IndustryViewPage() {
 
   const industry = data?.data
 
-  const handleDelete = () => {
-    if (window.confirm(`Delete "${industry?.name}"? This cannot be undone.`)) {
-      deleteMutation.mutate()
-    }
+  const handleDelete = async () => {
+    const ok = await confirmDelete(industry?.name)
+    if (ok) deleteMutation.mutate()
   }
 
   return (

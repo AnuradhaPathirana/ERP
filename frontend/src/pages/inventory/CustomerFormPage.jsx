@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, Save } from 'lucide-react'
 import { checkCustomerCode, createCustomer, getCustomer, updateCustomer } from '../../api/customers'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 function generateCustomerCode() {
   const num = Math.floor(Math.random() * 9999) + 1
@@ -215,6 +216,7 @@ export default function CustomerFormPage() {
       queryClient.invalidateQueries({ queryKey: ['customers'] })
       queryClient.invalidateQueries({ queryKey: ['customers-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['customer', id] })
+      showSuccess(isEditing ? 'Customer updated successfully.' : 'Customer created successfully.')
       navigate('/inventory/customers')
     },
     onError: (err) => {
@@ -223,6 +225,7 @@ export default function CustomerFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

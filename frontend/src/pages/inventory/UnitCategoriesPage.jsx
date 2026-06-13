@@ -23,13 +23,16 @@ export default function UnitCategoriesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteUnitCategory,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['unit-categories'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unit-categories'] })
+      showSuccess('Unit category deleted.')
+    },
+    onError: () => showError('Failed to delete. The unit category may be in use.'),
   })
 
-  const handleDelete = (id, name) => {
-    if (window.confirm(`Delete "${name}"? This cannot be undone.`)) {
-      deleteMutation.mutate(id)
-    }
+  const handleDelete = async (id, name) => {
+    const ok = await confirmDelete(name)
+    if (ok) deleteMutation.mutate(id)
   }
 
   const meta = data?.meta

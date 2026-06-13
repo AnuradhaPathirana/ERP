@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Trash2 } from 'lucide-react'
 import { deleteCategory, getCategory } from '../../api/categories'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 const TYPE_BADGE = {
   product: 'bg-blue-50 text-blue-700',
@@ -37,8 +38,10 @@ export default function CategoryViewPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['categories'] })
       queryClient.invalidateQueries({ queryKey: ['categories-all'] })
+      showSuccess('Category deleted.')
       navigate('/inventory/categories')
     },
+    onError: () => showError('Failed to delete. The category may be in use.'),
   })
 
   const crumbs = [
@@ -52,10 +55,9 @@ export default function CategoryViewPage() {
 
   const cat = data?.data
 
-  const handleDelete = () => {
-    if (window.confirm(`Delete "${cat?.category_name}"? Its sub-categories will become top-level.`)) {
-      deleteMutation.mutate()
-    }
+  const handleDelete = async () => {
+    const ok = await confirmDelete(cat?.category_name)
+    if (ok) deleteMutation.mutate()
   }
 
   return (

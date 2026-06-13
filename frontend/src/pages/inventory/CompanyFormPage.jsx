@@ -5,6 +5,7 @@ import { Save } from 'lucide-react'
 import { createCompany, getCompany, updateCompany } from '../../api/companies'
 import { getAllIndustries } from '../../api/industries'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 const COMPANY_TYPES = [
   'Manufacturer',
@@ -171,6 +172,7 @@ export default function CompanyFormPage() {
       queryClient.invalidateQueries({ queryKey: ['companies-all'] })
       queryClient.invalidateQueries({ queryKey: ['companies-all-list'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['company', id] })
+      showSuccess(isEditing ? 'Company updated successfully.' : 'Company created successfully.')
       navigate('/inventory/companies')
     },
     onError: (err) => {
@@ -179,6 +181,7 @@ export default function CompanyFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

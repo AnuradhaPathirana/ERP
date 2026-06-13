@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Trash2 } from 'lucide-react'
 import { deleteSupplier, getSupplier } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 function Row({ label, value, mono }) {
   const empty = value === null || value === undefined || value === ''
@@ -42,8 +43,10 @@ export default function SupplierViewPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suppliers'] })
       queryClient.invalidateQueries({ queryKey: ['suppliers-all'] })
+      showSuccess('Supplier deleted.')
       navigate('/inventory/suppliers')
     },
+    onError: () => showError('Failed to delete. The supplier may be in use.'),
   })
 
   const crumbs = [
@@ -57,10 +60,9 @@ export default function SupplierViewPage() {
 
   const s = data?.data
 
-  const handleDelete = () => {
-    if (window.confirm(`Delete supplier "${s?.supplier_name}"? This cannot be undone.`)) {
-      deleteMutation.mutate()
-    }
+  const handleDelete = async () => {
+    const ok = await confirmDelete(s?.supplier_name)
+    if (ok) deleteMutation.mutate()
   }
 
   const fmt = (v) => (v != null && v !== '' ? v : null)

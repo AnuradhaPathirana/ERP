@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Trash2 } from 'lucide-react'
 import { deleteCustomer, getCustomer } from '../../api/customers'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 const TYPE_COLORS = {
   Trade:     'bg-blue-50 text-blue-700',
@@ -49,8 +50,10 @@ export default function CustomerViewPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['customers'] })
       queryClient.invalidateQueries({ queryKey: ['customers-all'] })
+      showSuccess('Customer deleted.')
       navigate('/inventory/customers')
     },
+    onError: () => showError('Failed to delete. The customer may be in use.'),
   })
 
   const crumbs = [
@@ -65,10 +68,9 @@ export default function CustomerViewPage() {
   const c = data?.data
   const fmt = (v) => (v != null && v !== '' ? v : null)
 
-  const handleDelete = () => {
-    if (window.confirm(`Delete customer "${c?.customer_name}"? This cannot be undone.`)) {
-      deleteMutation.mutate()
-    }
+  const handleDelete = async () => {
+    const ok = await confirmDelete(c?.customer_name)
+    if (ok) deleteMutation.mutate()
   }
 
   return (

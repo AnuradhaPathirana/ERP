@@ -23,13 +23,16 @@ export default function AttributesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteAttribute,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attributes'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attributes'] })
+      showSuccess('Attribute deleted.')
+    },
+    onError: () => showError('Failed to delete. The attribute may be in use.'),
   })
 
-  const handleDelete = (id, name) => {
-    if (window.confirm(`Delete "${name}"? This cannot be undone.`)) {
-      deleteMutation.mutate(id)
-    }
+  const handleDelete = async (id, name) => {
+    const ok = await confirmDelete(name)
+    if (ok) deleteMutation.mutate(id)
   }
 
   const meta = data?.meta

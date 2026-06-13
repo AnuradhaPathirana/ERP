@@ -7,6 +7,7 @@ import { getAllStores } from '../../api/stores'
 import { getAllStoreTypes } from '../../api/storeTypes'
 import { getAllLocations } from '../../api/locations'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 const EMPTY_FORM = {
   store_type_id:    '',
@@ -221,6 +222,7 @@ export default function StoreFormPage() {
       queryClient.invalidateQueries({ queryKey: ['stores'] })
       queryClient.invalidateQueries({ queryKey: ['stores-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['store', id] })
+      showSuccess(isEditing ? 'Store updated successfully.' : 'Store created successfully.')
       navigate('/inventory/stores')
     },
     onError: (err) => {
@@ -229,6 +231,7 @@ export default function StoreFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

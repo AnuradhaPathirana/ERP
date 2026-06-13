@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Trash2 } from 'lucide-react'
 import { deleteVehicle, getVehicle } from '../../api/vehicles'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 const STATUS_COLORS = {
   active:            'bg-green-50 text-green-700',
@@ -73,8 +74,10 @@ export default function VehicleViewPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['vehicles'] })
       queryClient.invalidateQueries({ queryKey: ['vehicles-all'] })
+      showSuccess('Vehicle deleted.')
       navigate('/inventory/vehicles')
     },
+    onError: () => showError('Failed to delete. The vehicle may be in use.'),
   })
 
   const crumbs = [
@@ -88,11 +91,10 @@ export default function VehicleViewPage() {
 
   const v = data?.data
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     const label = v?.vehicle_code ?? v?.registration_number
-    if (window.confirm(`Delete vehicle "${label}"? This cannot be undone.`)) {
-      deleteMutation.mutate()
-    }
+    const ok = await confirmDelete(label)
+    if (ok) deleteMutation.mutate()
   }
 
   const statusLabel = STATUS_LABELS[v?.status] ?? v?.status

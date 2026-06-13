@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Trash2 } from 'lucide-react'
 import { deleteProduct, getProduct } from '../../api/products'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 const BOOL_OPTIONS = [
   { key: 'lock_purchase',             label: 'Lock Purchase' },
@@ -58,8 +59,10 @@ export default function ProductViewPage() {
     mutationFn: () => deleteProduct(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] })
+      showSuccess('Product deleted.')
       navigate('/inventory/products')
     },
+    onError: () => showError('Failed to delete. The product may be in use.'),
   })
 
   const crumbs = [
@@ -73,10 +76,9 @@ export default function ProductViewPage() {
 
   const p = data?.data
 
-  const handleDelete = () => {
-    if (window.confirm(`Delete "${p?.name}"? This cannot be undone.`)) {
-      deleteMutation.mutate()
-    }
+  const handleDelete = async () => {
+    const ok = await confirmDelete(p?.name)
+    if (ok) deleteMutation.mutate()
   }
 
   const costDetails = p?.cost_details ?? []

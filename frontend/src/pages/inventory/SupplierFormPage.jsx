@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCw, Save } from 'lucide-react'
 import { checkSupplierCode, createSupplier, getSupplier, updateSupplier } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 function generateSupplierCode() {
   const num = Math.floor(Math.random() * 9999) + 1
@@ -206,6 +207,7 @@ export default function SupplierFormPage() {
       queryClient.invalidateQueries({ queryKey: ['suppliers'] })
       queryClient.invalidateQueries({ queryKey: ['suppliers-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['supplier', id] })
+      showSuccess(isEditing ? 'Supplier updated successfully.' : 'Supplier created successfully.')
       navigate('/inventory/suppliers')
     },
     onError: (err) => {
@@ -214,6 +216,7 @@ export default function SupplierFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

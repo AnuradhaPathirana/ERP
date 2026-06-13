@@ -6,6 +6,7 @@ import { ChevronDown, ChevronRight, Save } from 'lucide-react'
 import { createAttributeType, getAttributeType, updateAttributeType } from '../../api/attributeTypes'
 import { getAllCategories } from '../../api/categories'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 const EMPTY_FORM = {
   category_id: '',
@@ -247,6 +248,7 @@ export default function AttributeTypeFormPage() {
       queryClient.invalidateQueries({ queryKey: ['attribute-types'] })
       queryClient.invalidateQueries({ queryKey: ['attribute-types-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['attribute-type', id] })
+      showSuccess(isEditing ? 'Attribute type updated successfully.' : 'Attribute type created successfully.')
       navigate('/inventory/attribute-types')
     },
     onError: (err) => {
@@ -255,6 +257,7 @@ export default function AttributeTypeFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

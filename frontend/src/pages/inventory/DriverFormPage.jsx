@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
 import { createDriver, getDriver, updateDriver } from '../../api/drivers'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 const LICENSE_TYPES = ['A', 'A1', 'B', 'B1', 'C', 'C1', 'CE', 'D', 'DE']
 const STATUSES      = ['active', 'inactive', 'suspended']
@@ -146,6 +147,7 @@ export default function DriverFormPage() {
       queryClient.invalidateQueries({ queryKey: ['drivers'] })
       queryClient.invalidateQueries({ queryKey: ['drivers-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['driver', id] })
+      showSuccess(isEditing ? 'Driver updated successfully.' : 'Driver created successfully.')
       navigate('/inventory/drivers')
     },
     onError: (err) => {
@@ -154,6 +156,7 @@ export default function DriverFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

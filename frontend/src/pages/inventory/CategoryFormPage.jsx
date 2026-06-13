@@ -6,6 +6,7 @@ import { createCategory, getAllCategories, getCategory, updateCategory } from '.
 import { getAllIndustries } from '../../api/industries'
 import { getAllCompanies } from '../../api/companies'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 // ── Tree helpers ──────────────────────────────────────────────────────────────
 
@@ -303,6 +304,7 @@ export default function CategoryFormPage() {
       queryClient.invalidateQueries({ queryKey: ['categories'] })
       queryClient.invalidateQueries({ queryKey: ['categories-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['category', id] })
+      showSuccess(isEditing ? 'Category updated successfully.' : 'Category created successfully.')
       navigate('/inventory/categories')
     },
     onError: (err) => {
@@ -311,6 +313,7 @@ export default function CategoryFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

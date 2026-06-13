@@ -7,6 +7,7 @@ import { getCompanies } from '../../api/companies'
 import { getAllIndustries } from '../../api/industries'
 import { getAllLocations } from '../../api/locations'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const LOCATION_TYPES = ['Head Office', 'Branch', 'Warehouse', 'Retail Store', 'Distribution Center', 'Factory', 'Other']
@@ -250,6 +251,7 @@ export default function LocationFormPage() {
       queryClient.invalidateQueries({ queryKey: ['locations'] })
       queryClient.invalidateQueries({ queryKey: ['locations-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['location', id] })
+      showSuccess(isEditing ? 'Location updated successfully.' : 'Location created successfully.')
       navigate('/inventory/locations')
     },
     onError: (err) => {
@@ -258,6 +260,7 @@ export default function LocationFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

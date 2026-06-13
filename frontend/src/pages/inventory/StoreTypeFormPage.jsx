@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
 import { createStoreType, getStoreType, updateStoreType } from '../../api/storeTypes'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 const EMPTY_FORM = {
   store_type_name: '',
@@ -83,6 +84,7 @@ export default function StoreTypeFormPage() {
       queryClient.invalidateQueries({ queryKey: ['store-types'] })
       queryClient.invalidateQueries({ queryKey: ['store-types-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['store-type', id] })
+      showSuccess(isEditing ? 'Store type updated successfully.' : 'Store type created successfully.')
       navigate('/inventory/store-types')
     },
     onError: (err) => {
@@ -91,6 +93,7 @@ export default function StoreTypeFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

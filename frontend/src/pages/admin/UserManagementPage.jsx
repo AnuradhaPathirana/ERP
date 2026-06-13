@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Loader2, Plus, Trash2, X } from 'lucide-react'
 import { createUser, deleteUser, getRoles, getUsers, updateUser } from '../../api/users'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 const CRUMBS = [{ label: 'Team Management' }]
 
@@ -53,11 +54,13 @@ function UserModal({ open, onClose, editing, roles, onSuccess }) {
       isEdit ? updateUser(editing.id, payload) : createUser(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
+      showSuccess(isEdit ? 'User updated successfully.' : 'User created successfully.')
       onSuccess()
     },
     onError: (err) => {
       const serverErrors = err.response?.data?.errors ?? {}
       setErrors(serverErrors)
+      showError('Failed to save user. Please check the form.')
     },
   })
 
@@ -252,17 +255,20 @@ export default function UserManagementPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteUser,
-    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['users'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      showSuccess('User deleted.')
+    },
+    onError: () => showError('Failed to delete user.'),
   })
 
   const openAdd  = () => { setEditingUser(null); setModalOpen(true) }
   const openEdit = (user) => { setEditingUser(user); setModalOpen(true) }
   const closeModal = () => setModalOpen(false)
 
-  const handleDelete = (user) => {
-    if (window.confirm(`Delete "${user.name}"? This cannot be undone.`)) {
-      deleteMutation.mutate(user.id)
-    }
+  const handleDelete = async (user) => {
+    const ok = await confirmDelete(user.name)
+    if (ok) deleteMutation.mutate(user.id)
   }
 
   const meta = usersData?.meta

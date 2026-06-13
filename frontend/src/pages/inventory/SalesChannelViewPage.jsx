@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Trash2 } from 'lucide-react'
 import { deleteSalesChannel, getSalesChannel } from '../../api/salesChannels'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 const TYPE_BADGE = {
   'Wholesale':  'bg-violet-50 text-violet-700',
@@ -42,8 +43,10 @@ export default function SalesChannelViewPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sales-channels'] })
       queryClient.invalidateQueries({ queryKey: ['sales-channels-all'] })
+      showSuccess('Sales channel deleted.')
       navigate('/inventory/sales-channels')
     },
+    onError: () => showError('Failed to delete. The sales channel may be in use.'),
   })
 
   const crumbs = [
@@ -57,10 +60,9 @@ export default function SalesChannelViewPage() {
 
   const c = data?.data
 
-  const handleDelete = () => {
-    if (window.confirm(`Delete "${c?.sales_channel_name}"? This cannot be undone.`)) {
-      deleteMutation.mutate()
-    }
+  const handleDelete = async () => {
+    const ok = await confirmDelete(c?.sales_channel_name)
+    if (ok) deleteMutation.mutate()
   }
 
   return (

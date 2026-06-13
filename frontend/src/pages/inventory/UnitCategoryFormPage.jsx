@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
 import { createUnitCategory, getUnitCategory, updateUnitCategory } from '../../api/unitCategories'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 const EMPTY_FORM = { name: '', description: '' }
 
@@ -75,6 +76,7 @@ export default function UnitCategoryFormPage() {
       queryClient.invalidateQueries({ queryKey: ['unit-categories'] })
       queryClient.invalidateQueries({ queryKey: ['unit-categories-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['unit-category', id] })
+      showSuccess(isEditing ? 'Unit category updated successfully.' : 'Unit category created successfully.')
       navigate('/inventory/unit-categories')
     },
     onError: (err) => {
@@ -83,6 +85,7 @@ export default function UnitCategoryFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched({ name: true, description: true })
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

@@ -5,6 +5,7 @@ import { Save } from 'lucide-react'
 import { createVehicle, getVehicle, updateVehicle } from '../../api/vehicles'
 import { getAllDrivers } from '../../api/drivers'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 const VEHICLE_TYPES = ['Car', 'Van', 'Truck', 'Bus', 'Motorcycle', 'Heavy Truck']
 const FUEL_TYPES    = ['Petrol', 'Diesel', 'Electric', 'Hybrid', 'CNG']
@@ -166,6 +167,7 @@ export default function VehicleFormPage() {
       queryClient.invalidateQueries({ queryKey: ['vehicles'] })
       queryClient.invalidateQueries({ queryKey: ['vehicles-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['vehicle', id] })
+      showSuccess(isEditing ? 'Vehicle updated successfully.' : 'Vehicle created successfully.')
       navigate('/inventory/vehicles')
     },
     onError: (err) => {
@@ -174,6 +176,7 @@ export default function VehicleFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

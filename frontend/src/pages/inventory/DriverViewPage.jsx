@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Trash2 } from 'lucide-react'
 import { deleteDriver, getDriver } from '../../api/drivers'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 const STATUS_COLORS = {
   active:    'bg-green-50 text-green-700',
@@ -57,8 +58,10 @@ export default function DriverViewPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['drivers'] })
       queryClient.invalidateQueries({ queryKey: ['drivers-all'] })
+      showSuccess('Driver deleted.')
       navigate('/inventory/drivers')
     },
+    onError: () => showError('Failed to delete. The driver may be in use.'),
   })
 
   const crumbs = [
@@ -72,10 +75,9 @@ export default function DriverViewPage() {
 
   const d = data?.data
 
-  const handleDelete = () => {
-    if (window.confirm(`Delete driver "${d?.full_name}"? This cannot be undone.`)) {
-      deleteMutation.mutate()
-    }
+  const handleDelete = async () => {
+    const ok = await confirmDelete(d?.full_name)
+    if (ok) deleteMutation.mutate()
   }
 
   const isExpired = d?.license_expiry_date && new Date(d.license_expiry_date) < new Date()

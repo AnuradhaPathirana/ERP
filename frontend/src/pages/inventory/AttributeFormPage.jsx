@@ -5,6 +5,7 @@ import { Save } from 'lucide-react'
 import { createAttribute, getAttribute, updateAttribute } from '../../api/attributes'
 import { getAllAttributeTypes } from '../../api/attributeTypes'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 const EMPTY_FORM = {
   attribute_type_id: '',
@@ -87,6 +88,7 @@ export default function AttributeFormPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['attributes'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['attribute', id] })
+      showSuccess(isEditing ? 'Attribute updated successfully.' : 'Attribute created successfully.')
       navigate('/inventory/attributes')
     },
     onError: (err) => {
@@ -95,6 +97,7 @@ export default function AttributeFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

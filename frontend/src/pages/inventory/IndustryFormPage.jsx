@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
 import { createIndustry, getIndustry, updateIndustry } from '../../api/industries'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 const EMPTY_FORM = {
   name:        '',
@@ -94,6 +95,7 @@ export default function IndustryFormPage() {
       queryClient.invalidateQueries({ queryKey: ['industries'] })
       queryClient.invalidateQueries({ queryKey: ['industries-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['industry', id] })
+      showSuccess(isEditing ? 'Industry updated successfully.' : 'Industry created successfully.')
       navigate('/inventory/industries')
     },
     onError: (err) => {
@@ -102,6 +104,7 @@ export default function IndustryFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

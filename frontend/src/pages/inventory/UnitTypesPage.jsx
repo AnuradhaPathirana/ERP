@@ -28,13 +28,16 @@ export default function UnitTypesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteUnitType,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['unit-types'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unit-types'] })
+      showSuccess('Unit type deleted.')
+    },
+    onError: () => showError('Failed to delete. The unit type may be in use.'),
   })
 
-  const handleDelete = (id, name) => {
-    if (window.confirm(`Delete unit type "${name}"? This cannot be undone.`)) {
-      deleteMutation.mutate(id)
-    }
+  const handleDelete = async (id, name) => {
+    const ok = await confirmDelete(name)
+    if (ok) deleteMutation.mutate(id)
   }
 
   const meta = data?.meta

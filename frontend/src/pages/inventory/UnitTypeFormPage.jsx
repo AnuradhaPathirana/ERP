@@ -5,6 +5,7 @@ import { Save } from 'lucide-react'
 import { getAllUnitCategories } from '../../api/unitCategories'
 import { createUnitType, getUnitType, updateUnitType } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 const EMPTY_FORM = {
   unit_category_id: '',
@@ -113,6 +114,7 @@ export default function UnitTypeFormPage() {
       queryClient.invalidateQueries({ queryKey: ['unit-types'] })
       queryClient.invalidateQueries({ queryKey: ['unit-types-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['unit-type', id] })
+      showSuccess(isEditing ? 'Unit type updated successfully.' : 'Unit type created successfully.')
       navigate('/inventory/unit-types')
     },
     onError: (err) => {
@@ -121,6 +123,7 @@ export default function UnitTypeFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

@@ -64,7 +64,11 @@ export default function VehiclesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteVehicle,
-    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['vehicles'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['vehicles'] })
+      showSuccess('Vehicle deleted.')
+    },
+    onError: () => showError('Failed to delete. The vehicle may be in use.'),
   })
 
   const handleSearch = (e) => {
@@ -73,10 +77,9 @@ export default function VehiclesPage() {
     setPage(1)
   }
 
-  const handleDelete = (id, label) => {
-    if (window.confirm(`Delete vehicle "${label}"? This cannot be undone.`)) {
-      deleteMutation.mutate(id)
-    }
+  const handleDelete = async (id, label) => {
+    const ok = await confirmDelete(label)
+    if (ok) deleteMutation.mutate(id)
   }
 
   const meta = data?.meta

@@ -40,7 +40,11 @@ export default function DriversPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteDriver,
-    onSuccess:  () => queryClient.invalidateQueries({ queryKey: ['drivers'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['drivers'] })
+      showSuccess('Driver deleted.')
+    },
+    onError: () => showError('Failed to delete. The driver may be in use.'),
   })
 
   const handleSearch = (e) => {
@@ -49,10 +53,9 @@ export default function DriversPage() {
     setPage(1)
   }
 
-  const handleDelete = (id, name) => {
-    if (window.confirm(`Delete driver "${name}"? This cannot be undone.`)) {
-      deleteMutation.mutate(id)
-    }
+  const handleDelete = async (id, name) => {
+    const ok = await confirmDelete(name)
+    if (ok) deleteMutation.mutate(id)
   }
 
   const meta = data?.meta

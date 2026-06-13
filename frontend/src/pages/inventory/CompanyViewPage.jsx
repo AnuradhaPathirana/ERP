@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Trash2 } from 'lucide-react'
 import { deleteCompany, getCompany } from '../../api/companies'
 import Breadcrumb from '../../components/Breadcrumb'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
 function Row({ label, value }) {
   const empty = value === null || value === undefined || value === ''
@@ -38,8 +39,10 @@ export default function CompanyViewPage() {
     mutationFn: () => deleteCompany(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['companies'] })
+      showSuccess('Company deleted.')
       navigate('/inventory/companies')
     },
+    onError: () => showError('Failed to delete. The company may be in use.'),
   })
 
   const crumbs = [
@@ -53,10 +56,9 @@ export default function CompanyViewPage() {
 
   const company = data?.data
 
-  const handleDelete = () => {
-    if (window.confirm(`Delete "${company?.company_name}"? This cannot be undone.`)) {
-      deleteMutation.mutate()
-    }
+  const handleDelete = async () => {
+    const ok = await confirmDelete(company?.company_name)
+    if (ok) deleteMutation.mutate()
   }
 
   return (

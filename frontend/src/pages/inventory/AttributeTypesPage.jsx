@@ -28,13 +28,16 @@ export default function AttributeTypesPage() {
 
   const deleteMutation = useMutation({
     mutationFn: deleteAttributeType,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['attribute-types'] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['attribute-types'] })
+      showSuccess('Attribute type deleted.')
+    },
+    onError: () => showError('Failed to delete. The attribute type may be in use.'),
   })
 
-  const handleDelete = (id, name) => {
-    if (window.confirm(`Delete "${name}"? This cannot be undone.`)) {
-      deleteMutation.mutate(id)
-    }
+  const handleDelete = async (id, name) => {
+    const ok = await confirmDelete(name)
+    if (ok) deleteMutation.mutate(id)
   }
 
   const meta = data?.meta

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
 import { createSalesChannel, getSalesChannel, updateSalesChannel } from '../../api/salesChannels'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 const CHANNEL_TYPES  = ['Wholesale', 'e-commerce', 'Retail']
 const STATUS_OPTIONS = ['Active', 'Inactive']
@@ -118,6 +119,7 @@ export default function SalesChannelFormPage() {
       queryClient.invalidateQueries({ queryKey: ['sales-channels'] })
       queryClient.invalidateQueries({ queryKey: ['sales-channels-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['sales-channel', id] })
+      showSuccess(isEditing ? 'Sales channel updated successfully.' : 'Sales channel created successfully.')
       navigate('/inventory/sales-channels')
     },
     onError: (err) => {
@@ -126,6 +128,7 @@ export default function SalesChannelFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 

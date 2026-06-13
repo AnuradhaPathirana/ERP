@@ -9,6 +9,7 @@ import { getAllSalesChannels } from '../../api/salesChannels'
 import { getAllSuppliers } from '../../api/suppliers'
 import { getAllUnitTypes } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
 
 function generateProductCode() {
   const num = Math.floor(Math.random() * 9999) + 1
@@ -658,6 +659,7 @@ export default function ProductFormPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['products'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['product', id] })
+      showSuccess(isEditing ? 'Product updated successfully.' : 'Product created successfully.')
       navigate('/inventory/products')
     },
     onError: (err) => {
@@ -666,6 +668,7 @@ export default function ProductFormPage() {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
         setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
+      showError('Failed to save. Please check the form and try again.')
     },
   })
 
