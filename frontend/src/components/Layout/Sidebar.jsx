@@ -1,21 +1,30 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
+  ArrowLeftRight,
   Box,
   Building2,
+  Bus,
+  Car,
   ChevronLeft,
   ChevronRight,
   DollarSign,
+  FolderTree,
   LayoutDashboard,
+  Layers,
   Lock,
   MapPin,
   Package,
   Ruler,
   ShoppingCart,
+  SlidersHorizontal,
   Tag,
   Truck,
   UserCog,
   Users,
+  UsersRound,
+  Store,
+  Warehouse,
   X,
 } from 'lucide-react'
 import UpgradeModal from './UpgradeModal'
@@ -41,14 +50,23 @@ const NAV_ITEMS = [
     icon: Package,
     moduleKey: 'inventory',
     children: [
-      { label: 'Products',        to: '/inventory/products',          icon: Box },
-      { label: 'Companies',       to: '/inventory/companies',         icon: Building2 },
-      { label: 'Locations',       to: '/inventory/locations',         icon: MapPin },
-      { label: 'Suppliers',       to: '/inventory/suppliers',         icon: Truck },
-      { label: 'Sales Channels',  to: '/inventory/sales-channels',   icon: ShoppingCart },
-      { label: 'Industries',      to: '/inventory/industries',        icon: Building2 },
-      { label: 'Unit Categories', to: '/inventory/unit-categories',  icon: Tag },
-      { label: 'Unit Types',      to: '/inventory/unit-types',       icon: Ruler },
+      { label: 'Industries',       to: '/inventory/industries',        icon: Building2 },
+      { label: 'Companies',        to: '/inventory/companies',         icon: Building2 },
+      { label: 'Locations',        to: '/inventory/locations',         icon: MapPin },
+      { label: 'Stores',           to: '/inventory/stores',            icon: Store,           permissionGuard: 'view_stores' },
+      { label: 'Store Types',      to: '/inventory/store-types',       icon: Warehouse,       permissionGuard: 'view_store_types' },
+      { label: 'Customers',        to: '/inventory/customers',         icon: UsersRound,      permissionGuard: 'view_customers' },
+      { label: 'Suppliers',        to: '/inventory/suppliers',         icon: Truck },
+      { label: 'Unit Categories',  to: '/inventory/unit-categories',   icon: Tag },
+      { label: 'Unit Types',       to: '/inventory/unit-types',        icon: Ruler },
+      { label: 'Unit Conversions', to: '/inventory/unit-conversions',  icon: ArrowLeftRight },
+      { label: 'Attribute Types',  to: '/inventory/attribute-types',   icon: Layers },
+      { label: 'Attributes',       to: '/inventory/attributes',        icon: SlidersHorizontal },
+      { label: 'Drivers',          to: '/inventory/drivers',           icon: Car,             permissionGuard: 'view_drivers' },
+      { label: 'Vehicles',         to: '/inventory/vehicles',          icon: Bus,             permissionGuard: 'view_vehicles' },
+      { label: 'Categories',       to: '/inventory/categories',        icon: FolderTree },
+      { label: 'Products',         to: '/inventory/products',          icon: Box },
+      { label: 'Sales Channels',   to: '/inventory/sales-channels',    icon: ShoppingCart },
     ],
   },
   {
@@ -64,6 +82,15 @@ const NAV_ITEMS = [
     children: [],
   },
 ]
+
+function readUserPermissions() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem('user_permissions') ?? '[]')
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
 
 function readActiveModules() {
   try {
@@ -84,9 +111,11 @@ function readUserRoles() {
 }
 
 export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClose }) {
-  const activeModules = readActiveModules()
-  const userRoles     = readUserRoles()
-  const navigate      = useNavigate()
+  const activeModules   = readActiveModules()
+  const userRoles       = readUserRoles()
+  const userPermissions = readUserPermissions()
+  const isSuperAdmin    = userRoles.includes('super_admin')
+  const navigate        = useNavigate()
 
   const [lockedModule, setLockedModule] = useState(null)
 
@@ -234,7 +263,9 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
                 )}
 
                 {/* Children — always visible when expanded */}
-                {!collapsed && children?.map(({ label: cl, to: ct, icon: CI }) => (
+                {!collapsed && children?.filter(({ permissionGuard }) =>
+                  !permissionGuard || isSuperAdmin || userPermissions.includes(permissionGuard)
+                ).map(({ label: cl, to: ct, icon: CI }) => (
                   <NavLink
                     key={cl}
                     to={ct}
@@ -256,7 +287,9 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
                 ))}
 
                 {/* Collapsed: show each child icon */}
-                {collapsed && children?.map(({ label: cl, to: ct, icon: CI }) => (
+                {collapsed && children?.filter(({ permissionGuard }) =>
+                  !permissionGuard || isSuperAdmin || userPermissions.includes(permissionGuard)
+                ).map(({ label: cl, to: ct, icon: CI }) => (
                   <NavLink
                     key={cl}
                     to={ct}

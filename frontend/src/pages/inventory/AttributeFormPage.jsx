@@ -2,17 +2,21 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Save } from 'lucide-react'
-import { createUnitCategory, getUnitCategory, updateUnitCategory } from '../../api/unitCategories'
+import { createAttribute, getAttribute, updateAttribute } from '../../api/attributes'
+import { getAllAttributeTypes } from '../../api/attributeTypes'
 import Breadcrumb from '../../components/Breadcrumb'
 
-const EMPTY_FORM = { name: '', description: '' }
+const EMPTY_FORM = {
+  attribute_type_id: '',
+  attribute_name: '',
+}
 
 function validate(field, value) {
-  if (field === 'name') {
-    if (!value.trim()) return 'Name is required.'
+  if (field === 'attribute_type_id' && !value) return 'Attribute type is required.'
+  if (field === 'attribute_name') {
+    if (!value.trim()) return 'Attribute name is required.'
     if (value.length > 100) return 'Max 100 characters.'
   }
-  if (field === 'description' && value.length > 255) return 'Max 255 characters.'
   return ''
 }
 
@@ -21,7 +25,7 @@ const inputBase =
 const inputErr =
   'block w-full rounded border border-red-400 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
 
-export default function UnitCategoryFormPage() {
+export default function AttributeFormPage() {
   const { id }      = useParams()
   const isEditing   = Boolean(id)
   const navigate    = useNavigate()
@@ -33,16 +37,25 @@ export default function UnitCategoryFormPage() {
   const [touched, setTouched] = useState({})
 
   const { isLoading: isFetching, data: fetchedData } = useQuery({
-    queryKey: ['unit-category', id],
-    queryFn:  () => getUnitCategory(id),
+    queryKey: ['attribute', id],
+    queryFn:  () => getAttribute(id),
     enabled:  isEditing,
   })
+
+  const { data: typesData } = useQuery({
+    queryKey: ['attribute-types-all'],
+    queryFn:  getAllAttributeTypes,
+  })
+  const attributeTypes = typesData?.data ?? []
 
   const initialized = useRef(false)
   useLayoutEffect(() => {
     if (fetchedData?.data && !initialized.current) {
-      const cat = fetchedData.data
-      setForm({ name: cat.name ?? '', description: cat.description ?? '' })
+      const a = fetchedData.data
+      setForm({
+        attribute_type_id: String(a.attribute_type_id ?? ''),
+        attribute_name:    a.attribute_name ?? '',
+      })
       initialized.current = true
     }
   }, [fetchedData])
@@ -62,44 +75,47 @@ export default function UnitCategoryFormPage() {
   }
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && e.target.name === 'name') {
+    if (e.key === 'Enter' && e.target.name === 'attribute_type_id') {
       e.preventDefault()
-      document.getElementById('field-description')?.focus()
+      document.getElementById('field-attribute_name')?.focus()
     }
   }
 
   const mutation = useMutation({
     mutationFn: (payload) =>
-      isEditing ? updateUnitCategory(id, payload) : createUnitCategory(payload),
+      isEditing ? updateAttribute(id, payload) : createAttribute(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['unit-categories'] })
-      queryClient.invalidateQueries({ queryKey: ['unit-categories-all'] })
-      if (isEditing) queryClient.invalidateQueries({ queryKey: ['unit-category', id] })
-      navigate('/inventory/unit-categories')
+      queryClient.invalidateQueries({ queryKey: ['attributes'] })
+      if (isEditing) queryClient.invalidateQueries({ queryKey: ['attribute', id] })
+      navigate('/inventory/attributes')
     },
     onError: (err) => {
       const apiErrors = err.response?.data?.errors ?? {}
       if (Object.keys(apiErrors).length) {
         setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
-        setTouched({ name: true, description: true })
+        setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
       }
     },
   })
 
   const handleSubmit = (e) => {
     e.preventDefault()
-    const nameErr = validate('name', form.name)
-    const descErr = validate('description', form.description)
-    setErrors({ name: nameErr, description: descErr })
-    setTouched({ name: true, description: true })
-    if (nameErr || descErr) return
-    mutation.mutate({ name: form.name.trim(), description: form.description.trim() || null })
+    const fields = ['attribute_type_id', 'attribute_name']
+    const newErrors  = Object.fromEntries(fields.map((f) => [f, validate(f, form[f])]))
+    const newTouched = Object.fromEntries(fields.map((f) => [f, true]))
+    setErrors(newErrors)
+    setTouched(newTouched)
+    if (Object.values(newErrors).some(Boolean)) return
+    mutation.mutate({
+      attribute_type_id: Number(form.attribute_type_id),
+      attribute_name:    form.attribute_name.trim(),
+    })
   }
 
   const crumbs = [
-    { label: 'Inventory',       to: '/inventory/unit-categories' },
-    { label: 'Unit Categories', to: '/inventory/unit-categories' },
-    { label: isEditing ? 'Edit Category' : 'New Category' },
+    { label: 'Inventory',  to: '/inventory/attributes' },
+    { label: 'Attributes', to: '/inventory/attributes' },
+    { label: isEditing ? 'Edit Attribute' : 'New Attribute' },
   ]
 
   if (isEditing && isFetching) {
@@ -112,72 +128,72 @@ export default function UnitCategoryFormPage() {
 
       <div className="mb-2">
         <h1 className="text-xl font-bold text-slate-800">
-          {isEditing ? 'Edit Unit Category' : 'New Unit Category'}
+          {isEditing ? 'Edit Attribute' : 'New Attribute'}
         </h1>
       </div>
 
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} noValidate>
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
           <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Category Details</h2>
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              Attribute Details
+            </h2>
           </div>
 
-          {/* Name + Description side-by-side */}
-          <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-3">
-            {/* Name — 1 col */}
+          <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-2 lg:grid-cols-3">
+
+            {/* Attribute Type */}
             <div>
-              <label className="mb-0.5 block text-xs font-medium text-slate-600">
-                Name <span className="text-red-500">*</span>
+              <label htmlFor="field-attribute_type_id" className="mb-0.5 block text-xs font-medium text-slate-600">
+                Attribute Type <span className="text-red-500">*</span>
+              </label>
+              <select
+                id="field-attribute_type_id"
+                name="attribute_type_id"
+                value={form.attribute_type_id}
+                onChange={handleChange}
+                onBlur={handleBlur}
+                className={errors.attribute_type_id && touched.attribute_type_id ? inputErr : inputBase}
+              >
+                <option value="">— Select attribute type —</option>
+                {attributeTypes.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.attribute_type_name}
+                  </option>
+                ))}
+              </select>
+              {errors.attribute_type_id && touched.attribute_type_id && (
+                <p className="mt-0.5 text-[11px] text-red-600">{errors.attribute_type_id}</p>
+              )}
+            </div>
+
+            {/* Attribute Name */}
+            <div>
+              <label htmlFor="field-attribute_name" className="mb-0.5 block text-xs font-medium text-slate-600">
+                Attribute Name <span className="text-red-500">*</span>
               </label>
               <input
                 ref={nameRef}
-                id="field-name"
-                name="name"
+                id="field-attribute_name"
+                name="attribute_name"
                 type="text"
-                value={form.name}
+                value={form.attribute_name}
                 onChange={handleChange}
                 onBlur={handleBlur}
-                placeholder="e.g. Weight, Length, Volume"
+                placeholder="e.g. Red, XL, Cotton"
                 maxLength={100}
                 autoComplete="off"
-                className={errors.name && touched.name ? inputErr : inputBase}
+                className={errors.attribute_name && touched.attribute_name ? inputErr : inputBase}
               />
-              {errors.name && touched.name && (
-                <p className="mt-0.5 text-[11px] text-red-600">{errors.name}</p>
-              )}
-            </div>
-
-            {/* Description — 2 cols */}
-            <div className="md:col-span-2">
-              <label htmlFor="field-description" className="mb-0.5 block text-xs font-medium text-slate-600">
-                Description <span className="text-xs font-normal text-slate-400">(optional)</span>
-              </label>
-              <div className="relative">
-                <textarea
-                  id="field-description"
-                  name="description"
-                  value={form.description}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  placeholder="Briefly describe what this category covers…"
-                  maxLength={255}
-                  rows={2}
-                  className={`${errors.description && touched.description ? inputErr : inputBase} resize-none pr-14`}
-                />
-                <span className="absolute bottom-1.5 right-2 text-[10px] text-slate-400">
-                  {form.description.length}/255
-                </span>
-              </div>
-              {errors.description && touched.description && (
-                <p className="mt-0.5 text-[11px] text-red-600">{errors.description}</p>
+              {errors.attribute_name && touched.attribute_name && (
+                <p className="mt-0.5 text-[11px] text-red-600">{errors.attribute_name}</p>
               )}
             </div>
           </div>
 
-          {/* Footer */}
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-2">
             <Link
-              to="/inventory/unit-categories"
+              to="/inventory/attributes"
               className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
             >
               Cancel
@@ -188,7 +204,7 @@ export default function UnitCategoryFormPage() {
               className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Save size={13} strokeWidth={2.5} />
-              {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Category'}
+              {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Attribute'}
             </button>
           </div>
         </div>

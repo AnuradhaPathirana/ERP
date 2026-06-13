@@ -9,6 +9,7 @@ const UnitCategoriesPage    = lazy(() => import('./pages/inventory/UnitCategorie
 const UnitCategoryFormPage  = lazy(() => import('./pages/inventory/UnitCategoryFormPage'))
 const UnitTypesPage         = lazy(() => import('./pages/inventory/UnitTypesPage'))
 const UnitTypeFormPage      = lazy(() => import('./pages/inventory/UnitTypeFormPage'))
+const UnitConversionsPage   = lazy(() => import('./pages/inventory/UnitConversionsPage'))
 const ProductsPage             = lazy(() => import('./pages/inventory/ProductsPage'))
 const ProductFormPage          = lazy(() => import('./pages/inventory/ProductFormPage'))
 const ProductViewPage          = lazy(() => import('./pages/inventory/ProductViewPage'))
@@ -27,6 +28,26 @@ const LocationViewPage         = lazy(() => import('./pages/inventory/LocationVi
 const SuppliersPage            = lazy(() => import('./pages/inventory/SuppliersPage'))
 const SupplierFormPage         = lazy(() => import('./pages/inventory/SupplierFormPage'))
 const SupplierViewPage         = lazy(() => import('./pages/inventory/SupplierViewPage'))
+const CustomersPage            = lazy(() => import('./pages/inventory/CustomersPage'))
+const CustomerFormPage         = lazy(() => import('./pages/inventory/CustomerFormPage'))
+const CustomerViewPage         = lazy(() => import('./pages/inventory/CustomerViewPage'))
+const CategoriesPage           = lazy(() => import('./pages/inventory/CategoriesPage'))
+const CategoryFormPage         = lazy(() => import('./pages/inventory/CategoryFormPage'))
+const CategoryViewPage         = lazy(() => import('./pages/inventory/CategoryViewPage'))
+const AttributeTypesPage       = lazy(() => import('./pages/inventory/AttributeTypesPage'))
+const AttributeTypeFormPage    = lazy(() => import('./pages/inventory/AttributeTypeFormPage'))
+const AttributesPage           = lazy(() => import('./pages/inventory/AttributesPage'))
+const AttributeFormPage        = lazy(() => import('./pages/inventory/AttributeFormPage'))
+const StoreTypesPage           = lazy(() => import('./pages/inventory/StoreTypesPage'))
+const StoreTypeFormPage        = lazy(() => import('./pages/inventory/StoreTypeFormPage'))
+const StoresPage               = lazy(() => import('./pages/inventory/StoresPage'))
+const StoreFormPage            = lazy(() => import('./pages/inventory/StoreFormPage'))
+const DriversPage              = lazy(() => import('./pages/inventory/DriversPage'))
+const DriverFormPage           = lazy(() => import('./pages/inventory/DriverFormPage'))
+const DriverViewPage           = lazy(() => import('./pages/inventory/DriverViewPage'))
+const VehiclesPage             = lazy(() => import('./pages/inventory/VehiclesPage'))
+const VehicleFormPage          = lazy(() => import('./pages/inventory/VehicleFormPage'))
+const VehicleViewPage          = lazy(() => import('./pages/inventory/VehicleViewPage'))
 const UserManagementPage    = lazy(() => import('./pages/admin/UserManagementPage'))
 
 function PageLoader() {
@@ -64,6 +85,7 @@ export default function App() {
         <Route path="/inventory/unit-types"                   element={<Lazy component={UnitTypesPage} />} />
         <Route path="/inventory/unit-types/create"           element={<Lazy component={UnitTypeFormPage} />} />
         <Route path="/inventory/unit-types/:id/edit"         element={<Lazy component={UnitTypeFormPage} />} />
+        <Route path="/inventory/unit-conversions"            element={<Lazy component={UnitConversionsPage} />} />
         <Route path="/inventory/products"                        element={<Lazy component={ProductsPage} />} />
         <Route path="/inventory/products/create"               element={<Lazy component={ProductFormPage} />} />
         <Route path="/inventory/products/:id"                  element={<Lazy component={ProductViewPage} />} />
@@ -88,6 +110,34 @@ export default function App() {
         <Route path="/inventory/suppliers/create"              element={<Lazy component={SupplierFormPage} />} />
         <Route path="/inventory/suppliers/:id"                 element={<Lazy component={SupplierViewPage} />} />
         <Route path="/inventory/suppliers/:id/edit"            element={<Lazy component={SupplierFormPage} />} />
+        <Route path="/inventory/customers"                     element={<Lazy component={CustomersPage} />} />
+        <Route path="/inventory/customers/create"              element={<Lazy component={CustomerFormPage} />} />
+        <Route path="/inventory/customers/:id"                 element={<Lazy component={CustomerViewPage} />} />
+        <Route path="/inventory/customers/:id/edit"            element={<Lazy component={CustomerFormPage} />} />
+        <Route path="/inventory/categories"                    element={<Lazy component={CategoriesPage} />} />
+        <Route path="/inventory/categories/create"             element={<Lazy component={CategoryFormPage} />} />
+        <Route path="/inventory/categories/:id"                element={<Lazy component={CategoryViewPage} />} />
+        <Route path="/inventory/categories/:id/edit"           element={<Lazy component={CategoryFormPage} />} />
+        <Route path="/inventory/attribute-types"               element={<Lazy component={AttributeTypesPage} />} />
+        <Route path="/inventory/attribute-types/create"        element={<Lazy component={AttributeTypeFormPage} />} />
+        <Route path="/inventory/attribute-types/:id/edit"      element={<Lazy component={AttributeTypeFormPage} />} />
+        <Route path="/inventory/attributes"                    element={<Lazy component={AttributesPage} />} />
+        <Route path="/inventory/attributes/create"             element={<Lazy component={AttributeFormPage} />} />
+        <Route path="/inventory/attributes/:id/edit"           element={<Lazy component={AttributeFormPage} />} />
+        <Route path="/inventory/store-types"                   element={<Lazy component={StoreTypesPage} />} />
+        <Route path="/inventory/store-types/create"            element={<Lazy component={StoreTypeFormPage} />} />
+        <Route path="/inventory/store-types/:id/edit"          element={<Lazy component={StoreTypeFormPage} />} />
+        <Route path="/inventory/stores"                        element={<Lazy component={StoresPage} />} />
+        <Route path="/inventory/stores/create"                 element={<Lazy component={StoreFormPage} />} />
+        <Route path="/inventory/stores/:id/edit"               element={<Lazy component={StoreFormPage} />} />
+        <Route path="/inventory/drivers"                       element={<Lazy component={DriversPage} />} />
+        <Route path="/inventory/drivers/create"                element={<Lazy component={DriverFormPage} />} />
+        <Route path="/inventory/drivers/:id"                   element={<Lazy component={DriverViewPage} />} />
+        <Route path="/inventory/drivers/:id/edit"              element={<Lazy component={DriverFormPage} />} />
+        <Route path="/inventory/vehicles"                      element={<Lazy component={VehiclesPage} />} />
+        <Route path="/inventory/vehicles/create"               element={<Lazy component={VehicleFormPage} />} />
+        <Route path="/inventory/vehicles/:id"                  element={<Lazy component={VehicleViewPage} />} />
+        <Route path="/inventory/vehicles/:id/edit"             element={<Lazy component={VehicleFormPage} />} />
       </Route>
 
       {/* Fallback */}

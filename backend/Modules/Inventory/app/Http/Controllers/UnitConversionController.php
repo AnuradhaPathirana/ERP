@@ -5,33 +5,31 @@ declare(strict_types=1);
 namespace Modules\Inventory\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Modules\Inventory\Http\Requests\SaveUnitConversionRatesRequest;
+use Modules\Inventory\Services\UnitConversionService;
 
 class UnitConversionController extends Controller
 {
-    public function index(): JsonResponse
+    public function __construct(private readonly UnitConversionService $service) {}
+
+    /** Return all unit types in the category with their current conversion rates. */
+    public function byCategory(int $categoryId): JsonResponse
     {
-        return response()->json([]);
+        $data = $this->service->getByCategoryWithRates($categoryId);
+
+        return response()->json(['data' => $data]);
     }
 
-    public function store(Request $request): JsonResponse
+    /** Save (replace) conversion rates for all units in a category against the selected base unit. */
+    public function saveRates(SaveUnitConversionRatesRequest $request): JsonResponse
     {
-        return response()->json([], 201);
-    }
+        $this->service->saveRates(
+            $request->integer('category_id'),
+            $request->integer('base_unit_type_id'),
+            $request->input('rates', []),
+        );
 
-    public function show(int $id): JsonResponse
-    {
-        return response()->json([]);
-    }
-
-    public function update(Request $request, int $id): JsonResponse
-    {
-        return response()->json([]);
-    }
-
-    public function destroy(int $id): JsonResponse
-    {
-        return response()->json([], 204);
+        return response()->json(['message' => 'Rates saved successfully.']);
     }
 }

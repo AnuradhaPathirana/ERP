@@ -1,5 +1,8 @@
 import api from './axios'
 
+export const getAllCompanies = () =>
+  api.get('/api/v1/companies/all').then((r) => r.data.data)
+
 export const getCompanies = (page = 1) =>
   api.get('/api/v1/companies', { params: { page } }).then((r) => r.data)
 

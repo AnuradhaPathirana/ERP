@@ -20,6 +20,7 @@ export default function LoginPage() {
       localStorage.setItem('auth_token', data.token)
       localStorage.setItem('active_modules', JSON.stringify(data.active_modules ?? []))
       localStorage.setItem('user_roles', JSON.stringify(data.roles ?? []))
+      localStorage.setItem('user_permissions', JSON.stringify(data.permissions ?? []))
       navigate('/dashboard')
     } catch (err) {
       setError(err.response?.data?.message ?? 'An unexpected error occurred.')

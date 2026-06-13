@@ -1,0 +1,147 @@
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Edit2, Trash2 } from 'lucide-react'
+import { deleteCategory, getCategory } from '../../api/categories'
+import Breadcrumb from '../../components/Breadcrumb'
+
+const TYPE_BADGE = {
+  product: 'bg-blue-50 text-blue-700',
+  service: 'bg-violet-50 text-violet-700',
+}
+
+function Row({ label, value, badge }) {
+  const empty = value === null || value === undefined || value === ''
+  return (
+    <div className="flex items-start gap-2 py-1">
+      <span className="w-40 shrink-0 text-xs text-slate-500">{label}</span>
+      {badge
+        ? <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium capitalize ${TYPE_BADGE[value] ?? ''}`}>{value}</span>
+        : <span className={`text-xs text-slate-800 ${empty ? 'italic text-slate-400' : ''}`}>{empty ? '—' : value}</span>
+      }
+    </div>
+  )
+}
+
+export default function CategoryViewPage() {
+  const { id }      = useParams()
+  const navigate    = useNavigate()
+  const queryClient = useQueryClient()
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['category', id],
+    queryFn:  () => getCategory(id),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteCategory(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] })
+      queryClient.invalidateQueries({ queryKey: ['categories-all'] })
+      navigate('/inventory/categories')
+    },
+  })
+
+  const crumbs = [
+    { label: 'Inventory',   to: '/inventory/products' },
+    { label: 'Categories',  to: '/inventory/categories' },
+    { label: 'View Category' },
+  ]
+
+  if (isLoading) return <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
+  if (isError)   return <div className="flex items-center justify-center py-14 text-sm text-red-500">Failed to load category.</div>
+
+  const cat = data?.data
+
+  const handleDelete = () => {
+    if (window.confirm(`Delete "${cat?.category_name}"? Its sub-categories will become top-level.`)) {
+      deleteMutation.mutate()
+    }
+  }
+
+  return (
+    <div className="w-full">
+      <Breadcrumb crumbs={crumbs} />
+
+      {/* Header */}
+      <div className="mb-3 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-800">{cat?.category_name}</h1>
+          {cat?.parent_category_name && (
+            <p className="mt-0.5 text-xs text-slate-500">
+              Under{' '}
+              <Link
+                to={`/inventory/categories/${cat.parent_category_id}`}
+                className="font-medium text-indigo-600 hover:underline"
+              >
+                {cat.parent_category_name}
+              </Link>
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <Link
+            to={`/inventory/categories/${id}/edit`}
+            className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+          >
+            <Edit2 size={12} />
+            Edit
+          </Link>
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={deleteMutation.isPending}
+            className="flex items-center gap-1.5 rounded border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+          >
+            <Trash2 size={12} />
+            Delete
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+
+        {/* Category Details */}
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Category Details</h2>
+          </div>
+          <div className="divide-y divide-slate-50 px-4 py-1">
+            <Row label="Category Name"   value={cat?.category_name} />
+            <Row label="Type"            value={cat?.product_service_type} badge />
+            <Row label="Reference Name"  value={cat?.reference_name} />
+          </div>
+        </section>
+
+        {/* Hierarchy & Classification */}
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Hierarchy &amp; Classification</h2>
+          </div>
+          <div className="divide-y divide-slate-50 px-4 py-1">
+            <Row label="Parent Category" value={cat?.parent_category_name} />
+            <Row label="Industry"        value={cat?.industry_name} />
+            <Row label="Company"         value={cat?.company_name} />
+          </div>
+        </section>
+
+        {/* Record Info */}
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Record Info</h2>
+          </div>
+          <div className="divide-y divide-slate-50 px-4 py-1">
+            <Row label="Created At" value={cat?.created_at ? new Date(cat.created_at).toLocaleString() : null} />
+            <Row label="Updated At" value={cat?.updated_at ? new Date(cat.updated_at).toLocaleString() : null} />
+          </div>
+        </section>
+
+      </div>
+
+      <div className="mt-3">
+        <Link to="/inventory/categories" className="text-xs font-medium text-slate-500 hover:text-slate-800">
+          ← Back to Categories
+        </Link>
+      </div>
+    </div>
+  )
+}

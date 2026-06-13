@@ -68,4 +68,16 @@ class CompanyController extends Controller
 
         return response()->json(null, 204);
     }
+
+    /** Flat list for dropdowns — id + company_name. */
+    public function all(): JsonResponse
+    {
+        $items = Company::orderBy('company_name')
+            ->get(['id', 'company_name'])
+            ->map(fn (Company $c) => ['id' => $c->id, 'name' => $c->company_name])
+            ->values()
+            ->all();
+
+        return response()->json(['data' => $items]);
+    }
 }
