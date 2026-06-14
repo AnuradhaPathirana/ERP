@@ -54,7 +54,7 @@ class ProductController extends Controller
 
     public function show(Product $product): JsonResponse
     {
-        $product->loadMissing('suppliers');
+        $product->loadMissing(['suppliers', 'salesChannels', 'category', 'location', 'productAttributes', 'locationStores']);
 
         return response()->json(
             ['data' => (new ProductResource($product))->toArray(request())],

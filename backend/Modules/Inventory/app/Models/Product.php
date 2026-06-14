@@ -8,9 +8,12 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Modules\Inventory\Database\Factories\ProductFactory;
 use Modules\Inventory\Models\Category;
 use Modules\Inventory\Models\Location;
+use Modules\Inventory\Models\ProductAttribute;
+use Modules\Inventory\Models\ProductLocationStore;
 use Modules\Inventory\Models\SalesChannel;
 use Modules\Inventory\Models\SupplierMaster;
 
@@ -76,10 +79,20 @@ class Product extends Model
         return $this->belongsTo(Location::class, 'location_id');
     }
 
+    public function locationStores(): HasMany
+    {
+        return $this->hasMany(ProductLocationStore::class, 'product_id');
+    }
+
     public function suppliers(): BelongsToMany
     {
         return $this->belongsToMany(SupplierMaster::class, 'inv_product_supplier')
             ->withTimestamps();
+    }
+
+    public function productAttributes(): HasMany
+    {
+        return $this->hasMany(ProductAttribute::class, 'product_id');
     }
 
     public function salesChannels(): BelongsToMany

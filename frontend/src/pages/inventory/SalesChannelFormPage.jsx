@@ -172,16 +172,14 @@ export default function SalesChannelFormPage() {
       </div>
 
       <form onSubmit={handleSubmit} noValidate>
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Channel Details</h2>
-          </div>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {/* Form card — left column */}
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Channel Details</h2>
+            </div>
 
-          {/* 2-column grid: fields left, description right */}
-          <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2">
-
-            {/* Left — structured fields */}
-            <div className="space-y-3">
+            <div className="space-y-3 p-4">
               {/* Row: Type | Name | Status */}
               <div className="grid grid-cols-3 gap-2">
                 <div>
@@ -272,46 +270,46 @@ export default function SalesChannelFormPage() {
                   <FieldError errors={errors} touched={touched} name="applicable_to" />
                 </div>
               </div>
-            </div>
 
-            {/* Right — description */}
-            <div className="flex flex-col">
-              <Label>Description</Label>
-              <div className="relative flex-1">
-                <textarea
-                  name="description"
-                  rows={5}
-                  value={form.description}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  maxLength={255}
-                  placeholder="Optional notes about this channel…"
-                  className={`${fieldCls(errors, touched, 'description')} h-full min-h-24 resize-none pb-5`}
-                />
-                <span className="absolute bottom-1.5 right-2 text-[10px] text-slate-400">
-                  {form.description.length}/255
-                </span>
+              {/* Description below other inputs */}
+              <div>
+                <Label>Description</Label>
+                <div className="relative">
+                  <textarea
+                    name="description"
+                    rows={4}
+                    value={form.description}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    maxLength={255}
+                    placeholder="Optional notes about this channel…"
+                    className={`${fieldCls(errors, touched, 'description')} resize-none pb-5`}
+                  />
+                  <span className="absolute bottom-1.5 right-2 text-[10px] text-slate-400">
+                    {form.description.length}/255
+                  </span>
+                </div>
+                <FieldError errors={errors} touched={touched} name="description" />
               </div>
-              <FieldError errors={errors} touched={touched} name="description" />
             </div>
-          </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-2">
-            <Link
-              to="/inventory/sales-channels"
-              className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={mutation.isPending}
-              className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Save size={13} strokeWidth={2.5} />
-              {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Channel'}
-            </button>
+            {/* Footer — both buttons on same row */}
+            <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-2">
+              <Link
+                to="/inventory/sales-channels"
+                className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
+              >
+                Cancel
+              </Link>
+              <button
+                type="submit"
+                disabled={mutation.isPending}
+                className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={13} strokeWidth={2.5} />
+                {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Channel'}
+              </button>
+            </div>
           </div>
         </div>
 

@@ -12,6 +12,7 @@ final class ProductData
     /**
      * @param array<int>                            $supplierIds
      * @param array<array<string, mixed>>           $costDetails
+     * @param array<array{attribute_type_id:int, attribute_id:int}> $productAttributes
      */
     public function __construct(
         public readonly string  $name,
@@ -41,6 +42,8 @@ final class ProductData
         public readonly bool    $isSerial,
         public readonly array   $supplierIds,
         public readonly array   $costDetails,
+        public readonly array   $productAttributes,
+        public readonly array   $locationStores,
     ) {}
 
     public static function fromRequest(StoreProductRequest|UpdateProductRequest $request): self
@@ -77,8 +80,10 @@ final class ProductData
             loyalty:                 (bool) ($request->validated('loyalty')                  ?? false),
             isBatch:                 (bool) ($request->validated('is_batch')                 ?? false),
             isSerial:                (bool) ($request->validated('is_serial')                ?? false),
-            supplierIds:             (array) ($request->validated('supplier_ids')            ?? []),
-            costDetails:             (array) ($request->validated('cost_details')            ?? []),
+            supplierIds:             (array) ($request->validated('supplier_ids')             ?? []),
+            costDetails:             (array) ($request->validated('cost_details')             ?? []),
+            productAttributes:       (array) ($request->validated('product_attributes')      ?? []),
+            locationStores:          (array) ($request->validated('location_stores')          ?? []),
         );
     }
 }

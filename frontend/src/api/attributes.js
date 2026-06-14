@@ -23,4 +23,4 @@ export const deleteAttribute = (id) =>
 
 /** Flat list for <select> dropdowns — returns [{ id, attribute_type_id, attribute_name }] */
 export const getAllAttributes = () =>
-  api.get(`${BASE}/all`).then((r) => r.data)
+  api.get(`${BASE}/all`).then((r) => r.data.data)

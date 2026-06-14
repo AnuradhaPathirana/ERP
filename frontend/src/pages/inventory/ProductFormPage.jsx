@@ -1,11 +1,14 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, HelpCircle, Plus, RefreshCw, Save, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, HelpCircle, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
 import { checkProductCode, createProduct, getProduct, updateProduct } from '../../api/products'
+import { getAllAttributes } from '../../api/attributes'
+import { getAllAttributeTypes } from '../../api/attributeTypes'
 import { getAllCategories } from '../../api/categories'
 import { getAllLocations } from '../../api/locations'
 import { getAllSalesChannels } from '../../api/salesChannels'
+import { getAllStores } from '../../api/stores'
 import { getAllSuppliers } from '../../api/suppliers'
 import { getAllUnitTypes } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
@@ -35,6 +38,9 @@ const BOOL_OPTIONS = [
   { key: 'is_serial',                 label: 'Serial Tracked' },
 ]
 
+const EMPTY_ATTRIBUTE_ROW      = { attribute_type_id: '', attribute_id: '' }
+const EMPTY_LOCATION_STORE_ROW = { location_id: '', store_id: '' }
+
 const EMPTY_COST_ROW = {
   sales_channel_id:               '',
   uom:                            '',
@@ -58,7 +64,7 @@ const EMPTY_FORM = {
   product_type:              '',
   description:               '',
   category_id:               '',
-  location_id:               '',
+  location_stores:           [],
   reorder_level:             '',
   reorder_qty:               '',
   reorder_period:            '',
@@ -77,6 +83,7 @@ const EMPTY_FORM = {
   is_serial:                  false,
   supplier_ids:               [],
   cost_details:               [],
+  product_attributes:         [],
 }
 
 function validateField(field, value) {
@@ -331,7 +338,7 @@ function TreeSelect({ name, value, onChange, items, parentField, labelField, err
       </button>
 
       {open && (
-        <div className="absolute left-0 z-20 mt-1 w-full min-w-[180px] rounded-lg border border-slate-200 bg-white shadow-lg max-h-56 overflow-y-auto py-1">
+        <div className="absolute left-0 z-50 mt-1 w-full min-w-[180px] rounded-lg border border-slate-200 bg-white shadow-lg max-h-56 overflow-y-auto py-1">
           {tree.length === 0
             ? <p className="px-3 py-2 text-xs italic text-slate-400">{emptyText ?? 'No options available.'}</p>
             : tree.map((node) => (
@@ -347,6 +354,51 @@ function TreeSelect({ name, value, onChange, items, parentField, labelField, err
           }
         </div>
       )}
+    </div>
+  )
+}
+
+function AttributeRow({ row, idx, attributeTypes, allAttributes, usedAttributeIds, onChange, onRemove }) {
+  const filteredAttrs = allAttributes
+    .filter((a) => String(a.attribute_type_id) === String(row.attribute_type_id))
+    .filter((a) => !usedAttributeIds.includes(String(a.id)) || String(a.id) === String(row.attribute_id))
+
+  return (
+    <div className="flex items-end gap-1.5">
+      <div className="flex-1">
+        {idx === 0 && <label className="mb-0.5 block text-xs font-medium text-slate-600">Attribute Type</label>}
+        <select
+          value={row.attribute_type_id}
+          onChange={(e) => onChange(idx, 'attribute_type_id', e.target.value)}
+          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30"
+        >
+          <option value="">— Type —</option>
+          {attributeTypes.map((t) => (
+            <option key={t.id} value={t.id}>{t.attribute_type_name}</option>
+          ))}
+        </select>
+      </div>
+      <div className="flex-1">
+        {idx === 0 && <label className="mb-0.5 block text-xs font-medium text-slate-600">Attribute</label>}
+        <select
+          value={row.attribute_id}
+          onChange={(e) => onChange(idx, 'attribute_id', e.target.value)}
+          disabled={!row.attribute_type_id}
+          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30 disabled:bg-slate-50 disabled:text-slate-400"
+        >
+          <option value="">— Attribute —</option>
+          {filteredAttrs.map((a) => (
+            <option key={a.id} value={a.id}>{a.attribute_name}</option>
+          ))}
+        </select>
+      </div>
+      <button
+        type="button"
+        onClick={() => onRemove(idx)}
+        className="shrink-0 rounded p-0.5 text-slate-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+      >
+        <Trash2 size={13} />
+      </button>
     </div>
   )
 }
@@ -534,6 +586,10 @@ export default function ProductFormPage() {
     queryKey: ['locations-all'],
     queryFn:  getAllLocations,
   })
+  const { data: storesData } = useQuery({
+    queryKey: ['stores-all'],
+    queryFn:  getAllStores,
+  })
   const { data: suppliersData } = useQuery({
     queryKey: ['suppliers-all'],
     queryFn:  getAllSuppliers,
@@ -546,17 +602,29 @@ export default function ProductFormPage() {
     queryKey: ['unit-types-all'],
     queryFn:  getAllUnitTypes,
   })
+  const { data: attributeTypesData } = useQuery({
+    queryKey: ['attribute-types-all'],
+    queryFn:  getAllAttributeTypes,
+  })
+  const { data: allAttributesData } = useQuery({
+    queryKey: ['attributes-all'],
+    queryFn:  getAllAttributes,
+  })
 
-  const categories    = categoriesData ?? []
-  const locations     = locationsData  ?? []
-  const suppliers     = suppliersData ?? []
-  const salesChannels = channelsData  ?? []
-  const unitTypes     = unitTypesData ?? []
+  const categories    = categoriesData     ?? []
+  const locations     = locationsData      ?? []
+  const allStores     = storesData         ?? []
+  const suppliers     = suppliersData      ?? []
+  const salesChannels = channelsData       ?? []
+  const unitTypes     = unitTypesData      ?? []
+  const attributeTypes = attributeTypesData ?? []
+  const allAttributes  = allAttributesData  ?? []
 
-  const { isLoading: isFetching, data: fetchedData } = useQuery({
+  const { isLoading: isFetching, isError: isFetchError, data: fetchedData } = useQuery({
     queryKey: ['product', id],
     queryFn:  () => getProduct(id),
     enabled:  isEditing,
+    retry:    1,
   })
 
   const initialized = useRef(false)
@@ -572,7 +640,10 @@ export default function ProductFormPage() {
         product_type:              p.product_type             ?? '',
         description:               p.description              ?? '',
         category_id:               p.category_id  != null ? String(p.category_id)  : '',
-        location_id:               p.location_id  != null ? String(p.location_id)  : '',
+        location_stores:           (p.location_stores ?? []).map((ls) => ({
+          location_id: ls.location_id != null ? String(ls.location_id) : '',
+          store_id:    ls.store_id    != null ? String(ls.store_id)    : '',
+        })),
         reorder_level:             p.reorder_level            != null ? String(p.reorder_level) : '',
         reorder_qty:               p.reorder_qty              != null ? String(p.reorder_qty) : '',
         reorder_period:            p.reorder_period           ?? '',
@@ -590,6 +661,10 @@ export default function ProductFormPage() {
         is_batch:                   Boolean(p.is_batch),
         is_serial:                  Boolean(p.is_serial),
         supplier_ids:               (p.suppliers ?? []).map((s) => s.id),
+        product_attributes:         (p.product_attributes ?? []).map((pa) => ({
+          attribute_type_id: pa.attribute_type_id != null ? String(pa.attribute_type_id) : '',
+          attribute_id:      pa.attribute_id      != null ? String(pa.attribute_id)      : '',
+        })),
         cost_details:               (p.cost_details ?? []).map((c) => ({
           sales_channel_id:               String(c.sales_channel_id),
           uom:                            c.uom                            ?? '',
@@ -610,7 +685,11 @@ export default function ProductFormPage() {
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setForm((prev) => ({ ...prev, [name]: value }))
+    setForm((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === 'category_id' ? { product_attributes: [] } : {}),
+    }))
     if (name === 'product_code') setCodeStatus('idle')
     if (touched[name]) {
       setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }))
@@ -653,6 +732,44 @@ export default function ProductFormPage() {
     }))
   }
 
+  const addLocationStoreRow = () => {
+    setForm((prev) => ({ ...prev, location_stores: [...prev.location_stores, { ...EMPTY_LOCATION_STORE_ROW }] }))
+  }
+
+  const removeLocationStoreRow = (idx) => {
+    setForm((prev) => ({ ...prev, location_stores: prev.location_stores.filter((_, i) => i !== idx) }))
+  }
+
+  const handleLocationStoreChange = (idx, field, value) => {
+    setForm((prev) => ({
+      ...prev,
+      location_stores: prev.location_stores.map((row, i) =>
+        i === idx
+          ? { ...row, [field]: value, ...(field === 'location_id' ? { store_id: '' } : {}) }
+          : row
+      ),
+    }))
+  }
+
+  const addAttributeRow = () => {
+    setForm((prev) => ({ ...prev, product_attributes: [...prev.product_attributes, { ...EMPTY_ATTRIBUTE_ROW }] }))
+  }
+
+  const removeAttributeRow = (idx) => {
+    setForm((prev) => ({ ...prev, product_attributes: prev.product_attributes.filter((_, i) => i !== idx) }))
+  }
+
+  const handleAttributeChange = (idx, field, value) => {
+    setForm((prev) => ({
+      ...prev,
+      product_attributes: prev.product_attributes.map((row, i) =>
+        i === idx
+          ? { ...row, [field]: value, ...(field === 'attribute_type_id' ? { attribute_id: '' } : {}) }
+          : row
+      ),
+    }))
+  }
+
   const mutation = useMutation({
     mutationFn: (payload) =>
       isEditing ? updateProduct(id, payload) : createProduct(payload),
@@ -687,7 +804,6 @@ export default function ProductFormPage() {
 
     const toNum = (v) => v !== '' ? Number(v) : null
     const payload = {
-      ...form,
       product_code:           form.product_code.trim(),
       reference_no:           form.reference_no.trim() || null,
       ean_13:                 form.ean_13.trim() || null,
@@ -696,14 +812,36 @@ export default function ProductFormPage() {
       product_type:           form.product_type,
       description:            form.description.trim() || null,
       category_id:            form.category_id !== '' ? Number(form.category_id) : null,
-      location_id:            form.location_id  !== '' ? Number(form.location_id)  : null,
+      location_stores:        form.location_stores
+        .filter((r) => r.location_id || r.store_id)
+        .map((r) => ({
+          location_id: r.location_id !== '' ? Number(r.location_id) : null,
+          store_id:    r.store_id    !== '' ? Number(r.store_id)    : null,
+        })),
       reorder_level:          toNum(form.reorder_level),
       reorder_qty:            toNum(form.reorder_qty),
       reorder_period:         form.reorder_period || null,
       stock_releasing_method: form.stock_releasing_method || null,
       tracking_type:          form.tracking_type || null,
-      supplier_ids:           form.supplier_ids,
-      cost_details:           form.cost_details
+      supplier_ids:                form.supplier_ids,
+      lock_purchase:               form.lock_purchase,
+      allow_complimentary_items:   form.allow_complimentary_items,
+      free_issue:                  form.free_issue,
+      allow_minus:                 form.allow_minus,
+      not_allow_direct_sale:       form.not_allow_direct_sale,
+      non_returnable:              form.non_returnable,
+      is_empty:                    form.is_empty,
+      service_charge:              form.service_charge,
+      loyalty:                     form.loyalty,
+      is_batch:                    form.is_batch,
+      is_serial:                   form.is_serial,
+      product_attributes:          form.product_attributes
+        .filter((r) => r.attribute_type_id && r.attribute_id)
+        .map((r) => ({
+          attribute_type_id: Number(r.attribute_type_id),
+          attribute_id:      Number(r.attribute_id),
+        })),
+      cost_details:                form.cost_details
         .filter((r) => r.sales_channel_id)
         .map((r) => ({
           sales_channel_id:               Number(r.sales_channel_id),
@@ -732,10 +870,22 @@ export default function ProductFormPage() {
     return <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading…</div>
   }
 
+  if (isEditing && isFetchError) {
+    return (
+      <div className="flex flex-col items-center justify-center py-16 gap-2">
+        <p className="text-sm font-medium text-red-600">Failed to load product. Please try again.</p>
+        <Link to="/inventory/products" className="text-xs text-indigo-600 hover:underline">
+          Back to Products
+        </Link>
+      </div>
+    )
+  }
+
   const f = form
   const e = errors
   const t = touched
-  const usedChannelIds = f.cost_details.map((r) => r.sales_channel_id).filter(Boolean)
+  const usedChannelIds   = f.cost_details.map((r) => r.sales_channel_id).filter(Boolean)
+  const usedAttributeIds = f.product_attributes.map((r) => r.attribute_id).filter(Boolean)
 
   return (
     <div className="w-full">
@@ -758,7 +908,7 @@ export default function ProductFormPage() {
         <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
 
           {/* Basic Information — 2/3 width */}
-          <section className="overflow-hidden rounded-lg border border-slate-200 bg-white lg:col-span-2">
+          <section className="rounded-lg border border-slate-200 bg-white lg:col-span-2">
             <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
               <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Basic Information</h2>
             </div>
@@ -808,7 +958,7 @@ export default function ProductFormPage() {
                 </Field>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
                 <Field label="Product Name" required error={e.name} touched={t.name}>
                   <Input name="name" value={f.name} onChange={handleChange} onBlur={handleBlur}
                     error={e.name} touched={t.name} placeholder="Full product name" maxLength={100} />
@@ -831,20 +981,6 @@ export default function ProductFormPage() {
                     emptyText="No categories available."
                   />
                 </Field>
-                <Field label="Location" error={e.location_id} touched={t.location_id}>
-                  <TreeSelect
-                    name="location_id"
-                    value={f.location_id}
-                    onChange={handleChange}
-                    items={locations}
-                    parentField="parent_location_id"
-                    labelField="location_name"
-                    error={e.location_id}
-                    touched={t.location_id}
-                    placeholder="— Select location —"
-                    emptyText="No locations available."
-                  />
-                </Field>
               </div>
 
               <Field label="Description">
@@ -852,6 +988,111 @@ export default function ProductFormPage() {
                   placeholder="Optional product description…"
                   className="block w-full resize-none rounded border border-slate-300 px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition-all focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30" />
               </Field>
+
+              {/* ── Product Attributes + Location & Store side-by-side ── */}
+              <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+
+                {/* Left: Product Attributes */}
+                <div className="rounded border border-slate-100 bg-slate-50/50 p-2 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Product Attributes</span>
+                    <button
+                      type="button"
+                      onClick={addAttributeRow}
+                      disabled={!f.category_id}
+                      title={f.category_id ? 'Add attribute' : 'Select a category first'}
+                      className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
+                    >
+                      <Plus size={11} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                  {f.product_attributes.length === 0 ? (
+                    <p className="text-[11px] italic text-slate-400">
+                      {f.category_id ? 'No attributes. Click + to add.' : 'Select a category to add attributes.'}
+                    </p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {f.product_attributes.map((row, idx) => (
+                        <AttributeRow
+                          key={idx}
+                          row={row}
+                          idx={idx}
+                          attributeTypes={attributeTypes.filter((t) => !f.category_id || String(t.category_id) === String(f.category_id))}
+                          allAttributes={allAttributes}
+                          usedAttributeIds={usedAttributeIds}
+                          onChange={handleAttributeChange}
+                          onRemove={removeAttributeRow}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Right: Location & Store */}
+                <div className="rounded border border-slate-100 bg-slate-50/50 p-2 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Location &amp; Store</span>
+                    <button
+                      type="button"
+                      onClick={addLocationStoreRow}
+                      className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 transition-colors"
+                    >
+                      <Plus size={11} strokeWidth={2.5} />
+                    </button>
+                  </div>
+                  {f.location_stores.length === 0 ? (
+                    <p className="text-[11px] italic text-slate-400">No locations added. Click + to add.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {f.location_stores.map((row, idx) => {
+                        const rowStores = row.location_id
+                          ? allStores.filter((s) => String(s.location_id) === String(row.location_id))
+                          : allStores
+                        return (
+                          <div key={idx} className="grid grid-cols-2 gap-1.5 items-end">
+                            <div>
+                              {idx === 0 && <label className="mb-0.5 block text-xs font-medium text-slate-600">Location</label>}
+                              <TreeSelect
+                                name={`location_stores_${idx}_location_id`}
+                                value={row.location_id}
+                                onChange={(e) => handleLocationStoreChange(idx, 'location_id', e.target.value)}
+                                items={locations}
+                                parentField="parent_location_id"
+                                labelField="location_name"
+                                placeholder="— Location —"
+                                emptyText="No locations."
+                              />
+                            </div>
+                            <div className="flex items-end gap-1">
+                              <div className="flex-1">
+                                {idx === 0 && <label className="mb-0.5 block text-xs font-medium text-slate-600">Store</label>}
+                                <select
+                                  value={row.store_id}
+                                  onChange={(e) => handleLocationStoreChange(idx, 'store_id', e.target.value)}
+                                  className="block w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30"
+                                >
+                                  <option value="">{row.location_id ? '— Store —' : '— Select location first —'}</option>
+                                  {rowStores.map((s) => (
+                                    <option key={s.id} value={String(s.id)}>{s.store_name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => removeLocationStoreRow(idx)}
+                                className={['shrink-0 rounded p-0.5 text-slate-400 hover:bg-red-100 hover:text-red-600 transition-colors', idx === 0 ? '' : ''].join(' ')}
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+              </div>
             </div>
           </section>
 

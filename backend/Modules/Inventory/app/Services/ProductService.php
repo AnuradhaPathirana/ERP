@@ -7,6 +7,8 @@ namespace Modules\Inventory\Services;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Modules\Inventory\DTOs\ProductData;
 use Modules\Inventory\Models\Product;
+use Modules\Inventory\Models\ProductAttribute;
+use Modules\Inventory\Models\ProductLocationStore;
 
 class ProductService
 {
@@ -19,7 +21,7 @@ class ProductService
 
     public function find(int $id): Product
     {
-        return Product::with(['suppliers', 'salesChannels', 'category', 'location'])->findOrFail($id);
+        return Product::with(['suppliers', 'salesChannels', 'category', 'location', 'productAttributes', 'locationStores'])->findOrFail($id);
     }
 
     public function create(ProductData $data): Product
@@ -28,8 +30,10 @@ class ProductService
 
         $this->syncSuppliers($product, $data->supplierIds);
         $this->syncCostDetails($product, $data->costDetails);
+        $this->syncProductAttributes($product, $data->productAttributes);
+        $this->syncLocationStores($product, $data->locationStores);
 
-        return $product->load(['suppliers', 'salesChannels']);
+        return $product->load(['suppliers', 'salesChannels', 'productAttributes', 'locationStores']);
     }
 
     public function update(Product $product, ProductData $data): Product
@@ -38,8 +42,10 @@ class ProductService
 
         $this->syncSuppliers($product, $data->supplierIds);
         $this->syncCostDetails($product, $data->costDetails);
+        $this->syncProductAttributes($product, $data->productAttributes);
+        $this->syncLocationStores($product, $data->locationStores);
 
-        return $product->load(['suppliers', 'salesChannels']);
+        return $product->load(['suppliers', 'salesChannels', 'productAttributes', 'locationStores']);
     }
 
     public function delete(Product $product): void
@@ -82,6 +88,51 @@ class ProductService
         }
 
         $product->salesChannels()->sync($pivotData);
+    }
+
+    /** @param array<array{location_id: ?int, store_id: ?int}> $locationStores */
+    private function syncLocationStores(Product $product, array $locationStores): void
+    {
+        $product->locationStores()->delete();
+
+        $rows = collect($locationStores)
+            ->filter(fn (array $row) => !empty($row['location_id']) || !empty($row['store_id']))
+            ->values()
+            ->map(fn (array $row) => [
+                'product_id'  => $product->id,
+                'location_id' => !empty($row['location_id']) ? (int) $row['location_id'] : null,
+                'store_id'    => !empty($row['store_id'])    ? (int) $row['store_id']    : null,
+                'created_at'  => now(),
+                'updated_at'  => now(),
+            ])
+            ->all();
+
+        if (!empty($rows)) {
+            ProductLocationStore::insert($rows);
+        }
+    }
+
+    /** @param array<array{attribute_type_id: int, attribute_id: int}> $productAttributes */
+    private function syncProductAttributes(Product $product, array $productAttributes): void
+    {
+        $product->productAttributes()->delete();
+
+        $rows = collect($productAttributes)
+            ->filter(fn (array $row) => !empty($row['attribute_id']) && !empty($row['attribute_type_id']))
+            ->unique('attribute_id')
+            ->values()
+            ->map(fn (array $row) => [
+                'product_id'        => $product->id,
+                'attribute_type_id' => (int) $row['attribute_type_id'],
+                'attribute_id'      => (int) $row['attribute_id'],
+                'created_at'        => now(),
+                'updated_at'        => now(),
+            ])
+            ->all();
+
+        if (!empty($rows)) {
+            ProductAttribute::insert($rows);
+        }
     }
 
     /** @return array<string, mixed> */

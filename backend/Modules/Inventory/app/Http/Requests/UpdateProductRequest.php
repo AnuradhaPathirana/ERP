@@ -61,6 +61,16 @@ class UpdateProductRequest extends FormRequest
             'is_batch'                  => ['nullable', 'boolean'],
             'is_serial'                 => ['nullable', 'boolean'],
 
+            // Location & Store pairs
+            'location_stores'                    => ['nullable', 'array'],
+            'location_stores.*.location_id'      => ['nullable', 'integer', 'exists:inv_locations,id'],
+            'location_stores.*.store_id'         => ['nullable', 'integer', 'exists:inv_stores,id'],
+
+            // Product attributes
+            'product_attributes'                          => ['nullable', 'array'],
+            'product_attributes.*.attribute_type_id'      => ['required', 'integer', 'exists:inv_attribute_types,id'],
+            'product_attributes.*.attribute_id'           => ['required', 'integer', 'exists:inv_attributes,id'],
+
             // Cost details per sales channel
             'cost_details'                                  => ['nullable', 'array'],
             'cost_details.*.sales_channel_id'               => ['required', 'integer', 'exists:inv_sales_channels,id'],

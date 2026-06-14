@@ -55,7 +55,26 @@ class ProductResource extends JsonResource
             'is_batch'                  => $this->is_batch,
             'is_serial'                 => $this->is_serial,
 
+            // Location & Store pairs
+            'location_stores' => $this->whenLoaded('locationStores', fn () => $this->locationStores
+                ->map(fn ($ls) => [
+                    'location_id' => $ls->location_id,
+                    'store_id'    => $ls->store_id,
+                ])
+                ->values()
+                ->all()
+            ),
+
             // Relationships (included only when loaded — avoids N+1)
+            'product_attributes' => $this->whenLoaded('productAttributes', fn () => $this->productAttributes
+                ->map(fn ($pa) => [
+                    'attribute_type_id' => $pa->attribute_type_id,
+                    'attribute_id'      => $pa->attribute_id,
+                ])
+                ->values()
+                ->all()
+            ),
+
             'suppliers' => $this->whenLoaded('suppliers', fn () => $this->suppliers
                 ->map(fn ($s) => ['id' => $s->id, 'name' => $s->supplier_name])
                 ->values()

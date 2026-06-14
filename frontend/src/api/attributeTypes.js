@@ -21,6 +21,6 @@ export const updateAttributeType = (id, payload) =>
 export const deleteAttributeType = (id) =>
   api.delete(`${BASE}/${id}`)
 
-/** Flat list for <select> dropdowns — returns [{ id, attribute_type_name }] */
+/** Flat list for <select> dropdowns — returns [{ id, attribute_type_name, category_id, category_name }] */
 export const getAllAttributeTypes = () =>
-  api.get(`${BASE}/all`).then((r) => r.data)
+  api.get(`${BASE}/all`).then((r) => r.data.data)

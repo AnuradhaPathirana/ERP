@@ -20,7 +20,7 @@ class StoreService
 
     public function all(): Collection
     {
-        return Store::select('id', 'parent_store_id', 'store_code', 'store_name')
+        return Store::select('id', 'location_id', 'parent_store_id', 'store_code', 'store_name')
             ->where('is_active', true)
             ->orderBy('store_name')
             ->get();
