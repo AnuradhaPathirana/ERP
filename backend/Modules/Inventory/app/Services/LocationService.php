@@ -10,11 +10,33 @@ use Modules\Inventory\Models\Location;
 
 class LocationService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    /** @param array<string, mixed> $filters */
+    public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
     {
-        return Location::with(['company', 'industry', 'parentLocation'])
-            ->orderBy('location_name')
-            ->paginate($perPage);
+        $query = Location::with(['company', 'industry', 'parentLocation'])
+            ->orderBy('location_name');
+
+        if (!empty($filters['search'])) {
+            $term = '%' . $filters['search'] . '%';
+            $query->where(function ($q) use ($term) {
+                $q->where('location_name', 'like', $term)
+                  ->orWhere('location_code', 'like', $term);
+            });
+        }
+
+        if (!empty($filters['type'])) {
+            $query->where('location_type', $filters['type']);
+        }
+
+        if (!empty($filters['city'])) {
+            $query->where('loc_city', 'like', '%' . $filters['city'] . '%');
+        }
+
+        if (!empty($filters['country'])) {
+            $query->where('country', 'like', '%' . $filters['country'] . '%');
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function all(): \Illuminate\Database\Eloquent\Collection

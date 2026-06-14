@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Eye, MapPin, Plus, Trash2 } from 'lucide-react'
 import { deleteLocation, getLocations } from '../../api/locations'
 import Breadcrumb from '../../components/Breadcrumb'
+import TableFilter, { FilterField } from '../../components/TableFilter'
+import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
 
@@ -12,14 +14,29 @@ const CRUMBS = [
   { label: 'Locations' },
 ]
 
+const INITIAL_FILTERS = { search: '', type: '', city: '', country: '' }
+
+const LOCATION_TYPES = ['HQ', 'Branch', 'Warehouse', 'Retail', 'Other']
+
+const INPUT_CLS =
+  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+
+const SELECT_CLS =
+  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+
 export default function LocationsPage() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
   const { can } = usePermissions()
 
+  const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
+    useTableFilter(INITIAL_FILTERS)
+
+  const resetPage = () => setPage(1)
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['locations', page],
-    queryFn:  () => getLocations(page),
+    queryKey: ['locations', page, applied],
+    queryFn: () => getLocations(page, applied),
     placeholderData: (prev) => prev,
   })
 
@@ -62,6 +79,56 @@ export default function LocationsPage() {
         )}
       </div>
 
+      {/* ── Filter Panel ── */}
+      <TableFilter
+        open={open}
+        onToggle={toggle}
+        onApply={() => apply(resetPage)}
+        onClear={() => clear(resetPage)}
+        activeCount={activeCount}
+      >
+        <FilterField label="Search">
+          <input
+            className={INPUT_CLS}
+            placeholder="Name or code…"
+            value={draft.search}
+            onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
+          />
+        </FilterField>
+
+        <FilterField label="Type">
+          <select
+            className={SELECT_CLS}
+            value={draft.type}
+            onChange={(e) => setDraft((d) => ({ ...d, type: e.target.value }))}
+          >
+            <option value="">All types</option>
+            {LOCATION_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </FilterField>
+
+        <FilterField label="City">
+          <input
+            className={INPUT_CLS}
+            placeholder="City…"
+            value={draft.city}
+            onChange={(e) => setDraft((d) => ({ ...d, city: e.target.value }))}
+          />
+        </FilterField>
+
+        <FilterField label="Country">
+          <input
+            className={INPUT_CLS}
+            placeholder="Country…"
+            value={draft.country}
+            onChange={(e) => setDraft((d) => ({ ...d, country: e.target.value }))}
+          />
+        </FilterField>
+      </TableFilter>
+
+      {/* ── Data Table ── */}
       <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
@@ -94,12 +161,18 @@ export default function LocationsPage() {
                   {rows.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-400">
-                        No locations yet.{' '}
-                        {can('create_locations') && (
-                          <Link to="/inventory/locations/create" className="font-medium text-indigo-600 hover:underline">
-                            Create the first one.
-                          </Link>
-                        )}
+                        {activeCount > 0
+                          ? 'No locations match the current filters.'
+                          : (
+                            <>
+                              No locations yet.{' '}
+                              {can('create_locations') && (
+                                <Link to="/inventory/locations/create" className="font-medium text-indigo-600 hover:underline">
+                                  Create the first one.
+                                </Link>
+                              )}
+                            </>
+                          )}
                       </td>
                     </tr>
                   ) : (
@@ -118,7 +191,7 @@ export default function LocationsPage() {
                             {loc.location_name}
                           </Link>
                         </td>
-                        <td className="px-3 py-2 text-slate-500 truncate max-w-[120px]">
+                        <td className="max-w-30 truncate px-3 py-2 text-slate-500">
                           {loc.company?.name ?? <span className="italic text-slate-300">—</span>}
                         </td>
                         <td className="px-3 py-2 text-slate-500">
@@ -193,7 +266,7 @@ export default function LocationsPage() {
                   >
                     ← Prev
                   </button>
-                  <span className="min-w-[3.5rem] text-center text-xs text-slate-400">
+                  <span className="min-w-14 text-center text-xs text-slate-400">
                     {page} / {meta.last_page}
                   </span>
                   <button

@@ -1,7 +1,9 @@
 import api from './axios'
 
-export const getLocations = (page = 1) =>
-  api.get('/api/v1/locations', { params: { page } }).then((r) => r.data)
+export const getLocations = (page = 1, filters = {}) => {
+  const params = { page, ...filters }
+  return api.get('/api/v1/locations', { params }).then((r) => r.data)
+}
 
 export const getAllLocations = () =>
   api.get('/api/v1/locations/all').then((r) => r.data)
