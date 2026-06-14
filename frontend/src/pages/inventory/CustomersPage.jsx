@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Eye, Plus, Search, Trash2 } from 'lucide-react'
+import { Edit2, Eye, Plus, Trash2 } from 'lucide-react'
 import { deleteCustomer, getCustomers } from '../../api/customers'
 import Breadcrumb from '../../components/Breadcrumb'
+import TableFilter, { FilterField } from '../../components/TableFilter'
+import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
 
@@ -12,6 +14,10 @@ const CRUMBS = [
   { label: 'Customers' },
 ]
 
+const INITIAL_FILTERS = { search: '', customer_type: '', billing_city: '', billing_country: '' }
+
+const CUSTOMER_TYPES = ['Trade', 'Retail', 'Wholesale', 'Corporate']
+
 const TYPE_COLORS = {
   Trade:     'bg-blue-50 text-blue-700',
   Retail:    'bg-green-50 text-green-700',
@@ -19,16 +25,25 @@ const TYPE_COLORS = {
   Corporate: 'bg-indigo-50 text-indigo-700',
 }
 
+const INPUT_CLS =
+  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+
+const SELECT_CLS =
+  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+
 export default function CustomersPage() {
-  const [page, setPage]     = useState(1)
-  const [search, setSearch] = useState('')
-  const [q, setQ]           = useState('')
-  const queryClient         = useQueryClient()
-  const { can }             = usePermissions()
+  const [page, setPage] = useState(1)
+  const queryClient    = useQueryClient()
+  const { can }        = usePermissions()
+
+  const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
+    useTableFilter(INITIAL_FILTERS)
+
+  const resetPage = () => setPage(1)
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['customers', page, q],
-    queryFn:  () => getCustomers(page, q),
+    queryKey: ['customers', page, applied],
+    queryFn:  () => getCustomers(page, applied),
     placeholderData: (prev) => prev,
   })
 
@@ -41,12 +56,6 @@ export default function CustomersPage() {
     onError: () => showError('Failed to delete. The customer may be in use.'),
   })
 
-  const handleSearch = (e) => {
-    e.preventDefault()
-    setQ(search.trim())
-    setPage(1)
-  }
-
   const handleDelete = async (id, name) => {
     const ok = await confirmDelete(name)
     if (ok) deleteMutation.mutate(id)
@@ -57,12 +66,10 @@ export default function CustomersPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={CRUMBS} />
-
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Customers</h1>
-          <p className="mt-0.5 text-sm text-slate-500">Manage your customer master records.</p>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Customers</h1>
+          <Breadcrumb crumbs={CRUMBS} />
         </div>
         {can('create_customer_masters') && (
           <Link
@@ -74,36 +81,56 @@ export default function CustomersPage() {
           </Link>
         )}
       </div>
-
-      {/* Search bar */}
-      <form onSubmit={handleSearch} className="mt-3 flex items-center gap-2">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+      {/* ── Filter Panel ── */}
+      <TableFilter
+        open={open}
+        onToggle={toggle}
+        onApply={() => apply(resetPage)}
+        onClear={() => clear(resetPage)}
+        activeCount={activeCount}
+      >
+        <FilterField label="Search">
           <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name, code or email…"
-            className="w-full rounded border border-slate-300 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+            className={INPUT_CLS}
+            placeholder="Name, code or email…"
+            value={draft.search}
+            onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
           />
-        </div>
-        <button
-          type="submit"
-          className="rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-50"
-        >
-          Search
-        </button>
-        {q && (
-          <button
-            type="button"
-            onClick={() => { setQ(''); setSearch(''); setPage(1) }}
-            className="text-xs text-slate-400 hover:text-slate-700"
-          >
-            Clear
-          </button>
-        )}
-      </form>
+        </FilterField>
 
+        <FilterField label="Customer Type">
+          <select
+            className={SELECT_CLS}
+            value={draft.customer_type}
+            onChange={(e) => setDraft((d) => ({ ...d, customer_type: e.target.value }))}
+          >
+            <option value="">All types</option>
+            {CUSTOMER_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </FilterField>
+
+        <FilterField label="Billing City">
+          <input
+            className={INPUT_CLS}
+            placeholder="City…"
+            value={draft.billing_city}
+            onChange={(e) => setDraft((d) => ({ ...d, billing_city: e.target.value }))}
+          />
+        </FilterField>
+
+        <FilterField label="Billing Country">
+          <input
+            className={INPUT_CLS}
+            placeholder="Country…"
+            value={draft.billing_country}
+            onChange={(e) => setDraft((d) => ({ ...d, billing_country: e.target.value }))}
+          />
+        </FilterField>
+      </TableFilter>
+
+      {/* ── Data Table ── */}
       <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
@@ -134,12 +161,18 @@ export default function CustomersPage() {
                   {rows.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
-                        {q ? `No customers found for "${q}".` : 'No customers yet.'}{' '}
-                        {!q && can('create_customer_masters') && (
-                          <Link to="/inventory/customers/create" className="font-medium text-indigo-600 hover:underline">
-                            Add the first one.
-                          </Link>
-                        )}
+                        {activeCount > 0
+                          ? 'No customers match the current filters.'
+                          : (
+                            <>
+                              No customers yet.{' '}
+                              {can('create_customer_masters') && (
+                                <Link to="/inventory/customers/create" className="font-medium text-indigo-600 hover:underline">
+                                  Add the first one.
+                                </Link>
+                              )}
+                            </>
+                          )}
                       </td>
                     </tr>
                   ) : (
@@ -151,7 +184,7 @@ export default function CustomersPage() {
                         <td className="px-3 py-2 font-mono text-slate-500">
                           {c.customer_code ?? <span className="italic text-slate-300">—</span>}
                         </td>
-                        <td className="max-w-[220px] px-3 py-2 font-medium text-slate-800">
+                        <td className="max-w-55 px-3 py-2 font-medium text-slate-800">
                           <Link
                             to={`/inventory/customers/${c.id}`}
                             className="truncate hover:text-indigo-600 hover:underline"
@@ -169,7 +202,7 @@ export default function CustomersPage() {
                         <td className="px-3 py-2 text-slate-500">
                           {c.customer_mobile ?? <span className="italic text-slate-300">—</span>}
                         </td>
-                        <td className="max-w-[176px] truncate px-3 py-2 text-slate-500">
+                        <td className="max-w-44 truncate px-3 py-2 text-slate-500">
                           {c.customer_email ?? <span className="italic text-slate-300">—</span>}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-400">
@@ -230,7 +263,7 @@ export default function CustomersPage() {
                   >
                     ← Prev
                   </button>
-                  <span className="min-w-[3.5rem] text-center text-xs text-slate-400">
+                  <span className="min-w-14 text-center text-xs text-slate-400">
                     {page} / {meta.last_page}
                   </span>
                   <button

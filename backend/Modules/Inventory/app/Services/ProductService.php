@@ -12,11 +12,34 @@ use Modules\Inventory\Models\ProductLocationStore;
 
 class ProductService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    /** @param array<string, mixed> $filters */
+    public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
     {
-        return Product::with(['suppliers', 'salesChannels'])
-            ->orderBy('name')
-            ->paginate($perPage);
+        $query = Product::with(['suppliers', 'salesChannels', 'category'])
+            ->orderBy('name');
+
+        if (!empty($filters['search'])) {
+            $term = '%' . $filters['search'] . '%';
+            $query->where(function ($q) use ($term) {
+                $q->where('name', 'like', $term)
+                  ->orWhere('product_code', 'like', $term)
+                  ->orWhere('ean_13', 'like', $term);
+            });
+        }
+
+        if (!empty($filters['product_type'])) {
+            $query->where('product_type', $filters['product_type']);
+        }
+
+        if (!empty($filters['category_id'])) {
+            $query->where('category_id', (int) $filters['category_id']);
+        }
+
+        if (!empty($filters['tracking_type'])) {
+            $query->where('tracking_type', $filters['tracking_type']);
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function find(int $id): Product

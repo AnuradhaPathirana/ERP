@@ -54,15 +54,11 @@ export default function RolesPage() {
 
   return (
     <div>
-      <Breadcrumb crumbs={CRUMBS} />
-
       {/* Page header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Roles & Permissions</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Manage roles and the permissions assigned to each.
-          </p>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Roles & Permissions</h1>
+          <Breadcrumb crumbs={CRUMBS} />
         </div>
         <button
           type="button"
@@ -75,7 +71,7 @@ export default function RolesPage() {
       </div>
 
       {/* Table card */}
-      <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center gap-2 py-16 text-sm text-slate-400">
             <Loader2 size={16} className="animate-spin" />

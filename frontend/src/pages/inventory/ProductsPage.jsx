@@ -3,7 +3,11 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Eye, Plus, Trash2 } from 'lucide-react'
 import { deleteProduct, getProducts } from '../../api/products'
+import { getAllCategories } from '../../api/categories'
 import Breadcrumb from '../../components/Breadcrumb'
+import TableFilter, { FilterField } from '../../components/TableFilter'
+import TreeSelect from '../../components/TreeSelect'
+import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
 
@@ -12,10 +16,15 @@ const CRUMBS = [
   { label: 'Products' },
 ]
 
+const INITIAL_FILTERS = { search: '', product_type: '', category_id: '', tracking_type: '' }
+
+const PRODUCT_TYPES  = ['Product', 'Service', 'Bundle', 'Raw Material']
+const TRACKING_TYPES = ['Batch', 'Serial']
+
 const TYPE_COLORS = {
-  Product:      'bg-blue-50 text-blue-700',
-  Service:      'bg-purple-50 text-purple-700',
-  Bundle:       'bg-amber-50 text-amber-700',
+  Product:        'bg-blue-50 text-blue-700',
+  Service:        'bg-purple-50 text-purple-700',
+  Bundle:         'bg-amber-50 text-amber-700',
   'Raw Material': 'bg-green-50 text-green-700',
 }
 
@@ -24,15 +33,32 @@ const TRACKING_COLORS = {
   Serial: 'bg-indigo-50 text-indigo-600',
 }
 
+const INPUT_CLS =
+  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+
+const SELECT_CLS =
+  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+
 export default function ProductsPage() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
   const { can } = usePermissions()
 
+  const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
+    useTableFilter(INITIAL_FILTERS)
+
+  const resetPage = () => setPage(1)
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['products', page],
-    queryFn: () => getProducts(page),
+    queryKey: ['products', page, applied],
+    queryFn:  () => getProducts(page, applied),
     placeholderData: (prev) => prev,
+  })
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories-all'],
+    queryFn:  getAllCategories,
+    staleTime: 5 * 60 * 1000,
   })
 
   const deleteMutation = useMutation({
@@ -53,28 +79,81 @@ export default function ProductsPage() {
   const rows = data?.data ?? []
 
   return (
-    <div>
-      <Breadcrumb crumbs={CRUMBS} />
-
+    <div className="w-full">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Products</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Manage your inventory product master list.
-          </p>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Products</h1>
+          <Breadcrumb crumbs={CRUMBS} />
         </div>
         {can('create_products') && (
           <Link
             to="/inventory/products/create"
-            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
           >
-            <Plus size={15} strokeWidth={2.5} />
+            <Plus size={14} strokeWidth={2.5} />
             New Product
           </Link>
         )}
       </div>
+      {/* ── Filter Panel ── */}
+      <TableFilter
+        open={open}
+        onToggle={toggle}
+        onApply={() => apply(resetPage)}
+        onClear={() => clear(resetPage)}
+        activeCount={activeCount}
+      >
+        <FilterField label="Search">
+          <input
+            className={INPUT_CLS}
+            placeholder="Name, code or EAN…"
+            value={draft.search}
+            onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
+          />
+        </FilterField>
 
-      <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <FilterField label="Product Type">
+          <select
+            className={SELECT_CLS}
+            value={draft.product_type}
+            onChange={(e) => setDraft((d) => ({ ...d, product_type: e.target.value }))}
+          >
+            <option value="">All types</option>
+            {PRODUCT_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </FilterField>
+
+        <FilterField label="Category">
+          <TreeSelect
+            name="category_id"
+            value={draft.category_id}
+            onChange={(e) => setDraft((d) => ({ ...d, category_id: e.target.value }))}
+            items={categories}
+            parentField="parent_category_id"
+            labelField="category_name"
+            placeholder="All categories"
+            emptyText="No categories available."
+          />
+        </FilterField>
+
+        <FilterField label="Tracking Type">
+          <select
+            className={SELECT_CLS}
+            value={draft.tracking_type}
+            onChange={(e) => setDraft((d) => ({ ...d, tracking_type: e.target.value }))}
+          >
+            <option value="">All tracking</option>
+            {TRACKING_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </FilterField>
+      </TableFilter>
+
+      {/* ── Data Table ── */}
+      <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center py-16 text-sm text-slate-400">
             Loading…
@@ -90,18 +169,18 @@ export default function ProductsPage() {
         {!isLoading && !isError && (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
-                    <th className="w-8 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500">#</th>
-                    <th className="w-32 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Code</th>
-                    <th className="px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Name</th>
-                    <th className="w-36 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Display Name</th>
-                    <th className="w-28 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Type</th>
-                    <th className="w-32 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Category</th>
-                    <th className="w-24 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Tracking</th>
-                    <th className="w-24 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-slate-500">Created</th>
-                    <th className="w-24 px-3 py-2.5 text-right text-xs font-semibold uppercase tracking-wider text-slate-500">Actions</th>
+                    <th className="w-8 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">#</th>
+                    <th className="w-32 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Code</th>
+                    <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Name</th>
+                    <th className="w-36 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Display Name</th>
+                    <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Type</th>
+                    <th className="w-32 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Category</th>
+                    <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Tracking</th>
+                    <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Created</th>
+                    <th className="w-20 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                   </tr>
                 </thead>
 
@@ -109,15 +188,21 @@ export default function ProductsPage() {
                   {rows.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="px-4 py-14 text-center text-sm text-slate-400">
-                        No products yet.{' '}
-                        {can('create_products') && (
-                          <Link
-                            to="/inventory/products/create"
-                            className="font-medium text-indigo-600 hover:underline"
-                          >
-                            Create the first one.
-                          </Link>
-                        )}
+                        {activeCount > 0
+                          ? 'No products match the current filters.'
+                          : (
+                            <>
+                              No products yet.{' '}
+                              {can('create_products') && (
+                                <Link
+                                  to="/inventory/products/create"
+                                  className="font-medium text-indigo-600 hover:underline"
+                                >
+                                  Create the first one.
+                                </Link>
+                              )}
+                            </>
+                          )}
                       </td>
                     </tr>
                   ) : (
@@ -127,7 +212,7 @@ export default function ProductsPage() {
                           {(page - 1) * (meta?.per_page ?? 25) + i + 1}
                         </td>
 
-                        <td className="px-3 py-2 font-mono text-xs text-slate-600">
+                        <td className="px-3 py-2 font-mono text-slate-600">
                           {prod.product_code
                             ? <span className="rounded bg-slate-100 px-1.5 py-0.5">{prod.product_code}</span>
                             : <span className="italic text-slate-300">—</span>}
@@ -136,11 +221,11 @@ export default function ProductsPage() {
                         <td className="px-3 py-2">
                           <span className="font-medium text-slate-800">{prod.name}</span>
                           {prod.ean_13 && (
-                            <span className="ml-2 text-xs text-slate-400">{prod.ean_13}</span>
+                            <span className="ml-2 text-slate-400">{prod.ean_13}</span>
                           )}
                         </td>
 
-                        <td className="px-3 py-2">
+                        <td className="max-w-36 px-3 py-2">
                           {prod.display_name
                             ? <span title={prod.display_name} className="line-clamp-1 text-slate-600">{prod.display_name}</span>
                             : <span className="italic text-slate-300">—</span>}
@@ -148,7 +233,7 @@ export default function ProductsPage() {
 
                         <td className="px-3 py-2">
                           {prod.product_type ? (
-                            <span className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium ${TYPE_COLORS[prod.product_type] ?? 'bg-slate-100 text-slate-600'}`}>
+                            <span className={`inline-flex rounded px-1.5 py-0.5 font-medium ${TYPE_COLORS[prod.product_type] ?? 'bg-slate-100 text-slate-600'}`}>
                               {prod.product_type}
                             </span>
                           ) : (
@@ -156,15 +241,15 @@ export default function ProductsPage() {
                           )}
                         </td>
 
-                        <td className="px-3 py-2">
-                          {prod.category
-                            ? <span title={prod.category} className="line-clamp-1 text-slate-600">{prod.category}</span>
+                        <td className="max-w-32 px-3 py-2">
+                          {prod.category_name
+                            ? <span title={prod.category_name} className="line-clamp-1 text-slate-600">{prod.category_name}</span>
                             : <span className="italic text-slate-300">—</span>}
                         </td>
 
                         <td className="px-3 py-2">
                           {prod.tracking_type ? (
-                            <span className={`inline-flex rounded px-1.5 py-0.5 text-xs font-medium ${TRACKING_COLORS[prod.tracking_type] ?? 'bg-slate-100 text-slate-600'}`}>
+                            <span className={`inline-flex rounded px-1.5 py-0.5 font-medium ${TRACKING_COLORS[prod.tracking_type] ?? 'bg-slate-100 text-slate-600'}`}>
                               {prod.tracking_type}
                             </span>
                           ) : (
@@ -172,7 +257,7 @@ export default function ProductsPage() {
                           )}
                         </td>
 
-                        <td className="whitespace-nowrap px-3 py-2 text-xs text-slate-400">
+                        <td className="whitespace-nowrap px-3 py-2 text-slate-400">
                           {new Date(prod.created_at).toLocaleDateString()}
                         </td>
 
@@ -181,17 +266,17 @@ export default function ProductsPage() {
                             <Link
                               to={`/inventory/products/${prod.id}`}
                               title="View"
-                              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
                             >
-                              <Eye size={14} />
+                              <Eye size={13} />
                             </Link>
                             {can('edit_products') && (
                               <Link
                                 to={`/inventory/products/${prod.id}/edit`}
                                 title="Edit"
-                                className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
                               >
-                                <Edit2 size={14} />
+                                <Edit2 size={13} />
                               </Link>
                             )}
                             {can('delete_products') && (
@@ -200,9 +285,9 @@ export default function ProductsPage() {
                                 title="Delete"
                                 onClick={() => handleDelete(prod.id, prod.name)}
                                 disabled={deleteMutation.isPending}
-                                className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                                className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
                               >
-                                <Trash2 size={14} />
+                                <Trash2 size={13} />
                               </button>
                             )}
                           </div>
@@ -215,7 +300,7 @@ export default function ProductsPage() {
             </div>
 
             {meta && meta.last_page > 1 && (
-              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2.5">
+              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2">
                 <p className="text-xs text-slate-500">
                   Showing{' '}
                   <span className="font-medium text-slate-700">
@@ -227,19 +312,19 @@ export default function ProductsPage() {
                   <button
                     onClick={() => setPage((p) => p - 1)}
                     disabled={page === 1}
-                    className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    ← Prev
+                    Prev
                   </button>
-                  <span className="min-w-[4rem] text-center text-xs text-slate-400">
+                  <span className="min-w-16 text-center text-xs text-slate-400">
                     {page} / {meta.last_page}
                   </span>
                   <button
                     onClick={() => setPage((p) => p + 1)}
                     disabled={page === meta.last_page}
-                    className="rounded-md px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
                   >
-                    Next →
+                    Next
                   </button>
                 </div>
               </div>

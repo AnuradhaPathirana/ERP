@@ -287,14 +287,12 @@ export default function SupplierFormPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
-      <div className="mb-2">
-        <h1 className="text-xl font-bold text-slate-800">
+      <div>
+        <h1 className="text-xl font-bold leading-none text-slate-800">
           {isEditing ? 'Edit Supplier' : 'New Supplier'}
         </h1>
+        <Breadcrumb crumbs={crumbs} />
       </div>
-
       <form onSubmit={handleSubmit} noValidate>
         {/* ── 2-column section grid ──────────────────────────────────── */}
         <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
@@ -304,7 +302,7 @@ export default function SupplierFormPage() {
 
             {/* General */}
             <SectionCard title="General">
-              <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <Label required>Supplier Code</Label>
                   <div className="flex items-center gap-1">
@@ -350,13 +348,13 @@ export default function SupplierFormPage() {
                   </select>
                   <FieldError errors={errors} touched={touched} name="supplier_type" />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label required>Supplier Name</Label>
                   <input ref={nameRef} type="text" placeholder="Full supplier name" maxLength={100} {...inp('supplier_name')} />
                   <FieldError errors={errors} touched={touched} name="supplier_name" />
                 </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label>Check Writer Name</Label>
                   <input type="text" placeholder="Name on cheques" maxLength={100} {...inp('check_writer_name')} />
@@ -367,7 +365,7 @@ export default function SupplierFormPage() {
 
             {/* Contact */}
             <SectionCard title="Contact">
-              <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <Label required>Mobile</Label>
                   <input type="tel" placeholder="+1 234 567 8900" maxLength={20} {...inp('mobile')} />
@@ -383,16 +381,18 @@ export default function SupplierFormPage() {
                   <input type="email" placeholder="supplier@example.com" maxLength={100} {...inp('email')} />
                   <FieldError errors={errors} touched={touched} name="email" />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label>Fax</Label>
                   <input type="tel" placeholder="+1 234 567 8900" maxLength={20} {...inp('fax')} />
                   <FieldError errors={errors} touched={touched} name="fax" />
                 </div>
-              </div>
-              <div>
-                <Label>Website</Label>
-                <input type="url" placeholder="https://supplier.com" maxLength={255} {...inp('website')} />
-                <FieldError errors={errors} touched={touched} name="website" />
+                <div>
+                  <Label>Website</Label>
+                  <input type="url" placeholder="https://supplier.com" maxLength={255} {...inp('website')} />
+                  <FieldError errors={errors} touched={touched} name="website" />
+                </div>
               </div>
             </SectionCard>
 

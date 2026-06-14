@@ -59,14 +59,10 @@ export default function LocationsPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={CRUMBS} />
-
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Locations</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Manage company locations and branches.
-          </p>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Locations</h1>
+          <Breadcrumb crumbs={CRUMBS} />
         </div>
         {can('create_locations') && (
           <Link
@@ -78,7 +74,6 @@ export default function LocationsPage() {
           </Link>
         )}
       </div>
-
       {/* ── Filter Panel ── */}
       <TableFilter
         open={open}

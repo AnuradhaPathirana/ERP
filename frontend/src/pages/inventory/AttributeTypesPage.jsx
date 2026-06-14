@@ -47,14 +47,10 @@ export default function AttributeTypesPage() {
 
   return (
     <div>
-      <Breadcrumb crumbs={CRUMBS} />
-
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Attribute Types</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Define groupings of attributes linked to product categories (e.g. Color, Size).
-          </p>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Attribute Types</h1>
+          <Breadcrumb crumbs={CRUMBS} />
         </div>
         {can('create_attribute_types') && (
           <Link
@@ -66,7 +62,6 @@ export default function AttributeTypesPage() {
           </Link>
         )}
       </div>
-
       <div className="mt-5 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading…</div>

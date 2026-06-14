@@ -3,7 +3,11 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Plus, Trash2 } from 'lucide-react'
 import { deleteStore, getStores } from '../../api/stores'
+import { getAllStoreTypes } from '../../api/storeTypes'
+import { getAllLocations } from '../../api/locations'
 import Breadcrumb from '../../components/Breadcrumb'
+import TableFilter, { FilterField } from '../../components/TableFilter'
+import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
 
@@ -12,15 +16,40 @@ const CRUMBS = [
   { label: 'Stores' },
 ]
 
+const INITIAL_FILTERS = { search: '', store_type_id: '', is_active: '', location_id: '' }
+
+const INPUT_CLS =
+  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+
+const SELECT_CLS =
+  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+
 export default function StoresPage() {
   const [page, setPage] = useState(1)
   const queryClient = useQueryClient()
   const { can } = usePermissions()
 
+  const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
+    useTableFilter(INITIAL_FILTERS)
+
+  const resetPage = () => setPage(1)
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['stores', page],
-    queryFn: () => getStores(page),
+    queryKey: ['stores', page, applied],
+    queryFn: () => getStores(page, applied),
     placeholderData: (prev) => prev,
+  })
+
+  const { data: storeTypes = [] } = useQuery({
+    queryKey: ['store-types-all'],
+    queryFn: getAllStoreTypes,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: locations = [] } = useQuery({
+    queryKey: ['locations-all'],
+    queryFn: getAllLocations,
+    staleTime: 5 * 60 * 1000,
   })
 
   const deleteMutation = useMutation({
@@ -42,14 +71,10 @@ export default function StoresPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={CRUMBS} />
-
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Stores</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Manage warehouses and storage locations.
-          </p>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Stores</h1>
+          <Breadcrumb crumbs={CRUMBS} />
         </div>
         {can('create_stores') && (
           <Link
@@ -61,7 +86,64 @@ export default function StoresPage() {
           </Link>
         )}
       </div>
+      {/* ── Filter Panel ── */}
+      <TableFilter
+        open={open}
+        onToggle={toggle}
+        onApply={() => apply(resetPage)}
+        onClear={() => clear(resetPage)}
+        activeCount={activeCount}
+      >
+        <FilterField label="Search">
+          <input
+            className={INPUT_CLS}
+            placeholder="Name or code…"
+            value={draft.search}
+            onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
+          />
+        </FilterField>
 
+        <FilterField label="Store Type">
+          <select
+            className={SELECT_CLS}
+            value={draft.store_type_id}
+            onChange={(e) => setDraft((d) => ({ ...d, store_type_id: e.target.value }))}
+          >
+            <option value="">All types</option>
+            {storeTypes.map((t) => (
+              <option key={t.id} value={t.id}>{t.store_type_name}</option>
+            ))}
+          </select>
+        </FilterField>
+
+        <FilterField label="Status">
+          <select
+            className={SELECT_CLS}
+            value={draft.is_active}
+            onChange={(e) => setDraft((d) => ({ ...d, is_active: e.target.value }))}
+          >
+            <option value="">All statuses</option>
+            <option value="1">Active</option>
+            <option value="0">Inactive</option>
+          </select>
+        </FilterField>
+
+        <FilterField label="Location">
+          <select
+            className={SELECT_CLS}
+            value={draft.location_id}
+            onChange={(e) => setDraft((d) => ({ ...d, location_id: e.target.value }))}
+          >
+            <option value="">All locations</option>
+            {locations.map((l) => (
+              <option key={l.id} value={l.id}>{l.location_name}</option>
+            ))}
+          </select>
+        </FilterField>
+
+      </TableFilter>
+
+      {/* ── Data Table ── */}
       <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
@@ -95,12 +177,18 @@ export default function StoresPage() {
                   {rows.length === 0 ? (
                     <tr>
                       <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-400">
-                        No stores yet.{' '}
-                        {can('create_stores') && (
-                          <Link to="/inventory/stores/create" className="font-medium text-indigo-600 hover:underline">
-                            Create the first one.
-                          </Link>
-                        )}
+                        {activeCount > 0
+                          ? 'No stores match the current filters.'
+                          : (
+                            <>
+                              No stores yet.{' '}
+                              {can('create_stores') && (
+                                <Link to="/inventory/stores/create" className="font-medium text-indigo-600 hover:underline">
+                                  Create the first one.
+                                </Link>
+                              )}
+                            </>
+                          )}
                       </td>
                     </tr>
                   ) : (
@@ -110,7 +198,7 @@ export default function StoresPage() {
                           {(page - 1) * (meta?.per_page ?? 25) + i + 1}
                         </td>
                         <td className="px-3 py-2 font-mono text-slate-500">{row.store_code}</td>
-                        <td className="max-w-[200px] px-3 py-2 font-medium text-slate-800">
+                        <td className="max-w-50 px-3 py-2 font-medium text-slate-800">
                           {can('edit_stores') ? (
                             <Link
                               to={`/inventory/stores/${row.id}/edit`}
@@ -125,7 +213,7 @@ export default function StoresPage() {
                         <td className="px-3 py-2 text-slate-500">
                           {row.store_type?.name ?? <span className="italic text-slate-300">—</span>}
                         </td>
-                        <td className="max-w-[144px] truncate px-3 py-2 text-slate-500">
+                        <td className="max-w-36 truncate px-3 py-2 text-slate-500">
                           {row.location?.name ?? <span className="italic text-slate-300">—</span>}
                         </td>
                         <td className="px-3 py-2 text-slate-500">{row.uom}</td>
@@ -190,7 +278,7 @@ export default function StoresPage() {
                   >
                     ← Prev
                   </button>
-                  <span className="min-w-[3.5rem] text-center text-xs text-slate-400">
+                  <span className="min-w-14 text-center text-xs text-slate-400">
                     {page} / {meta.last_page}
                   </span>
                   <button

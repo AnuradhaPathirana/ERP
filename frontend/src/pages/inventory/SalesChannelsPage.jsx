@@ -53,14 +53,10 @@ export default function SalesChannelsPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={CRUMBS} />
-
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Sales Channels</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Manage wholesale, retail, and e-commerce pricing channels.
-          </p>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Sales Channels</h1>
+          <Breadcrumb crumbs={CRUMBS} />
         </div>
         {can('create_sales_channels') && (
           <Link
@@ -72,7 +68,6 @@ export default function SalesChannelsPage() {
           </Link>
         )}
       </div>
-
       <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>

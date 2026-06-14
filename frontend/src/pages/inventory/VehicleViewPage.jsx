@@ -101,14 +101,13 @@ export default function VehicleViewPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
       {/* Header */}
       <div className="mb-3 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">
+          <h1 className="text-xl font-bold leading-none text-slate-800">
             {[v?.make, v?.model].filter(Boolean).join(' ') || v?.registration_number}
           </h1>
+          <Breadcrumb crumbs={crumbs} />
           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-slate-500">
             {v?.vehicle_code && <span className="font-mono">{v.vehicle_code}</span>}
             {v?.registration_number && <span className="font-mono font-medium text-slate-700">{v.registration_number}</span>}

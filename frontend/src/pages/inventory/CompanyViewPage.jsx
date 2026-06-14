@@ -63,12 +63,11 @@ export default function CompanyViewPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
       {/* Header */}
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">{company?.company_name}</h1>
+          <h1 className="text-xl font-bold leading-none text-slate-800">{company?.company_name}</h1>
+          <Breadcrumb crumbs={crumbs} />
           {company?.company_type && (
             <span className="mt-0.5 inline-block rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-700">
               {company.company_type}

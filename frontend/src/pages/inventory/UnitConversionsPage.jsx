@@ -146,17 +146,12 @@ export default function UnitConversionsPage() {
 
   return (
     <div>
-      <Breadcrumb crumbs={CRUMBS} />
-
       <div className="flex items-start justify-between mb-3">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Unit Conversions</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Select a category, choose the base unit, and enter conversion rates.
-          </p>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Unit Conversions</h1>
+          <Breadcrumb crumbs={CRUMBS} />
         </div>
       </div>
-
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {/* Category selector */}
         <div className="flex items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-3">

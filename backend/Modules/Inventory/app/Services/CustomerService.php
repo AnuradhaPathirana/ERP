@@ -11,19 +11,33 @@ use Modules\Inventory\Models\CustomerMaster;
 
 class CustomerService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    /** @param array<string, mixed> $filters */
+    public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
     {
-        return CustomerMaster::orderBy('customer_name')
-            ->paginate($perPage);
-    }
+        $query = CustomerMaster::orderBy('customer_name');
 
-    public function search(string $term, int $perPage = 25): LengthAwarePaginator
-    {
-        return CustomerMaster::where('customer_name', 'like', "%{$term}%")
-            ->orWhere('customer_code', 'like', "%{$term}%")
-            ->orWhere('customer_email', 'like', "%{$term}%")
-            ->orderBy('customer_name')
-            ->paginate($perPage);
+        if (!empty($filters['search'])) {
+            $term = '%' . $filters['search'] . '%';
+            $query->where(function ($q) use ($term) {
+                $q->where('customer_name', 'like', $term)
+                  ->orWhere('customer_code', 'like', $term)
+                  ->orWhere('customer_email', 'like', $term);
+            });
+        }
+
+        if (!empty($filters['customer_type'])) {
+            $query->where('customer_type', $filters['customer_type']);
+        }
+
+        if (!empty($filters['billing_city'])) {
+            $query->where('billing_city', 'like', '%' . $filters['billing_city'] . '%');
+        }
+
+        if (!empty($filters['billing_country'])) {
+            $query->where('billing_country', 'like', '%' . $filters['billing_country'] . '%');
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function find(int $id): CustomerMaster

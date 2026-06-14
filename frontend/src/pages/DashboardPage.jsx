@@ -2,9 +2,6 @@ export default function DashboardPage() {
   return (
     <div>
       <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
-      <p className="mt-1 text-sm text-slate-500">
-        Welcome to your ERP workspace. Select a module from the sidebar to get started.
-      </p>
 
       {/* Placeholder stat cards */}
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

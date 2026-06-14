@@ -3,8 +3,8 @@ import api from './axios'
 export const getAllCustomers = () =>
   api.get('/api/v1/customer-masters/all').then((r) => r.data.data)
 
-export const getCustomers = (page = 1, search = '') =>
-  api.get('/api/v1/customer-masters', { params: { page, ...(search ? { search } : {}) } }).then((r) => r.data)
+export const getCustomers = (page = 1, filters = {}) =>
+  api.get('/api/v1/customer-masters', { params: { page, ...filters } }).then((r) => r.data)
 
 export const getCustomer = (id) =>
   api.get(`/api/v1/customer-masters/${id}`).then((r) => r.data)

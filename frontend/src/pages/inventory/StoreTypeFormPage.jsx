@@ -124,14 +124,12 @@ export default function StoreTypeFormPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
-      <div className="mb-2">
-        <h1 className="text-xl font-bold text-slate-800">
+      <div>
+        <h1 className="text-xl font-bold leading-none text-slate-800">
           {isEditing ? 'Edit Store Type' : 'New Store Type'}
         </h1>
+        <Breadcrumb crumbs={crumbs} />
       </div>
-
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} noValidate>
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
 

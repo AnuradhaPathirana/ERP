@@ -27,7 +27,7 @@ export default function TableFilter({ open, onToggle, onApply, onClear, activeCo
   }
 
   return (
-    <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+    <div className="mt-2 rounded-lg border border-slate-200 bg-white shadow-sm">
       {/* ── toggle bar ── */}
       <div className="flex items-center justify-between px-3 py-2">
         <button

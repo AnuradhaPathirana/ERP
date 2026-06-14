@@ -3,8 +3,8 @@ import api from './axios'
 const BASE = '/api/v1/stores'
 
 /** @returns {Promise<{ data: object[], meta: object }>} */
-export const getStores = (page = 1) =>
-  api.get(BASE, { params: { page } }).then((r) => r.data)
+export const getStores = (page = 1, filters = {}) =>
+  api.get(BASE, { params: { page, ...filters } }).then((r) => r.data)
 
 /** @returns {Promise<{ data: object }>} */
 export const getStore = (id) =>

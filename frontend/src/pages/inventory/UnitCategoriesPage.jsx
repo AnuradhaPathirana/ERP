@@ -42,15 +42,11 @@ export default function UnitCategoriesPage() {
 
   return (
     <div>
-      <Breadcrumb crumbs={CRUMBS} />
-
       {/* Page header */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Unit Categories</h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            Top-level groupings for units of measure (e.g. Weight, Volume).
-          </p>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Unit Categories</h1>
+          <Breadcrumb crumbs={CRUMBS} />
         </div>
         {can('create_unit_categories') && (
           <Link

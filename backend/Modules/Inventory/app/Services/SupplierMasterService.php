@@ -11,11 +11,34 @@ use Modules\Inventory\Models\SupplierMaster;
 
 class SupplierMasterService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    /** @param array<string, mixed> $filters */
+    public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
     {
-        return SupplierMaster::withCount('products')
-            ->orderBy('supplier_name')
-            ->paginate($perPage);
+        $query = SupplierMaster::withCount('products')
+            ->orderBy('supplier_name');
+
+        if (!empty($filters['search'])) {
+            $term = '%' . $filters['search'] . '%';
+            $query->where(function ($q) use ($term) {
+                $q->where('supplier_name', 'like', $term)
+                  ->orWhere('supplier_code', 'like', $term)
+                  ->orWhere('email', 'like', $term);
+            });
+        }
+
+        if (!empty($filters['supplier_type'])) {
+            $query->where('supplier_type', $filters['supplier_type']);
+        }
+
+        if (!empty($filters['bil_city'])) {
+            $query->where('bil_city', 'like', '%' . $filters['bil_city'] . '%');
+        }
+
+        if (!empty($filters['bil_country'])) {
+            $query->where('bil_country', 'like', '%' . $filters['bil_country'] . '%');
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function find(int $id): SupplierMaster

@@ -67,12 +67,11 @@ export default function SalesChannelViewPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
       {/* Header */}
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">{c?.sales_channel_name}</h1>
+          <h1 className="text-xl font-bold leading-none text-slate-800">{c?.sales_channel_name}</h1>
+          <Breadcrumb crumbs={crumbs} />
           <div className="mt-0.5 flex items-center gap-2">
             {c?.type && (
               <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${TYPE_BADGE[c.type] ?? 'bg-slate-100 text-slate-500'}`}>

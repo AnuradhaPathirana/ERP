@@ -332,14 +332,12 @@ export default function LocationFormPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
-      <div className="mb-2 flex items-center justify-between">
-        <h1 className="text-xl font-bold text-slate-800">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold leading-none text-slate-800">
           {isEditing ? 'Edit Location' : 'Add New Location'}
         </h1>
+        <Breadcrumb crumbs={crumbs} />
       </div>
-
       <form onSubmit={handleSubmit} noValidate>
         {/* ── Tab bar ── */}
         <div className="overflow-hidden rounded-t-xl border border-slate-200 bg-white">

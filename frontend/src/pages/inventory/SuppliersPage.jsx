@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Eye, Plus, Trash2 } from 'lucide-react'
 import { deleteSupplier, getSuppliers } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
+import TableFilter, { FilterField } from '../../components/TableFilter'
+import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
 
@@ -12,14 +14,29 @@ const CRUMBS = [
   { label: 'Suppliers' },
 ]
 
+const INITIAL_FILTERS = { search: '', supplier_type: '', bil_city: '', bil_country: '' }
+
+const SUPPLIER_TYPES = ['Local', 'Foreign', 'Service', 'Manufacturer', 'Distributor', 'Other']
+
+const INPUT_CLS =
+  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+
+const SELECT_CLS =
+  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+
 export default function SuppliersPage() {
   const [page, setPage] = useState(1)
-  const queryClient = useQueryClient()
-  const { can } = usePermissions()
+  const queryClient    = useQueryClient()
+  const { can }        = usePermissions()
+
+  const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
+    useTableFilter(INITIAL_FILTERS)
+
+  const resetPage = () => setPage(1)
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['suppliers', page],
-    queryFn:  () => getSuppliers(page),
+    queryKey: ['suppliers', page, applied],
+    queryFn:  () => getSuppliers(page, applied),
     placeholderData: (prev) => prev,
   })
 
@@ -42,12 +59,10 @@ export default function SuppliersPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={CRUMBS} />
-
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Suppliers</h1>
-          <p className="mt-0.5 text-sm text-slate-500">Manage your supplier master records.</p>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Suppliers</h1>
+          <Breadcrumb crumbs={CRUMBS} />
         </div>
         {can('create_supplier_masters') && (
           <Link
@@ -59,7 +74,56 @@ export default function SuppliersPage() {
           </Link>
         )}
       </div>
+      {/* ── Filter Panel ── */}
+      <TableFilter
+        open={open}
+        onToggle={toggle}
+        onApply={() => apply(resetPage)}
+        onClear={() => clear(resetPage)}
+        activeCount={activeCount}
+      >
+        <FilterField label="Search">
+          <input
+            className={INPUT_CLS}
+            placeholder="Name, code or email…"
+            value={draft.search}
+            onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
+          />
+        </FilterField>
 
+        <FilterField label="Supplier Type">
+          <select
+            className={SELECT_CLS}
+            value={draft.supplier_type}
+            onChange={(e) => setDraft((d) => ({ ...d, supplier_type: e.target.value }))}
+          >
+            <option value="">All types</option>
+            {SUPPLIER_TYPES.map((t) => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </FilterField>
+
+        <FilterField label="Billing City">
+          <input
+            className={INPUT_CLS}
+            placeholder="City…"
+            value={draft.bil_city}
+            onChange={(e) => setDraft((d) => ({ ...d, bil_city: e.target.value }))}
+          />
+        </FilterField>
+
+        <FilterField label="Billing Country">
+          <input
+            className={INPUT_CLS}
+            placeholder="Country…"
+            value={draft.bil_country}
+            onChange={(e) => setDraft((d) => ({ ...d, bil_country: e.target.value }))}
+          />
+        </FilterField>
+      </TableFilter>
+
+      {/* ── Data Table ── */}
       <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
@@ -90,12 +154,18 @@ export default function SuppliersPage() {
                   {rows.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
-                        No suppliers yet.{' '}
-                        {can('create_supplier_masters') && (
-                          <Link to="/inventory/suppliers/create" className="font-medium text-indigo-600 hover:underline">
-                            Add the first one.
-                          </Link>
-                        )}
+                        {activeCount > 0
+                          ? 'No suppliers match the current filters.'
+                          : (
+                            <>
+                              No suppliers yet.{' '}
+                              {can('create_supplier_masters') && (
+                                <Link to="/inventory/suppliers/create" className="font-medium text-indigo-600 hover:underline">
+                                  Add the first one.
+                                </Link>
+                              )}
+                            </>
+                          )}
                       </td>
                     </tr>
                   ) : (
@@ -107,7 +177,7 @@ export default function SuppliersPage() {
                         <td className="px-3 py-2 font-mono text-slate-500">
                           {s.supplier_code ?? <span className="italic text-slate-300">—</span>}
                         </td>
-                        <td className="max-w-[220px] px-3 py-2 font-medium text-slate-800">
+                        <td className="max-w-55 px-3 py-2 font-medium text-slate-800">
                           <Link
                             to={`/inventory/suppliers/${s.id}`}
                             className="truncate hover:text-indigo-600 hover:underline"
@@ -121,7 +191,7 @@ export default function SuppliersPage() {
                         <td className="px-3 py-2 text-slate-500">
                           {s.mobile ?? <span className="italic text-slate-300">—</span>}
                         </td>
-                        <td className="max-w-[176px] truncate px-3 py-2 text-slate-500">
+                        <td className="max-w-44 truncate px-3 py-2 text-slate-500">
                           {s.email ?? <span className="italic text-slate-300">—</span>}
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-400">
@@ -182,7 +252,7 @@ export default function SuppliersPage() {
                   >
                     ← Prev
                   </button>
-                  <span className="min-w-[3.5rem] text-center text-xs text-slate-400">
+                  <span className="min-w-14 text-center text-xs text-slate-400">
                     {page} / {meta.last_page}
                   </span>
                   <button

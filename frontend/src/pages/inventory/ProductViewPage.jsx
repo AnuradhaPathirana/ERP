@@ -85,11 +85,10 @@ export default function ProductViewPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">{p?.name}</h1>
+          <h1 className="text-xl font-bold leading-none text-slate-800">{p?.name}</h1>
+          <Breadcrumb crumbs={crumbs} />
           <div className="mt-0.5 flex items-center gap-2">
             {p?.product_code && (
               <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-600">
@@ -122,7 +121,6 @@ export default function ProductViewPage() {
           </button>
         </div>
       </div>
-
       <div className="space-y-2.5">
 
         {/* Basic Information */}
@@ -266,7 +264,6 @@ export default function ProductViewPage() {
         </section>
 
       </div>
-
       <div className="mt-3">
         <Link to="/inventory/products" className="text-xs font-medium text-slate-500 hover:text-slate800">
           ← Back to Products

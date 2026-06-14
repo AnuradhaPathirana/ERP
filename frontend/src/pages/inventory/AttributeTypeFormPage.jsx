@@ -289,14 +289,12 @@ export default function AttributeTypeFormPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
-      <div className="mb-2">
-        <h1 className="text-xl font-bold text-slate-800">
+      <div>
+        <h1 className="text-xl font-bold leading-none text-slate-800">
           {isEditing ? 'Edit Attribute Type' : 'New Attribute Type'}
         </h1>
+        <Breadcrumb crumbs={crumbs} />
       </div>
-
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} noValidate>
         <div className="w-full max-w-sm">
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">

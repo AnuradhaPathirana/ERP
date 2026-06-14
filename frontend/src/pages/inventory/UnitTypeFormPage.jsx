@@ -155,14 +155,12 @@ export default function UnitTypeFormPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
-      <div className="mb-2">
-        <h1 className="text-xl font-bold text-slate-800">
+      <div>
+        <h1 className="text-xl font-bold leading-none text-slate-800">
           {isEditing ? 'Edit Unit Type' : 'New Unit Type'}
         </h1>
+        <Breadcrumb crumbs={crumbs} />
       </div>
-
       <form onSubmit={handleSubmit} onKeyDown={handleKeyDown} noValidate>
         <div className="w-full max-w-md">
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">

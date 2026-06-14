@@ -25,7 +25,8 @@ class StoreController extends Controller
 
     public function index(): JsonResponse
     {
-        $paginator = $this->service->paginate();
+        $filters   = request()->only(['search', 'store_type_id', 'is_active', 'location_id']);
+        $paginator = $this->service->paginate(25, $filters);
 
         return response()->json([
             'data' => collect($paginator->items())

@@ -265,21 +265,14 @@ export default function RoleFormPage() {
 
   return (
     <div>
-      <Breadcrumb crumbs={crumbs} />
-
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">
+          <h1 className="text-xl font-bold leading-none text-slate-800">
             {isEdit ? `Edit Role: ${role?.label ?? ''}` : 'New Role'}
           </h1>
-          <p className="mt-0.5 text-sm text-slate-500">
-            {isEdit
-              ? 'Update the role name and its assigned permissions.'
-              : 'Create a new role and assign its permissions.'}
-          </p>
+          <Breadcrumb crumbs={crumbs} />
         </div>
       </div>
-
       <form onSubmit={handleSubmit} noValidate className="mt-5">
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
 

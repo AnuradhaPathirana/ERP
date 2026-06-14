@@ -62,12 +62,11 @@ export default function CategoryViewPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
       {/* Header */}
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">{cat?.category_name}</h1>
+          <h1 className="text-xl font-bold leading-none text-slate-800">{cat?.category_name}</h1>
+          <Breadcrumb crumbs={crumbs} />
           {cat?.parent_category_name && (
             <p className="mt-0.5 text-xs text-slate-500">
               Under{' '}

@@ -11,11 +11,33 @@ use Modules\Inventory\Models\Store;
 
 class StoreService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    /** @param array<string, mixed> $filters */
+    public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
     {
-        return Store::with(['storeType', 'location', 'parentStore'])
-            ->orderBy('store_name')
-            ->paginate($perPage);
+        $query = Store::with(['storeType', 'location', 'parentStore'])
+            ->orderBy('store_name');
+
+        if (!empty($filters['search'])) {
+            $term = '%' . $filters['search'] . '%';
+            $query->where(function ($q) use ($term) {
+                $q->where('store_name', 'like', $term)
+                    ->orWhere('store_code', 'like', $term);
+            });
+        }
+
+        if (!empty($filters['store_type_id'])) {
+            $query->where('store_type_id', (int) $filters['store_type_id']);
+        }
+
+        if (isset($filters['is_active']) && $filters['is_active'] !== '') {
+            $query->where('is_active', (bool) $filters['is_active']);
+        }
+
+        if (!empty($filters['location_id'])) {
+            $query->where('location_id', (int) $filters['location_id']);
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function all(): Collection

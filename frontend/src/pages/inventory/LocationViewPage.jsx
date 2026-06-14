@@ -55,13 +55,12 @@ export default function LocationViewPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
       <div className="mb-3 flex items-start justify-between">
         <div>
           <div className="flex items-center gap-2">
             <MapPin size={18} className="text-indigo-500" />
-            <h1 className="text-xl font-bold text-slate-800">{loc.location_name}</h1>
+            <h1 className="text-xl font-bold leading-none text-slate-800">{loc.location_name}</h1>
+            <Breadcrumb crumbs={crumbs} />
             <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs text-slate-500">
               {loc.location_code}
             </span>
@@ -78,7 +77,6 @@ export default function LocationViewPage() {
           Edit
         </Link>
       </div>
-
       <div className="space-y-3">
 
         {/* Basic Details */}

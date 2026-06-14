@@ -56,12 +56,11 @@ export default function IndustryViewPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
       {/* Header */}
       <div className="mb-3 flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">{industry?.name}</h1>
+          <h1 className="text-xl font-bold leading-none text-slate-800">{industry?.name}</h1>
+          <Breadcrumb crumbs={crumbs} />
         </div>
         <div className="flex items-center gap-1.5">
           <Link

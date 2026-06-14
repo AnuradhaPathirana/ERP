@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save } from 'lucide-react'
+import { Building2, Save } from 'lucide-react'
 import { createIndustry, getIndustry, updateIndustry } from '../../api/industries'
 import Breadcrumb from '../../components/Breadcrumb'
 import { showError, showSuccess } from '../../utils/alerts'
@@ -25,9 +25,9 @@ function validate(field, value) {
 }
 
 const inputBase =
-  'block w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+  'block w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
 const inputErr =
-  'block w-full rounded border border-red-400 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
+  'block w-full rounded border border-red-400 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-400 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
 
 const fieldCls = (errors, touched, name) =>
   errors[name] && touched[name] ? inputErr : inputBase
@@ -123,8 +123,8 @@ export default function IndustryFormPage() {
   }
 
   const crumbs = [
-    { label: 'Inventory',   to: '/inventory/products' },
-    { label: 'Industries',  to: '/inventory/industries' },
+    { label: 'Inventory',  to: '/inventory/products' },
+    { label: 'Industries', to: '/inventory/industries' },
     { label: isEditing ? 'Edit Industry' : 'New Industry' },
   ]
 
@@ -134,86 +134,107 @@ export default function IndustryFormPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
-      <div className="mb-2">
-        <h1 className="text-xl font-bold text-slate-800">
+      {/* Page header */}
+      <div>
+        <h1 className="text-xl font-bold leading-none text-slate-800">
           {isEditing ? 'Edit Industry' : 'New Industry'}
         </h1>
+        <Breadcrumb crumbs={crumbs} />
       </div>
 
       <form onSubmit={handleSubmit} noValidate>
-        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Industry Details</h2>
-          </div>
+        <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
 
-          {/* 2-column: name left, description right */}
-          <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2">
+          {/* ── Main card (takes 2 of 3 cols) ── */}
+          <div className="lg:col-span-2">
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Industry Details</h2>
+              </div>
+              <div className="space-y-3 p-4">
+                {/* Industry Name */}
+                <div>
+                  <Label required>Industry Name</Label>
+                  <input
+                    ref={nameRef}
+                    name="name"
+                    type="text"
+                    value={form.name}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    placeholder="e.g. Agriculture"
+                    maxLength={100}
+                    autoComplete="off"
+                    className={fieldCls(errors, touched, 'name')}
+                  />
+                  <FieldError errors={errors} touched={touched} name="name" />
+                </div>
 
-            {/* Left — name */}
-            <div className="space-y-3">
-              <div>
-                <Label required>Industry Name</Label>
-                <input
-                  ref={nameRef}
-                  name="name"
-                  type="text"
-                  value={form.name}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  placeholder="e.g. Agriculture"
-                  maxLength={100}
-                  autoComplete="off"
-                  className={fieldCls(errors, touched, 'name')}
-                />
-                <FieldError errors={errors} touched={touched} name="name" />
+                {/* Description — below name */}
+                <div>
+                  <Label>Description</Label>
+                  <div className="relative">
+                    <textarea
+                      name="description"
+                      rows={4}
+                      value={form.description}
+                      onChange={handleChange}
+                      onBlur={handleBlur}
+                      maxLength={255}
+                      placeholder="Optional notes about this industry…"
+                      className={`${fieldCls(errors, touched, 'description')} resize-none pb-5`}
+                    />
+                    <span className="absolute bottom-1.5 right-2 text-[10px] text-slate-400">
+                      {form.description.length}/255
+                    </span>
+                  </div>
+                  <FieldError errors={errors} touched={touched} name="description" />
+                </div>
+              </div>
+
+              {/* Button row inside the left column, below the fields */}
+              <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-2">
+                <Link
+                  to="/inventory/industries"
+                  className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+                >
+                  Cancel
+                </Link>
+                <button
+                  type="submit"
+                  disabled={mutation.isPending}
+                  className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <Save size={13} strokeWidth={2.5} />
+                  {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Industry'}
+                </button>
               </div>
             </div>
+          </div>
 
-            {/* Right — description */}
-            <div className="flex flex-col">
-              <Label>Description</Label>
-              <div className="relative flex-1">
-                <textarea
-                  name="description"
-                  rows={4}
-                  value={form.description}
-                  onChange={handleChange}
-                  onBlur={handleBlur}
-                  maxLength={255}
-                  placeholder="Optional notes about this industry…"
-                  className={`${fieldCls(errors, touched, 'description')} h-full min-h-20 resize-none pb-5`}
-                />
-                <span className="absolute bottom-1.5 right-2 text-[10px] text-slate-400">
-                  {form.description.length}/255
-                </span>
+          {/* ── Right info panel ── */}
+          <div className="space-y-2.5">
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">About Industries</h2>
               </div>
-              <FieldError errors={errors} touched={touched} name="description" />
+              <div className="p-4">
+                <div className="flex flex-col items-center gap-2 py-2 text-center">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50">
+                    <Building2 size={20} className="text-indigo-400" />
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-slate-500">
+                    Industries classify your suppliers and companies by sector, making it easier to filter and report on business relationships.
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-slate-50 px-4 py-2">
-            <Link
-              to="/inventory/industries"
-              className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
-            >
-              Cancel
-            </Link>
-            <button
-              type="submit"
-              disabled={mutation.isPending}
-              className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Save size={13} strokeWidth={2.5} />
-              {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Industry'}
-            </button>
-          </div>
         </div>
 
         {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-          <p className="mt-2 text-xs text-red-600">
+          <p className="mt-1.5 text-xs text-red-600">
             {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
           </p>
         )}

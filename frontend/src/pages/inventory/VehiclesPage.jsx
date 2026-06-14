@@ -89,12 +89,10 @@ export default function VehiclesPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={CRUMBS} />
-
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">Vehicles</h1>
-          <p className="mt-0.5 text-sm text-slate-500">Manage fleet vehicle master records.</p>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Vehicles</h1>
+          <Breadcrumb crumbs={CRUMBS} />
         </div>
         {can('create_vehicle_masters') && (
           <Link
@@ -106,7 +104,6 @@ export default function VehiclesPage() {
           </Link>
         )}
       </div>
-
       {/* Search */}
       <form onSubmit={handleSearch} className="mt-3 flex items-center gap-2">
         <div className="relative max-w-xs flex-1">

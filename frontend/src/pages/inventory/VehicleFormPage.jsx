@@ -234,14 +234,12 @@ export default function VehicleFormPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
-      <div className="mb-2">
-        <h1 className="text-xl font-bold text-slate-800">
+      <div>
+        <h1 className="text-xl font-bold leading-none text-slate-800">
           {isEditing ? 'Edit Vehicle' : 'New Vehicle'}
         </h1>
+        <Breadcrumb crumbs={crumbs} />
       </div>
-
       <form onSubmit={handleSubmit} noValidate>
         <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
 

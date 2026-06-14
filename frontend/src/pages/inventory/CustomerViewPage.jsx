@@ -87,14 +87,13 @@ export default function CustomerViewPage() {
 
   return (
     <div className="w-full">
-      <Breadcrumb crumbs={crumbs} />
-
       {/* Header */}
       <div className="mb-3 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-slate-800">
+          <h1 className="text-xl font-bold leading-none text-slate-800">
             {c?.title ? `${c.title} ` : ''}{c?.customer_name}
           </h1>
+          <Breadcrumb crumbs={crumbs} />
           <div className="mt-0.5 flex items-center gap-3 text-xs text-slate-500">
             {c?.customer_code && (
               <span className="font-mono">{c.customer_code}</span>

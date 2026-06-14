@@ -26,7 +26,8 @@ class ProductController extends Controller
 
     public function index(): JsonResponse
     {
-        $paginator = $this->service->paginate();
+        $filters   = request()->only(['search', 'product_type', 'category_id', 'tracking_type']);
+        $paginator = $this->service->paginate(25, $filters);
 
         return response()->json([
             'data' => collect($paginator->items())

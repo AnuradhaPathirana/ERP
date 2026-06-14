@@ -42,18 +42,6 @@ const NAV_ITEMS = [
     icon: LayoutDashboard,
   },
   {
-    label: 'Team Management',
-    to: '/admin/users',
-    icon: UserCog,
-    roleGuard: ['super_admin', 'admin'],
-  },
-  {
-    label: 'Roles & Permissions',
-    to: '/admin/roles',
-    icon: Shield,
-    roleGuard: ['super_admin', 'admin'],
-  },
-  {
     label: 'Inventory',
     icon: Package,
     moduleKey: 'inventory',
@@ -88,6 +76,18 @@ const NAV_ITEMS = [
     icon: Users,
     moduleKey: 'hr',
     children: [],
+  },
+  {
+    label: 'Team Management',
+    to: '/admin/users',
+    icon: UserCog,
+    roleGuard: ['super_admin', 'admin'],
+  },
+  {
+    label: 'Roles & Permissions',
+    to: '/admin/roles',
+    icon: Shield,
+    roleGuard: ['super_admin', 'admin'],
   },
 ]
 
