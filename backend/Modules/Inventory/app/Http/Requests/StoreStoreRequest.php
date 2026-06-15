@@ -22,8 +22,8 @@ class StoreStoreRequest extends FormRequest
             'store_type_id'  => ['required', 'integer', 'exists:inv_store_types,id'],
             'store_code'     => ['required', 'string', 'max:50', Rule::unique('inv_stores', 'store_code')->whereNull('deleted_at')],
             'store_name'     => ['required', 'string', 'max:150'],
-            'uom'            => ['required', 'string', 'max:50'],
-            'capacity'       => ['required', 'numeric', 'min:0'],
+            'uom'            => ['nullable', 'string', 'max:50'],
+            'capacity'       => ['nullable', 'numeric', 'min:0'],
 
             // Optional relations
             'location_id'      => ['nullable', 'integer', 'exists:inv_locations,id'],
@@ -55,8 +55,6 @@ class StoreStoreRequest extends FormRequest
             'store_type_id'  => 'store type',
             'store_code'     => 'store code',
             'store_name'     => 'store name',
-            'uom'            => 'unit of measure',
-            'capacity'       => 'capacity',
             'location_id'    => 'location',
             'address_line_1' => 'address line 1',
             'address_line_2' => 'address line 2',

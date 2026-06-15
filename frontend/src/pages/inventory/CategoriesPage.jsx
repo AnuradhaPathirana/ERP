@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Eye, Plus, Trash2 } from 'lucide-react'
-import { deleteCategory, getCategories } from '../../api/categories'
+import { ChevronDown, ChevronRight, Edit2, Eye, ExternalLink, Save, Trash2, X } from 'lucide-react'
+import { createCategory, deleteCategory, getAllCategories, getCategories, getCategory, updateCategory } from '../../api/categories'
+import { getAllIndustries } from '../../api/industries'
+import { getAllCompanies } from '../../api/companies'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
@@ -17,10 +19,482 @@ const TYPE_BADGE = {
   service: 'bg-violet-50 text-violet-700',
 }
 
+// ── Tree helpers ─────────────────────────────────────────────────────────────
+function buildTree(flat, parentId = null, excludeId = null) {
+  return flat
+    .filter((c) => (c.parent_category_id ?? null) === parentId && c.id !== excludeId)
+    .map((c) => ({ ...c, children: buildTree(flat, c.id, excludeId) }))
+}
+
+function findName(nodes, id) {
+  for (const node of nodes) {
+    if (node.id === id) return node.category_name
+    const found = findName(node.children, id)
+    if (found) return found
+  }
+  return null
+}
+
+// ── TreeNode ─────────────────────────────────────────────────────────────────
+function TreeNode({ node, selectedId, onSelect, depth = 0 }) {
+  const hasChildren = node.children.length > 0
+  const isSelected  = node.id === selectedId
+  const [open, setOpen] = useState(true)
+
+  return (
+    <div>
+      <div
+        className={[
+          'flex cursor-pointer items-center gap-1 rounded px-2 py-1 text-xs transition-colors',
+          isSelected ? 'bg-indigo-600 text-white' : 'text-slate-700 hover:bg-slate-100',
+        ].join(' ')}
+        style={{ paddingLeft: `${8 + depth * 16}px` }}
+      >
+        {hasChildren ? (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setOpen((v) => !v) }}
+            className={['flex shrink-0 items-center rounded p-0.5 transition-colors', isSelected ? 'hover:bg-indigo-500' : 'hover:bg-slate-200'].join(' ')}
+          >
+            {open ? <ChevronDown size={11} strokeWidth={2.5} /> : <ChevronRight size={11} strokeWidth={2.5} />}
+          </button>
+        ) : (
+          <span className="w-4 shrink-0" />
+        )}
+        <span className="flex-1 select-none truncate" onClick={() => onSelect(node.id)}>
+          {node.category_name}
+        </span>
+      </div>
+      {hasChildren && open && node.children.map((child) => (
+        <TreeNode key={child.id} node={child} selectedId={selectedId} onSelect={onSelect} depth={depth + 1} />
+      ))}
+    </div>
+  )
+}
+
+// ── CategoryTreeSelect ───────────────────────────────────────────────────────
+function CategoryTreeSelect({ tree, value, onChange, hasError }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef(null)
+
+  const selectedName = value ? findName(tree, Number(value)) : null
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const handleSelect = (id) => { onChange(id); setOpen(false) }
+  const handleClear  = (e) => { e.stopPropagation(); onChange(''); setOpen(false) }
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={[
+          'flex w-full items-center justify-between rounded border px-2.5 py-1.5 text-xs outline-none transition',
+          hasError
+            ? 'border-red-400 bg-white focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
+            : 'border-slate-300 bg-white focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20',
+        ].join(' ')}
+      >
+        <span className={selectedName ? 'text-slate-800' : 'text-slate-400'}>
+          {selectedName ?? '— None (top-level) —'}
+        </span>
+        <div className="flex items-center gap-1">
+          {value && (
+            <span onClick={handleClear} className="rounded px-0.5 text-slate-400 hover:text-slate-700" title="Clear">✕</span>
+          )}
+          <ChevronDown size={12} strokeWidth={2.5} className={`shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        </div>
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg">
+          <div
+            onClick={() => handleSelect('')}
+            className={['cursor-pointer px-3 py-1.5 text-xs transition-colors', !value ? 'bg-indigo-600 text-white' : 'italic text-slate-500 hover:bg-slate-50'].join(' ')}
+          >
+            — None (top-level) —
+          </div>
+          <div className="max-h-56 overflow-y-auto border-t border-slate-100 py-1">
+            {tree.length === 0
+              ? <p className="px-3 py-2 text-xs text-slate-400">No categories available.</p>
+              : tree.map((node) => (
+                <TreeNode key={node.id} node={node} selectedId={value ? Number(value) : null} onSelect={handleSelect} depth={0} />
+              ))
+            }
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Form helpers ─────────────────────────────────────────────────────────────
+const EMPTY_FORM = {
+  category_name:        '',
+  product_service_type: 'product',
+  parent_category_id:   '',
+  reference_name:       '',
+  industry_id:          '',
+  company_id:           '',
+}
+
+function validate(field, value) {
+  if (field === 'category_name') {
+    if (!String(value).trim()) return 'Category name is required.'
+    if (String(value).length > 100) return 'Max 100 characters.'
+  }
+  if (field === 'reference_name' && String(value).length > 100) return 'Max 100 characters.'
+  return ''
+}
+
+const inputBase =
+  'block w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+const inputErr =
+  'block w-full rounded border border-red-400 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
+const fieldCls = (errors, touched, name) => errors[name] && touched[name] ? inputErr : inputBase
+
+function FieldError({ errors, touched, name }) {
+  if (!errors[name] || !touched[name]) return null
+  return <p className="mt-0.5 text-[11px] text-red-600">{errors[name]}</p>
+}
+
+// ── Read-only detail panel ────────────────────────────────────────────────────
+function CategoryDetail({ viewId, onEdit, onClose }) {
+  const { isLoading, data } = useQuery({
+    queryKey: ['category', viewId],
+    queryFn:  () => getCategory(viewId),
+    enabled:  Boolean(viewId),
+  })
+
+  const cat = data?.data
+
+  const DetailRow = ({ label, children }) => (
+    <div className="flex flex-col gap-0.5">
+      <span className="text-[11px] font-medium uppercase tracking-wider text-slate-400">{label}</span>
+      <span className="text-xs text-slate-800">{children}</span>
+    </div>
+  )
+
+  if (isLoading) {
+    return <div className="flex items-center justify-center py-12 text-xs text-slate-400">Loading…</div>
+  }
+
+  if (!cat) return null
+
+  return (
+    <div className="flex flex-col gap-3 p-4">
+      <DetailRow label="Category Name">
+        <span className="font-semibold">{cat.category_name}</span>
+      </DetailRow>
+
+      <DetailRow label="Type">
+        <span className={`inline-block rounded px-1.5 py-0.5 text-[11px] font-medium capitalize ${TYPE_BADGE[cat.product_service_type] ?? ''}`}>
+          {cat.product_service_type}
+        </span>
+      </DetailRow>
+
+      <DetailRow label="Parent Category">
+        {cat.parent_category_name
+          ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-700">{cat.parent_category_name}</span>
+          : <span className="italic text-slate-400">None (top-level)</span>}
+      </DetailRow>
+
+      <DetailRow label="Reference Name">
+        {cat.reference_name ?? <span className="italic text-slate-400">—</span>}
+      </DetailRow>
+
+      <DetailRow label="Industry">
+        {cat.industry_name ?? <span className="italic text-slate-400">—</span>}
+      </DetailRow>
+
+      <DetailRow label="Company">
+        {cat.company_name ?? <span className="italic text-slate-400">—</span>}
+      </DetailRow>
+
+      <DetailRow label="Created">
+        {new Date(cat.created_at).toLocaleString()}
+      </DetailRow>
+
+      <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+        <Link
+          to={`/inventory/categories/${viewId}`}
+          className="flex items-center gap-1 text-[11px] text-indigo-600 hover:underline"
+        >
+          <ExternalLink size={11} /> Full details
+        </Link>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center gap-1 rounded px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+          >
+            <X size={12} /> Close
+          </button>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700"
+          >
+            <Edit2 size={12} /> Edit
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Inline form panel ─────────────────────────────────────────────────────────
+function CategoryForm({ editId, onDone, onCancel }) {
+  const isEditing   = Boolean(editId)
+  const queryClient = useQueryClient()
+  const nameRef     = useRef(null)
+
+  const [form,    setForm]    = useState(EMPTY_FORM)
+  const [errors,  setErrors]  = useState({})
+  const [touched, setTouched] = useState({})
+
+  const { data: allCategories = [] } = useQuery({ queryKey: ['categories-all'], queryFn: getAllCategories })
+  const { data: allIndustries = [] } = useQuery({ queryKey: ['industries-all'],  queryFn: getAllIndustries })
+  const { data: allCompanies  = [] } = useQuery({ queryKey: ['companies-all'],   queryFn: getAllCompanies })
+
+  const { isLoading: isFetching, data: fetchedData } = useQuery({
+    queryKey: ['category', editId],
+    queryFn:  () => getCategory(editId),
+    enabled:  isEditing,
+  })
+
+  const initialized = useRef(false)
+  useLayoutEffect(() => {
+    initialized.current = false
+    setForm(EMPTY_FORM)
+    setErrors({})
+    setTouched({})
+  }, [editId])
+
+  useLayoutEffect(() => {
+    if (fetchedData?.data && !initialized.current) {
+      const c = fetchedData.data
+      setForm({
+        category_name:        c.category_name        ?? '',
+        product_service_type: c.product_service_type ?? 'product',
+        parent_category_id:   c.parent_category_id   ?? '',
+        reference_name:       c.reference_name       ?? '',
+        industry_id:          c.industry_id           ?? '',
+        company_id:           c.company_id            ?? '',
+      })
+      initialized.current = true
+    }
+  }, [fetchedData])
+
+  useEffect(() => {
+    if (!isFetching) nameRef.current?.focus()
+  }, [isFetching, editId])
+
+  const categoryTree = useMemo(
+    () => buildTree(allCategories, null, isEditing ? Number(editId) : null),
+    [allCategories, isEditing, editId],
+  )
+
+  const handleChange = (e) => {
+    const { name, value } = e.target
+    setForm((prev) => ({ ...prev, [name]: value }))
+    if (touched[name]) setErrors((prev) => ({ ...prev, [name]: validate(name, value) }))
+  }
+
+  const handleBlur = (e) => {
+    const { name, value } = e.target
+    setTouched((prev) => ({ ...prev, [name]: true }))
+    setErrors((prev) => ({ ...prev, [name]: validate(name, value) }))
+  }
+
+  const mutation = useMutation({
+    mutationFn: (payload) =>
+      isEditing ? updateCategory(editId, payload) : createCategory(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['categories'] })
+      queryClient.invalidateQueries({ queryKey: ['categories-all'] })
+      if (isEditing) queryClient.invalidateQueries({ queryKey: ['category', editId] })
+      showSuccess(isEditing ? 'Category updated.' : 'Category created.')
+      onDone()
+    },
+    onError: (err) => {
+      const apiErrors = err.response?.data?.errors ?? {}
+      if (Object.keys(apiErrors).length) {
+        setErrors(Object.fromEntries(Object.entries(apiErrors).map(([k, v]) => [k, v[0]])))
+        setTouched(Object.fromEntries(Object.keys(apiErrors).map((k) => [k, true])))
+      }
+      showError('Failed to save. Please check the form and try again.')
+    },
+  })
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    const fields    = ['category_name', 'reference_name']
+    const newErrors = Object.fromEntries(fields.map((f) => [f, validate(f, form[f])]))
+    setErrors(newErrors)
+    setTouched(Object.fromEntries(fields.map((f) => [f, true])))
+    if (Object.values(newErrors).some(Boolean)) return
+    mutation.mutate({
+      category_name:        form.category_name.trim(),
+      product_service_type: form.product_service_type,
+      parent_category_id:   form.parent_category_id || null,
+      reference_name:       form.reference_name.trim() || null,
+      industry_id:          form.industry_id || null,
+      company_id:           form.company_id  || null,
+    })
+  }
+
+  if (isEditing && isFetching) {
+    return <div className="flex items-center justify-center py-12 text-xs text-slate-400">Loading…</div>
+  }
+
+  return (
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3 p-4">
+
+      {/* Category Name */}
+      <div>
+        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+          Category Name <span className="text-red-500">*</span>
+        </label>
+        <input
+          ref={nameRef}
+          name="category_name"
+          type="text"
+          value={form.category_name}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          placeholder="e.g. Electronics"
+          maxLength={100}
+          autoComplete="off"
+          className={fieldCls(errors, touched, 'category_name')}
+        />
+        <FieldError errors={errors} touched={touched} name="category_name" />
+      </div>
+
+      {/* Type */}
+      <div>
+        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+          Type <span className="text-red-500">*</span>
+        </label>
+        <div className="flex items-center gap-4 rounded border border-slate-300 bg-white px-2.5 py-1.5">
+          {[{ value: 'product', label: 'Product' }, { value: 'service', label: 'Service' }].map(({ value, label }) => (
+            <label key={value} className="flex cursor-pointer items-center gap-1.5 select-none">
+              <input
+                type="radio"
+                name="product_service_type"
+                value={value}
+                checked={form.product_service_type === value}
+                onChange={handleChange}
+                className="h-3.5 w-3.5 accent-indigo-600"
+              />
+              <span className="text-xs text-slate-700">{label}</span>
+            </label>
+          ))}
+        </div>
+      </div>
+
+      {/* Reference Name */}
+      <div>
+        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+          Reference Name <span className="text-[11px] font-normal text-slate-400">(optional)</span>
+        </label>
+        <input
+          name="reference_name"
+          type="text"
+          value={form.reference_name}
+          onChange={handleChange}
+          onBlur={handleBlur}
+          placeholder="Internal code or alias"
+          maxLength={100}
+          autoComplete="off"
+          className={fieldCls(errors, touched, 'reference_name')}
+        />
+        <FieldError errors={errors} touched={touched} name="reference_name" />
+      </div>
+
+      {/* Parent Category */}
+      <div>
+        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+          Parent Category <span className="text-[11px] font-normal text-slate-400">(optional)</span>
+        </label>
+        <CategoryTreeSelect
+          tree={categoryTree}
+          value={form.parent_category_id}
+          onChange={(val) => setForm((prev) => ({ ...prev, parent_category_id: val }))}
+          hasError={Boolean(errors.parent_category_id && touched.parent_category_id)}
+        />
+        <p className="mt-0.5 text-[11px] text-slate-400">Leave empty to create a top-level category.</p>
+      </div>
+
+      {/* Industry */}
+      <div>
+        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+          Industry <span className="text-[11px] font-normal text-slate-400">(optional)</span>
+        </label>
+        <select name="industry_id" value={form.industry_id} onChange={handleChange} onBlur={handleBlur} className={fieldCls(errors, touched, 'industry_id')}>
+          <option value="">— Select industry —</option>
+          {allIndustries.map((ind) => <option key={ind.id} value={ind.id}>{ind.name}</option>)}
+        </select>
+      </div>
+
+      {/* Company */}
+      <div>
+        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+          Company <span className="text-[11px] font-normal text-slate-400">(optional)</span>
+        </label>
+        <select name="company_id" value={form.company_id} onChange={handleChange} onBlur={handleBlur} className={fieldCls(errors, touched, 'company_id')}>
+          <option value="">— Select company —</option>
+          {allCompanies.map((co) => <option key={co.id} value={co.id}>{co.name}</option>)}
+        </select>
+      </div>
+
+      {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
+        <p className="text-xs text-red-600">
+          {mutation.error?.response?.data?.message ?? 'An unexpected error occurred.'}
+        </p>
+      )}
+
+      {/* Actions */}
+      <div className="flex items-center justify-end gap-2 pt-1">
+        {isEditing && (
+          <button
+            type="button"
+            onClick={onCancel}
+            className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
+          >
+            <X size={12} />
+            Cancel
+          </button>
+        )}
+        <button
+          type="submit"
+          disabled={mutation.isPending}
+          className="flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          <Save size={13} strokeWidth={2.5} />
+          {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Category'}
+        </button>
+      </div>
+    </form>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function CategoriesPage() {
-  const [page, setPage] = useState(1)
+  const [page,   setPage]   = useState(1)
+  const [editId, setEditId] = useState(null)
+  const [viewId, setViewId] = useState(null)
   const queryClient = useQueryClient()
   const { can } = usePermissions()
+
+  const handleView = (id) => { setViewId(id); setEditId(null) }
+  const handleEdit = (id) => { setEditId(id); setViewId(null) }
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['categories', page],
@@ -40,165 +514,205 @@ export default function CategoriesPage() {
 
   const handleDelete = async (id, name) => {
     const ok = await confirmDelete(name)
-    if (ok) deleteMutation.mutate(id)
+    if (ok) {
+      if (editId === id) setEditId(null)
+      if (viewId === id) setViewId(null)
+      deleteMutation.mutate(id)
+    }
   }
+
+  const handleDone = () => setEditId(null)
 
   const meta = data?.meta
   const rows = data?.data ?? []
 
   return (
     <div className="w-full">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-xl font-bold leading-none text-slate-800">Categories</h1>
-          <Breadcrumb crumbs={CRUMBS} />
-        </div>
-        {can('create_categories') && (
-          <Link
-            to="/inventory/categories/create"
-            className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
-          >
-            <Plus size={14} strokeWidth={2.5} />
-            New Category
-          </Link>
-        )}
+      <div>
+        <h1 className="text-xl font-bold leading-none text-slate-800">Categories</h1>
+        <Breadcrumb crumbs={CRUMBS} />
       </div>
-      <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        {isLoading && (
-          <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
-        )}
-        {isError && (
-          <div className="flex items-center justify-center py-14 text-sm text-red-500">
-            Failed to load categories.
-          </div>
-        )}
 
-        {!isLoading && !isError && (
-          <>
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-left">
-                    <th className="w-8 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">#</th>
-                    <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Category Name</th>
-                    <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Parent</th>
-                    <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Type</th>
-                    <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Reference</th>
-                    <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Created</th>
-                    <th className="w-20 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {rows.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-400">
-                        No categories yet.{' '}
-                        {can('create_categories') && (
-                          <Link to="/inventory/categories/create" className="font-medium text-indigo-600 hover:underline">
-                            Create the first one.
-                          </Link>
-                        )}
-                      </td>
+      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+
+        {/* ── LEFT: Table ─────────────────────────────────────────────── */}
+        <div className="lg:col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+          {isLoading && (
+            <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
+          )}
+          {isError && (
+            <div className="flex items-center justify-center py-14 text-sm text-red-500">
+              Failed to load categories.
+            </div>
+          )}
+
+          {!isLoading && !isError && (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-left">
+                      <th className="w-8 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">#</th>
+                      <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Category Name</th>
+                      <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Parent</th>
+                      <th className="w-20 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Type</th>
+                      <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Reference</th>
+                      <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Created</th>
+                      <th className="w-20 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                     </tr>
-                  ) : (
-                    rows.map((cat, i) => (
-                      <tr key={cat.id} className="transition-colors hover:bg-slate-50">
-                        <td className="px-3 py-2 text-slate-400">
-                          {(page - 1) * (meta?.per_page ?? 25) + i + 1}
-                        </td>
-                        <td className="px-3 py-2 font-medium text-slate-800">
-                          <Link to={`/inventory/categories/${cat.id}`} className="hover:text-indigo-600 hover:underline">
-                            {cat.category_name}
-                          </Link>
-                        </td>
-                        <td className="px-3 py-2 text-slate-500">
-                          {cat.parent_category_name
-                            ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">{cat.parent_category_name}</span>
-                            : <span className="italic text-slate-300">—</span>}
-                        </td>
-                        <td className="px-3 py-2">
-                          <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium capitalize ${TYPE_BADGE[cat.product_service_type] ?? ''}`}>
-                            {cat.product_service_type}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2 text-slate-500">
-                          {cat.reference_name
-                            ? <span className="truncate block max-w-[120px]" title={cat.reference_name}>{cat.reference_name}</span>
-                            : <span className="italic text-slate-300">—</span>}
-                        </td>
-                        <td className="whitespace-nowrap px-3 py-2 text-slate-400">
-                          {new Date(cat.created_at).toLocaleDateString()}
-                        </td>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center justify-end gap-1">
-                            <Link
-                              to={`/inventory/categories/${cat.id}`}
-                              title="View"
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                            >
-                              <Eye size={13} />
-                            </Link>
-                            {can('edit_categories') && (
-                              <Link
-                                to={`/inventory/categories/${cat.id}/edit`}
-                                title="Edit"
-                                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
-                              >
-                                <Edit2 size={13} />
-                              </Link>
-                            )}
-                            {can('delete_categories') && (
-                              <button
-                                type="button"
-                                title="Delete"
-                                onClick={() => handleDelete(cat.id, cat.category_name)}
-                                disabled={deleteMutation.isPending}
-                                className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
-                              >
-                                <Trash2 size={13} />
-                              </button>
-                            )}
-                          </div>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {rows.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-400">
+                          No categories yet. Use the form to create the first one.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {meta && meta.last_page > 1 && (
-              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2">
-                <p className="text-xs text-slate-500">
-                  Showing{' '}
-                  <span className="font-medium text-slate-700">
-                    {(page - 1) * meta.per_page + 1}–{Math.min(page * meta.per_page, meta.total)}
-                  </span>{' '}
-                  of <span className="font-medium text-slate-700">{meta.total}</span>
-                </p>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setPage((p) => p - 1)}
-                    disabled={page === 1}
-                    className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    ← Prev
-                  </button>
-                  <span className="min-w-[3.5rem] text-center text-xs text-slate-400">
-                    {page} / {meta.last_page}
-                  </span>
-                  <button
-                    onClick={() => setPage((p) => p + 1)}
-                    disabled={page === meta.last_page}
-                    className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Next →
-                  </button>
-                </div>
+                    ) : (
+                      rows.map((cat, i) => (
+                        <tr
+                          key={cat.id}
+                          className={`transition-colors hover:bg-slate-50 ${editId === cat.id ? 'bg-indigo-50/60' : viewId === cat.id ? 'bg-sky-50/60' : ''}`}
+                        >
+                          <td className="px-3 py-2 text-slate-400">
+                            {(page - 1) * (meta?.per_page ?? 25) + i + 1}
+                          </td>
+                          <td className="px-3 py-2 font-medium text-slate-800">
+                            <Link to={`/inventory/categories/${cat.id}`} className="hover:text-indigo-600 hover:underline">
+                              {cat.category_name}
+                            </Link>
+                          </td>
+                          <td className="px-3 py-2 text-slate-500">
+                            {cat.parent_category_name
+                              ? <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">{cat.parent_category_name}</span>
+                              : <span className="italic text-slate-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2">
+                            <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium capitalize ${TYPE_BADGE[cat.product_service_type] ?? ''}`}>
+                              {cat.product_service_type}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-slate-500">
+                            {cat.reference_name
+                              ? <span className="block max-w-25 truncate" title={cat.reference_name}>{cat.reference_name}</span>
+                              : <span className="italic text-slate-300">—</span>}
+                          </td>
+                          <td className="whitespace-nowrap px-3 py-2 text-slate-400">
+                            {new Date(cat.created_at).toLocaleDateString()}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                type="button"
+                                title="View"
+                                onClick={() => handleView(cat.id)}
+                                className={`rounded p-1 transition-colors ${viewId === cat.id ? 'bg-sky-100 text-sky-600' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}
+                              >
+                                <Eye size={13} />
+                              </button>
+                              {can('edit_categories') && (
+                                <button
+                                  type="button"
+                                  title="Edit"
+                                  onClick={() => handleEdit(cat.id)}
+                                  className={`rounded p-1 transition-colors ${editId === cat.id ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}
+                                >
+                                  <Edit2 size={13} />
+                                </button>
+                              )}
+                              {can('delete_categories') && (
+                                <button
+                                  type="button"
+                                  title="Delete"
+                                  onClick={() => handleDelete(cat.id, cat.category_name)}
+                                  disabled={deleteMutation.isPending}
+                                  className="rounded p-1 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
               </div>
+
+              {meta && meta.last_page > 1 && (
+                <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2">
+                  <p className="text-xs text-slate-500">
+                    Showing{' '}
+                    <span className="font-medium text-slate-700">
+                      {(page - 1) * meta.per_page + 1}–{Math.min(page * meta.per_page, meta.total)}
+                    </span>{' '}
+                    of <span className="font-medium text-slate-700">{meta.total}</span>
+                  </p>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setPage((p) => p - 1)}
+                      disabled={page === 1}
+                      className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      ← Prev
+                    </button>
+                    <span className="min-w-14 text-center text-xs text-slate-400">
+                      {page} / {meta.last_page}
+                    </span>
+                    <button
+                      onClick={() => setPage((p) => p + 1)}
+                      disabled={page === meta.last_page}
+                      className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
+                    >
+                      Next →
+                    </button>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* ── RIGHT: Detail / Form panel ──────────────────────────────── */}
+        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm self-start">
+          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              {editId ? 'Edit Category' : viewId ? 'Category Details' : 'New Category'}
+            </h2>
+            {editId && (
+              <span className="flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-600">
+                <Edit2 size={10} /> Editing
+              </span>
             )}
-          </>
-        )}
+            {viewId && !editId && (
+              <span className="flex items-center gap-1 rounded bg-sky-50 px-2 py-0.5 text-[11px] font-medium text-sky-600">
+                <Eye size={10} /> Viewing
+              </span>
+            )}
+          </div>
+
+          {viewId && !editId ? (
+            <CategoryDetail
+              key={viewId}
+              viewId={viewId}
+              onEdit={() => handleEdit(viewId)}
+              onClose={() => setViewId(null)}
+            />
+          ) : can('create_categories') || can('edit_categories') ? (
+            <CategoryForm
+              key={editId ?? 'create'}
+              editId={editId}
+              onDone={handleDone}
+              onCancel={() => setEditId(null)}
+            />
+          ) : (
+            <div className="p-4 text-xs text-slate-400">
+              You don't have permission to manage categories.
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   )

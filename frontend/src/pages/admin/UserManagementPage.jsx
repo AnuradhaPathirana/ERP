@@ -424,7 +424,7 @@ export default function UserManagementPage() {
                               type="button"
                               title="Edit"
                               onClick={() => openEdit(user)}
-                              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              className="rounded-md p-1.5 text-amber-500 transition-colors hover:bg-amber-50 hover:text-amber-700"
                             >
                               <Edit2 size={14} />
                             </button>
@@ -433,7 +433,7 @@ export default function UserManagementPage() {
                               title="Delete"
                               onClick={() => handleDelete(user)}
                               disabled={deleteMutation.isPending}
-                              className="rounded-md p-1.5 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                              className="rounded-md p-1.5 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
                             >
                               <Trash2 size={14} />
                             </button>

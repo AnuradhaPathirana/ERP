@@ -43,6 +43,24 @@ class AttributeService
         return $attribute->load('attributeType');
     }
 
+    /**
+     * Create one Attribute record for each name in the array.
+     *
+     * @param  array<int, string>  $names  Already-trimmed, non-empty names.
+     */
+    public function bulkCreate(int $attributeTypeId, array $names): Collection
+    {
+        $ids = [];
+        foreach ($names as $name) {
+            $ids[] = Attribute::create([
+                'attribute_type_id' => $attributeTypeId,
+                'attribute_name'    => $name,
+            ])->id;
+        }
+
+        return Attribute::with('attributeType')->whereIn('id', $ids)->get();
+    }
+
     public function delete(Attribute $attribute): void
     {
         $attribute->delete();

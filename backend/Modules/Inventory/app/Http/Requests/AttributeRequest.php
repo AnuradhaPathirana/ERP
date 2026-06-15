@@ -16,9 +16,11 @@ class AttributeRequest extends FormRequest
     /** @return array<string, array<int, mixed>> */
     public function rules(): array
     {
+        // max:500 allows comma-separated lists on both create and update;
+        // per-item max:100 is enforced in the controller after parsing.
         return [
             'attribute_type_id' => ['required', 'integer', 'exists:inv_attribute_types,id'],
-            'attribute_name'    => ['required', 'string', 'max:100'],
+            'attribute_name'    => ['required', 'string', 'max:500'],
         ];
     }
 

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { HelpCircle, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
+import { Check, ChevronDown, HelpCircle, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
 import { checkProductCode, createProduct, getProduct, updateProduct } from '../../api/products'
 import { getAllAttributes } from '../../api/attributes'
 import { getAllAttributeTypes } from '../../api/attributeTypes'
@@ -217,6 +217,108 @@ function CostSelect({ value, onChange, children, placeholder }) {
       <option value="">{placeholder ?? '— Select —'}</option>
       {children}
     </select>
+  )
+}
+
+function SupplierMultiSelect({ suppliers, selectedIds, onChange, error, touched }) {
+  const [open, setOpen] = useState(false)
+  const [search, setSearch] = useState('')
+  const ref = useRef(null)
+
+  useEffect(() => {
+    function handleOutside(e) {
+      if (ref.current && !ref.current.contains(e.target)) setOpen(false)
+    }
+    if (open) document.addEventListener('mousedown', handleOutside)
+    return () => document.removeEventListener('mousedown', handleOutside)
+  }, [open])
+
+  const filtered = suppliers.filter((s) =>
+    s.name.toLowerCase().includes(search.toLowerCase())
+  )
+
+  const toggle = (id) => {
+    const next = selectedIds.includes(id)
+      ? selectedIds.filter((x) => x !== id)
+      : [...selectedIds, id]
+    onChange(next)
+  }
+
+  const selectedNames = suppliers
+    .filter((s) => selectedIds.includes(s.id))
+    .map((s) => s.name)
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className={[
+          'flex w-full items-center justify-between rounded border px-2 py-1 bg-white text-left outline-none transition-all',
+          'focus:ring-1 focus:ring-indigo-500/30',
+          error && touched
+            ? 'border-red-400 focus:border-red-400'
+            : 'border-slate-300 focus:border-indigo-400',
+        ].join(' ')}
+      >
+        <span className={`flex-1 truncate text-sm ${selectedNames.length === 0 ? 'text-slate-400' : 'text-slate-800'}`}>
+          {selectedNames.length === 0 ? 'Select suppliers...' : selectedNames.join(', ')}
+        </span>
+        <ChevronDown size={14} className={`ml-1 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded border border-slate-200 bg-white shadow-lg">
+          <div className="border-b border-slate-100 p-1.5">
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search suppliers..."
+              autoFocus
+              className="block w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30"
+            />
+          </div>
+          <div className="max-h-48 overflow-y-auto">
+            {filtered.length === 0 ? (
+              <p className="px-3 py-2 text-xs italic text-slate-400">No suppliers found.</p>
+            ) : (
+              filtered.map((s) => {
+                const checked = selectedIds.includes(s.id)
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => toggle(s.id)}
+                    className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-slate-50"
+                  >
+                    <span className={[
+                      'flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border',
+                      checked ? 'bg-indigo-600 border-indigo-600' : 'border-slate-300 bg-white',
+                    ].join(' ')}>
+                      {checked && <Check size={10} className="text-white" strokeWidth={3} />}
+                    </span>
+                    <span className="truncate text-xs text-slate-700" title={s.name}>{s.name}</span>
+                  </button>
+                )
+              })
+            )}
+          </div>
+          {selectedIds.length > 0 && (
+            <div className="flex items-center justify-between border-t border-slate-100 px-2.5 py-1.5">
+              <span className="text-xs text-slate-500">{selectedIds.length} selected</span>
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                className="text-xs text-red-500 hover:text-red-700"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -568,16 +670,6 @@ export default function ProductFormPage() {
   }
 
   const handleCheck = (key) => setForm((prev) => ({ ...prev, [key]: !prev[key] }))
-
-  const toggleSupplier = (supplierId) => {
-    setForm((prev) => {
-      const ids = prev.supplier_ids.includes(supplierId)
-        ? prev.supplier_ids.filter((id) => id !== supplierId)
-        : [...prev.supplier_ids, supplierId]
-      return { ...prev, supplier_ids: ids }
-    })
-    setTouched((prev) => ({ ...prev, supplier_ids: true }))
-  }
 
   const addCostRow = () => {
     setForm((prev) => ({ ...prev, cost_details: [...prev.cost_details, { ...EMPTY_COST_ROW }] }))
@@ -957,29 +1049,25 @@ export default function ProductFormPage() {
           <div className="space-y-2.5">
 
             {/* Supplier */}
-            <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <section className="overflow-visible rounded-lg border border-slate-200 bg-white">
               <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
                   Supplier <span className="text-red-500">*</span>
                 </h2>
               </div>
               <div className="p-3">
+                <SupplierMultiSelect
+                  suppliers={suppliers}
+                  selectedIds={f.supplier_ids}
+                  onChange={(ids) => {
+                    setForm((prev) => ({ ...prev, supplier_ids: ids }))
+                    setTouched((prev) => ({ ...prev, supplier_ids: true }))
+                  }}
+                  error={e.supplier_ids}
+                  touched={t.supplier_ids}
+                />
                 {e.supplier_ids && t.supplier_ids && (
-                  <p className="mb-1.5 text-xs text-red-600">{e.supplier_ids}</p>
-                )}
-                {suppliers.length === 0 ? (
-                  <p className="text-xs italic text-slate-400">No suppliers available.</p>
-                ) : (
-                  <div className="grid grid-cols-1 gap-y-1.5">
-                    {suppliers.map((s) => (
-                      <label key={s.id} className="flex cursor-pointer items-center gap-1.5">
-                        <input type="checkbox" checked={f.supplier_ids.includes(s.id)}
-                          onChange={() => toggleSupplier(s.id)}
-                          className="h-3.5 w-3.5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 focus:ring-offset-0" />
-                        <span className="truncate text-xs text-slate-700" title={s.name}>{s.name}</span>
-                      </label>
-                    ))}
-                  </div>
+                  <p className="mt-1 text-xs text-red-600">{e.supplier_ids}</p>
                 )}
               </div>
             </section>

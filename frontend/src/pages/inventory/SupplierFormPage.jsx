@@ -11,7 +11,7 @@ function generateSupplierCode() {
   return `SUP-${String(num).padStart(4, '0')}`
 }
 
-const SUPPLIER_TYPES = ['Local', 'Foreign', 'Service', 'Manufacturer', 'Distributor', 'Other']
+const SUPPLIER_TYPES = ['Trade', 'Service']
 
 const EMPTY_FORM = {
   supplier_code:    '',

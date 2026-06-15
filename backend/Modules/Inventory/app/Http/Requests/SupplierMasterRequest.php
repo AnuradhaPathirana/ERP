@@ -25,7 +25,7 @@ class SupplierMasterRequest extends FormRequest
                     ->ignore($this->route('supplier_master')),
             ],
             'reference_no'              => ['nullable', 'string', 'max:50'],
-            'supplier_type'             => ['required', 'string', 'max:50'],
+            'supplier_type'             => ['required', 'string', Rule::in(['Trade', 'Service'])],
             'check_writer_name'         => ['nullable', 'string', 'max:100'],
 
             // Contact

@@ -13,8 +13,6 @@ const EMPTY_FORM = {
   store_type_id:    '',
   store_code:       '',
   store_name:       '',
-  uom:              '',
-  capacity:         '',
   location_id:      '',
   parent_store_id:  '',
   address_line_1:   '',
@@ -30,14 +28,12 @@ const EMPTY_FORM = {
   is_active:        true,
 }
 
-const REQUIRED = new Set(['store_type_id', 'store_code', 'store_name', 'uom', 'capacity'])
+const REQUIRED = new Set(['store_type_id', 'store_code', 'store_name'])
 
 const LABELS = {
   store_type_id: 'Store Type',
   store_code:    'Store Code',
   store_name:    'Store Name',
-  uom:           'Unit of Measure',
-  capacity:      'Capacity',
 }
 
 function validate(field, value) {
@@ -51,12 +47,6 @@ function validate(field, value) {
       break
     case 'store_name':
       if (v && String(v).length > 150) return 'Max 150 characters.'
-      break
-    case 'uom':
-      if (v && String(v).length > 50) return 'Max 50 characters.'
-      break
-    case 'capacity':
-      if (v !== '' && (isNaN(Number(v)) || Number(v) < 0)) return 'Must be a number ≥ 0.'
       break
     case 'email':
       if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return 'Enter a valid email.'
@@ -171,8 +161,6 @@ export default function StoreFormPage() {
         store_type_id:   String(s.store_type_id ?? ''),
         store_code:      s.store_code ?? '',
         store_name:      s.store_name ?? '',
-        uom:             s.uom ?? '',
-        capacity:        s.capacity != null ? String(s.capacity) : '',
         location_id:     String(s.location_id ?? ''),
         parent_store_id: String(s.parent_store_id ?? ''),
         address_line_1:  s.address_line_1 ?? '',
@@ -245,15 +233,12 @@ export default function StoreFormPage() {
     if (Object.values(newErrors).some(Boolean)) return
 
     const str  = (v) => (String(v).trim() === '' ? null : String(v).trim())
-    const num  = (v) => (v === '' ? null : Number(v))
     const intv = (v) => (v === '' || v === '0' ? null : parseInt(v, 10))
 
     mutation.mutate({
       store_type_id:    parseInt(form.store_type_id, 10),
       store_code:       form.store_code.trim(),
       store_name:       form.store_name.trim(),
-      uom:              form.uom.trim(),
-      capacity:         num(form.capacity),
       location_id:      intv(form.location_id),
       parent_store_id:  intv(form.parent_store_id),
       address_line_1:   str(form.address_line_1),
@@ -326,20 +311,6 @@ export default function StoreFormPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-                {/* UOM */}
-                <div>
-                  <Label required>Unit of Measure</Label>
-                  <input type="text" placeholder="e.g. sqft, m³, pallets" maxLength={50} {...inp('uom')} />
-                  <FieldError errors={errors} touched={touched} name="uom" />
-                </div>
-
-                {/* Capacity */}
-                <div>
-                  <Label required>Capacity</Label>
-                  <input type="number" min="0" step="0.01" placeholder="0.00" {...inp('capacity')} />
-                  <FieldError errors={errors} touched={touched} name="capacity" />
-                </div>
-
                 {/* Location */}
                 <div>
                   <Label>Location</Label>

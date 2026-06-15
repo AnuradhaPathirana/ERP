@@ -213,7 +213,7 @@ export default function CustomersPage() {
                             <Link
                               to={`/inventory/customers/${c.id}`}
                               title="View"
-                              className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                              className="rounded p-1 text-blue-500 transition-colors hover:bg-blue-50 hover:text-blue-700"
                             >
                               <Eye size={13} />
                             </Link>
@@ -221,7 +221,7 @@ export default function CustomersPage() {
                               <Link
                                 to={`/inventory/customers/${c.id}/edit`}
                                 title="Edit"
-                                className="rounded p-1 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                                className="rounded p-1 text-amber-500 transition-colors hover:bg-amber-50 hover:text-amber-700"
                               >
                                 <Edit2 size={13} />
                               </Link>
@@ -232,7 +232,7 @@ export default function CustomersPage() {
                                 title="Delete"
                                 onClick={() => handleDelete(c.id, c.customer_name)}
                                 disabled={deleteMutation.isPending}
-                                className="rounded p-1 text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+                                className="rounded p-1 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
                               >
                                 <Trash2 size={13} />
                               </button>

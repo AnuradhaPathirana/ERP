@@ -42,10 +42,40 @@ class AttributeController extends Controller
 
     public function store(AttributeRequest $request): JsonResponse
     {
-        $attribute = $this->service->create(AttributeData::fromRequest($request));
+        $typeId = (int) $request->validated('attribute_type_id');
+
+        // Parse comma-separated names, trim each, drop empties.
+        $names = array_values(array_filter(
+            array_map('trim', explode(',', (string) $request->validated('attribute_name'))),
+            fn (string $s): bool => $s !== '',
+        ));
+
+        // Per-item length guard (the form request only checks the whole string).
+        foreach ($names as $name) {
+            if (mb_strlen($name) > 100) {
+                return response()->json([
+                    'message' => 'Validation failed.',
+                    'errors'  => ['attribute_name' => ['"' . $name . '" exceeds the maximum of 100 characters.']],
+                ], 422);
+            }
+        }
+
+        if (count($names) <= 1) {
+            $attribute = $this->service->create(new AttributeData(
+                attribute_type_id: $typeId,
+                attribute_name:    $names[0] ?? '',
+            ));
+
+            return response()->json(
+                ['data' => (new AttributeResource($attribute))->toArray(request())],
+                201,
+            );
+        }
+
+        $created = $this->service->bulkCreate($typeId, $names);
 
         return response()->json(
-            ['data' => (new AttributeResource($attribute))->toArray(request())],
+            ['data' => $created->map(fn (Attribute $a) => (new AttributeResource($a))->toArray(request()))->values()->all()],
             201,
         );
     }
@@ -61,7 +91,30 @@ class AttributeController extends Controller
 
     public function update(AttributeRequest $request, Attribute $attribute): JsonResponse
     {
-        $updated = $this->service->update($attribute, AttributeData::fromRequest($request));
+        $typeId = (int) $request->validated('attribute_type_id');
+
+        $names = array_values(array_filter(
+            array_map('trim', explode(',', (string) $request->validated('attribute_name'))),
+            fn (string $s): bool => $s !== '',
+        ));
+
+        foreach ($names as $name) {
+            if (mb_strlen($name) > 100) {
+                return response()->json([
+                    'message' => 'Validation failed.',
+                    'errors'  => ['attribute_name' => ['"' . $name . '" exceeds the maximum of 100 characters.']],
+                ], 422);
+            }
+        }
+
+        $updated = $this->service->update($attribute, new AttributeData(
+            attribute_type_id: $typeId,
+            attribute_name:    $names[0] ?? '',
+        ));
+
+        if (count($names) > 1) {
+            $this->service->bulkCreate($typeId, array_slice($names, 1));
+        }
 
         return response()->json(
             ['data' => (new AttributeResource($updated))->toArray(request())],
