@@ -606,7 +606,7 @@ export default function CategoriesPage() {
                                 type="button"
                                 title="View"
                                 onClick={() => handleView(cat.id)}
-                                className={`rounded p-1 transition-colors ${viewId === cat.id ? 'bg-sky-100 text-sky-600' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}
+                                className={`rounded p-1 transition-colors ${viewId === cat.id ? 'bg-blue-100 text-blue-600' : 'text-blue-500 hover:bg-blue-50 hover:text-blue-700'}`}
                               >
                                 <Eye size={13} />
                               </button>
@@ -615,7 +615,7 @@ export default function CategoriesPage() {
                                   type="button"
                                   title="Edit"
                                   onClick={() => handleEdit(cat.id)}
-                                  className={`rounded p-1 transition-colors ${editId === cat.id ? 'bg-indigo-100 text-indigo-600' : 'text-slate-400 hover:bg-slate-100 hover:text-slate-700'}`}
+                                  className={`rounded p-1 transition-colors ${editId === cat.id ? 'bg-indigo-100 text-indigo-600' : 'text-amber-500 hover:bg-amber-50 hover:text-amber-700'}`}
                                 >
                                   <Edit2 size={13} />
                                 </button>

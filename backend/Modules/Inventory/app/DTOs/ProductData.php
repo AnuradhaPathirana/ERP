@@ -26,7 +26,7 @@ final class ProductData
         public readonly ?int    $locationId,
         public readonly ?float  $reorderLevel,
         public readonly ?float  $reorderQty,
-        public readonly ?string $reorderPeriod,
+        public readonly ?int    $reorderPeriod,
         public readonly ?string $stockReleasingMethod,
         public readonly ?string $trackingType,
         public readonly bool    $lockPurchase,
@@ -66,7 +66,9 @@ final class ProductData
             reorderQty:              $request->validated('reorder_qty') !== null
                                          ? (float) $request->validated('reorder_qty')
                                          : null,
-            reorderPeriod:           $request->validated('reorder_period'),
+            reorderPeriod:           $request->validated('reorder_period') !== null
+                                         ? (int) $request->validated('reorder_period')
+                                         : null,
             stockReleasingMethod:    $request->validated('stock_releasing_method'),
             trackingType:            $request->validated('tracking_type'),
             lockPurchase:            (bool) ($request->validated('lock_purchase')            ?? false),

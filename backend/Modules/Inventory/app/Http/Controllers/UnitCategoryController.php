@@ -7,6 +7,7 @@ namespace Modules\Inventory\Http\Controllers;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
 use Modules\Inventory\DTOs\UnitCategoryData;
+use Modules\Inventory\Http\Requests\UnitCategoryBulkRequest;
 use Modules\Inventory\Http\Requests\UnitCategoryRequest;
 use Modules\Inventory\Http\Resources\UnitCategoryResource;
 use Modules\Inventory\Models\UnitCategory;
@@ -17,7 +18,7 @@ class UnitCategoryController extends Controller
     public function __construct(private readonly UnitCategoryService $service)
     {
         $this->middleware('permission:view_unit_categories')->only(['index', 'show', 'all']);
-        $this->middleware('permission:create_unit_categories')->only(['store']);
+        $this->middleware('permission:create_unit_categories')->only(['store', 'bulkStore']);
         $this->middleware('permission:edit_unit_categories')->only(['update']);
         $this->middleware('permission:delete_unit_categories')->only(['destroy']);
     }
@@ -71,6 +72,21 @@ class UnitCategoryController extends Controller
         $this->service->delete($unitCategory);
 
         return response()->json(null, 204);
+    }
+
+    public function bulkStore(UnitCategoryBulkRequest $request): JsonResponse
+    {
+        $categories = $this->service->createMany(
+            $request->validated('names'),
+            $request->validated('description'),
+        );
+
+        return response()->json([
+            'data' => array_map(
+                fn (UnitCategory $cat) => (new UnitCategoryResource($cat))->toArray(request()),
+                $categories,
+            ),
+        ], 201);
     }
 
     /** Flat list for <select> dropdowns — no pagination, id+name only. */

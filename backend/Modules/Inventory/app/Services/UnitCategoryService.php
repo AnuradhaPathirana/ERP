@@ -45,6 +45,20 @@ class UnitCategoryService
         $category->delete();
     }
 
+    /** @return UnitCategory[] */
+    public function createMany(array $names, ?string $description = null): array
+    {
+        return \Illuminate\Support\Facades\DB::transaction(
+            fn (): array => array_map(
+                fn (string $name): UnitCategory => UnitCategory::create([
+                    'name'        => $name,
+                    'description' => $description,
+                ]),
+                $names,
+            ),
+        );
+    }
+
     /** Lightweight list for dropdowns — returns only id + name. */
     public function all(): \Illuminate\Database\Eloquent\Collection
     {

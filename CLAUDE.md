@@ -64,7 +64,7 @@ This document establishes the strict UI/UX standards for the SaaS ERP applicatio
   in New Product create page, we can optimize putting "Basic Information" card on left and on right "Supplier Detail" or "Stock & Reorder Settings" cards.
 - Need to Highlight input fields how can easily identify the input area, Do this for every frontend page
 
-- set appropriate color for each Actions buttons in each Data Table, as a Example Delete icon in Red color.
+- set appropriate colors for each Actions buttons in each Data Table, as a Example Delete icon in Red color.
 
 ---
 

@@ -85,10 +85,10 @@ class ProductResource extends JsonResource
                 ->map(fn ($c) => [
                     'sales_channel_id'               => $c->id,
                     'sales_channel_name'             => $c->sales_channel_name,
-                    'uom'                            => $c->pivot->uom,
                     'num_of_units'                   => $c->pivot->num_of_units                   !== null ? (float) $c->pivot->num_of_units                   : null,
                     'cost_price'                     => $c->pivot->cost_price                     !== null ? (float) $c->pivot->cost_price                     : null,
                     'margin'                         => $c->pivot->margin                         !== null ? (float) $c->pivot->margin                         : null,
+                    'margin_type'                    => $c->pivot->margin_type                    ?? 'percentage',
                     'selling_price'                  => $c->pivot->selling_price                  !== null ? (float) $c->pivot->selling_price                  : null,
                     'max_price'                      => $c->pivot->max_price                      !== null ? (float) $c->pivot->max_price                      : null,
                     'min_price'                      => $c->pivot->min_price                      !== null ? (float) $c->pivot->min_price                      : null,

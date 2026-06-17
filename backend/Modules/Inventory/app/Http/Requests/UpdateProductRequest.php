@@ -42,7 +42,7 @@ class UpdateProductRequest extends FormRequest
             // Reorder
             'reorder_level'          => ['nullable', 'numeric', 'min:0'],
             'reorder_qty'            => ['nullable', 'numeric', 'min:0'],
-            'reorder_period'         => ['nullable', 'string', 'max:50'],
+            'reorder_period'         => ['nullable', 'integer', 'min:1'],
 
             // Stock control
             'stock_releasing_method' => ['nullable', 'string', 'max:50'],
@@ -74,10 +74,10 @@ class UpdateProductRequest extends FormRequest
             // Cost details per sales channel
             'cost_details'                                  => ['nullable', 'array'],
             'cost_details.*.sales_channel_id'               => ['required', 'integer', 'exists:inv_sales_channels,id'],
-            'cost_details.*.uom'                            => ['nullable', 'string', 'max:50'],
             'cost_details.*.num_of_units'                   => ['nullable', 'numeric', 'min:0'],
             'cost_details.*.cost_price'                     => ['nullable', 'numeric', 'min:0'],
             'cost_details.*.margin'                         => ['nullable', 'numeric'],
+            'cost_details.*.margin_type'                    => ['nullable', 'string', Rule::in(['percentage', 'amount'])],
             'cost_details.*.selling_price'                  => ['nullable', 'numeric', 'min:0'],
             'cost_details.*.max_price'                      => ['nullable', 'numeric', 'min:0'],
             'cost_details.*.min_price'                      => ['nullable', 'numeric', 'min:0'],
@@ -103,7 +103,6 @@ class UpdateProductRequest extends FormRequest
             'stock_releasing_method'                => 'stock releasing method',
             'tracking_type'                         => 'tracking type',
             'cost_details.*.sales_channel_id'       => 'sales channel',
-            'cost_details.*.uom'                    => 'unit of measure',
             'cost_details.*.num_of_units'           => 'number of units',
             'cost_details.*.cost_price'             => 'cost price',
             'cost_details.*.margin'                 => 'margin',

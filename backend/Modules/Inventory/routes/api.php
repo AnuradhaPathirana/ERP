@@ -23,9 +23,11 @@ use Modules\Inventory\Http\Controllers\UnitConversionController;
 use Modules\Inventory\Http\Controllers\UnitTypeController;
 
 Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(function (): void {
-    // Named route before apiResource so /unit-categories/all is not swallowed by {unit_category}
+    // Named routes before apiResource so static segments are not swallowed by {unit_category}
     Route::get('unit-categories/all', [UnitCategoryController::class, 'all'])
         ->name('inventory.unit-categories.all');
+    Route::post('unit-categories/bulk', [UnitCategoryController::class, 'bulkStore'])
+        ->name('inventory.unit-categories.bulk-store');
 
     Route::apiResource('unit-categories', UnitCategoryController::class)
         ->names('inventory.unit-categories');

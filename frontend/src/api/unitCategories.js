@@ -14,6 +14,11 @@ export const getUnitCategory = (id) =>
 export const createUnitCategory = (payload) =>
   api.post(BASE, payload).then((r) => r.data)
 
+/** Bulk-create: payload = { names: string[], description?: string }
+ *  @returns {Promise<{ data: object[] }>} */
+export const createUnitCategories = (payload) =>
+  api.post(`${BASE}/bulk`, payload).then((r) => r.data)
+
 /** @returns {Promise<{ data: object }>} */
 export const updateUnitCategory = (id, payload) =>
   api.put(`${BASE}/${id}`, payload).then((r) => r.data)

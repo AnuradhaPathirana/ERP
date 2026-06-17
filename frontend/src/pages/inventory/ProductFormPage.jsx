@@ -23,7 +23,6 @@ function generateProductCode() {
 const PRODUCT_TYPES   = ['Inventory', 'Raw Material', 'Service']
 const STOCK_METHODS   = ['FIFO', 'LIFO', 'FEFO']
 const TRACKING_TYPES  = ['Batch', 'Serial']
-const REORDER_PERIODS = ['Daily', 'Weekly', 'Monthly', 'Quarterly', 'Yearly']
 
 const BOOL_OPTIONS = [
   { key: 'lock_purchase',             label: 'Lock Purchase' },
@@ -44,10 +43,10 @@ const EMPTY_LOCATION_STORE_ROW = { location_id: '', store_id: '' }
 
 const EMPTY_COST_ROW = {
   sales_channel_id:               '',
-  uom:                            '',
   num_of_units:                   '',
   cost_price:                     '',
   margin:                         '',
+  margin_type:                    'percentage',
   selling_price:                  '',
   max_price:                      '',
   min_price:                      '',
@@ -367,11 +366,161 @@ function AttributeRow({ row, idx, attributeTypes, allAttributes, usedAttributeId
   )
 }
 
+function calcSellingPrice(costPrice, margin, marginType) {
+  const cp = parseFloat(costPrice)
+  const m  = parseFloat(margin)
+  if (isNaN(cp) || isNaN(m)) return ''
+  return marginType === 'percentage'
+    ? (cp * (1 + m / 100)).toFixed(4)
+    : (cp + m).toFixed(4)
+}
+
+function calcMarginValue(costPrice, sellingPrice, marginType) {
+  const cp = parseFloat(costPrice)
+  const sp = parseFloat(sellingPrice)
+  if (isNaN(cp) || isNaN(sp) || cp === 0) return ''
+  return marginType === 'percentage'
+    ? (((sp - cp) / cp) * 100).toFixed(4)
+    : (sp - cp).toFixed(4)
+}
+
 // Single cost detail card
-function CostDetailCard({ row, idx, salesChannels, unitTypes, usedChannelIds, onChange, onRemove }) {
+function MarginField({ row, handle, toggleMarginType }) {
+  return (
+    <Field label={row.margin_type === 'percentage' ? 'Margin %' : 'Margin (Amt)'}>
+      <div className="flex overflow-hidden rounded border border-slate-300 bg-white focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-500/30">
+        <input
+          type="number"
+          value={row.margin}
+          onChange={handle('margin')}
+          step="0.01"
+          placeholder="0.00"
+          autoComplete="off"
+          className="min-w-0 flex-1 bg-transparent px-2 py-1 text-xs text-slate-800 outline-none"
+        />
+        <div className="flex shrink-0 border-l border-slate-200">
+          <button
+            type="button"
+            onClick={() => toggleMarginType('percentage')}
+            title="Percentage margin"
+            className={[
+              'px-1.5 text-xs font-semibold transition-colors',
+              row.margin_type === 'percentage'
+                ? 'bg-indigo-600 text-white'
+                : 'text-slate-500 hover:bg-slate-100',
+            ].join(' ')}
+          >%</button>
+          <button
+            type="button"
+            onClick={() => toggleMarginType('amount')}
+            title="Fixed amount margin"
+            className={[
+              'border-l border-slate-200 px-1.5 text-xs font-semibold transition-colors',
+              row.margin_type === 'amount'
+                ? 'bg-indigo-600 text-white'
+                : 'text-slate-500 hover:bg-slate-100',
+            ].join(' ')}
+          >$</button>
+        </div>
+      </div>
+    </Field>
+  )
+}
+
+function CostDetailCard({ row, idx, salesChannels, unitTypes, usedChannelIds, onChange, onRemove, isSingle }) {
   const avgPrice = computeAverage(row.cost_price, row.selling_price)
 
-  const handle = (field) => (e) => onChange(idx, field, e.target.value)
+  const handle = (field) => (e) => {
+    const value = e.target.value
+    if (field === 'cost_price') {
+      const sp = calcSellingPrice(value, row.margin, row.margin_type)
+      onChange(idx, sp !== '' ? { cost_price: value, selling_price: sp } : { cost_price: value })
+    } else if (field === 'margin') {
+      const sp = calcSellingPrice(row.cost_price, value, row.margin_type)
+      onChange(idx, sp !== '' ? { margin: value, selling_price: sp } : { margin: value })
+    } else if (field === 'selling_price') {
+      const m = calcMarginValue(row.cost_price, value, row.margin_type)
+      onChange(idx, m !== '' ? { selling_price: value, margin: m } : { selling_price: value })
+    } else {
+      onChange(idx, field, value)
+    }
+  }
+
+  const toggleMarginType = (newType) => {
+    if (newType === row.margin_type) return
+    const newMargin = calcMarginValue(row.cost_price, row.selling_price, newType)
+    onChange(idx, { margin_type: newType, ...(newMargin !== '' ? { margin: newMargin } : {}) })
+  }
+
+  const channelSelect = (
+    <Field label="Price List / Sale Channel" required>
+      <CostSelect value={row.sales_channel_id} onChange={handle('sales_channel_id')} placeholder="Channel...">
+        {salesChannels.map((c) => (
+          <option
+            key={c.id}
+            value={c.id}
+            disabled={usedChannelIds.includes(String(c.id)) && row.sales_channel_id !== String(c.id)}
+          >
+            {c.name}
+          </option>
+        ))}
+      </CostSelect>
+    </Field>
+  )
+
+  const numUnitsField = (
+    <Field label="Number Of Units" required>
+      <CostInput value={row.num_of_units} onChange={handle('num_of_units')} min="0" step="0.0001" placeholder="0" />
+    </Field>
+  )
+
+  const costPriceField = (
+    <Field label="Cost Price" required>
+      <CostInput value={row.cost_price} onChange={handle('cost_price')} min="0" step="0.0001" placeholder="0.00" />
+    </Field>
+  )
+
+  const sellingPriceField = (
+    <Field label="Selling Price" required>
+      <CostInput value={row.selling_price} onChange={handle('selling_price')} min="0" step="0.0001" placeholder="0.00" />
+    </Field>
+  )
+
+  const maxPriceField = (
+    <Field label="Maximum Price">
+      <CostInput value={row.max_price} onChange={handle('max_price')} min="0" step="0.0001" placeholder="0.00" />
+    </Field>
+  )
+
+  const minPriceField = (
+    <Field label="Minimum Price">
+      <CostInput value={row.min_price} onChange={handle('min_price')} min="0" step="0.0001" placeholder="0.00" />
+    </Field>
+  )
+
+  const wholesalePriceField = (
+    <Field label="Wholesale Price">
+      <CostInput value={row.wholesale_price} onChange={handle('wholesale_price')} min="0" step="0.0001" placeholder="0.00" />
+    </Field>
+  )
+
+  const saleDiscField = (
+    <Field label="Sale Disc %">
+      <CostInput value={row.sale_privileges_discount} onChange={handle('sale_privileges_discount')} min="0" max="100" step="0.01" placeholder="0.00" />
+    </Field>
+  )
+
+  const purchaseDiscField = (
+    <Field label="Purchase Disc %">
+      <CostInput value={row.purchasing_privileges_discount} onChange={handle('purchasing_privileges_discount')} min="0" max="100" step="0.01" placeholder="0.00" />
+    </Field>
+  )
+
+  const avgPriceField = (
+    <Field label="Average Price">
+      <CostInput value={avgPrice} disabled placeholder="—" />
+    </Field>
+  )
 
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 space-y-2.5">
@@ -390,128 +539,49 @@ function CostDetailCard({ row, idx, salesChannels, unitTypes, usedChannelIds, on
         </button>
       </div>
 
-      {/* Row 1: Sales Channel | UOM | Number of Units */}
-      <div className="grid grid-cols-3 gap-2.5">
-        <Field label="Price List / Sale Channel" required>
-          <CostSelect
-            value={row.sales_channel_id}
-            onChange={handle('sales_channel_id')}
-            placeholder="Channel..."
-          >
-            {salesChannels.map((c) => (
-              <option
-                key={c.id}
-                value={c.id}
-                disabled={usedChannelIds.includes(String(c.id)) && row.sales_channel_id !== String(c.id)}
-              >
-                {c.name}
-              </option>
-            ))}
-          </CostSelect>
-        </Field>
-        <Field label="UOM" required helpText="Unit of Measure">
-          <CostSelect
-            value={row.uom}
-            onChange={handle('uom')}
-            placeholder="Unit..."
-          >
-            {unitTypes.map((u) => (
-              <option key={u.id} value={u.symbol}>{u.name} ({u.symbol})</option>
-            ))}
-          </CostSelect>
-        </Field>
-        <Field label="Number Of Units" required>
-          <CostInput
-            value={row.num_of_units}
-            onChange={handle('num_of_units')}
-            min="0" step="0.0001"
-            placeholder="0"
-          />
-        </Field>
-      </div>
-
-      {/* Row 2: Cost Price | Margin % | Selling Price */}
-      <div className="grid grid-cols-3 gap-2.5">
-        <Field label="Cost Price" required>
-          <CostInput
-            value={row.cost_price}
-            onChange={handle('cost_price')}
-            min="0" step="0.0001"
-            placeholder="0.00"
-          />
-        </Field>
-        <Field label="Margin %"  required>
-          <CostInput
-            value={row.margin}
-            onChange={handle('margin')}
-            step="0.01"
-            placeholder="0.00"
-          />
-        </Field>
-        <Field label="Selling Price" required>
-          <CostInput
-            value={row.selling_price}
-            onChange={handle('selling_price')}
-            min="0" step="0.0001"
-            placeholder="0.00"
-          />
-        </Field>
-      </div>
-
-      {/* Row 3: Maximum Price | Minimum Price | Wholesale Price */}
-      <div className="grid grid-cols-3 gap-2.5">
-        <Field label="Maximum Price">
-          <CostInput
-            value={row.max_price}
-            onChange={handle('max_price')}
-            min="0" step="0.0001"
-            placeholder="0.00"
-          />
-        </Field>
-        <Field label="Minimum Price">
-          <CostInput
-            value={row.min_price}
-            onChange={handle('min_price')}
-            min="0" step="0.0001"
-            placeholder="0.00"
-          />
-        </Field>
-        <Field label="Wholesale Price">
-          <CostInput
-            value={row.wholesale_price}
-            onChange={handle('wholesale_price')}
-            min="0" step="0.0001"
-            placeholder="0.00"
-          />
-        </Field>
-      </div>
-
-      {/* Row 4: Sale Privileges Discount | Purchasing Privileges Discount | Average Price (read-only) */}
-      <div className="grid grid-cols-3 gap-2.5">
-        <Field label="Sale Privileges Discount">
-          <CostInput
-            value={row.sale_privileges_discount}
-            onChange={handle('sale_privileges_discount')}
-            min="0" max="100" step="0.01"
-            placeholder="0.00"
-          />
-        </Field>
-        <Field label="Purchasing Privileges Discount">
-          <CostInput
-            value={row.purchasing_privileges_discount}
-            onChange={handle('purchasing_privileges_discount')}
-            min="0" max="100" step="0.01"
-            placeholder="0.00"
-          />
-        </Field>
-        <Field label="Average Price">
-          <CostInput
-            value={avgPrice}
-            disabled
-            placeholder="—"
-          />
-        </Field>
-      </div>
+      {isSingle ? (
+        <>
+          {/* Single channel: 6 fields per row, full width */}
+          <div className="grid grid-cols-6 gap-2.5">
+            {channelSelect}
+            {numUnitsField}
+            {costPriceField}
+            <MarginField row={row} handle={handle} toggleMarginType={toggleMarginType} />
+            {sellingPriceField}
+            {maxPriceField}
+          </div>
+          <div className="grid grid-cols-5 gap-2.5">
+            {minPriceField}
+            {wholesalePriceField}
+            {saleDiscField}
+            {purchaseDiscField}
+            {avgPriceField}
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Multi-channel */}
+          <div className="grid grid-cols-2 gap-2.5">
+            {channelSelect}
+            {numUnitsField}
+          </div>
+          <div className="grid grid-cols-3 gap-2.5">
+            {costPriceField}
+            <MarginField row={row} handle={handle} toggleMarginType={toggleMarginType} />
+            {sellingPriceField}
+          </div>
+          <div className="grid grid-cols-3 gap-2.5">
+            {maxPriceField}
+            {minPriceField}
+            {wholesalePriceField}
+          </div>
+          <div className="grid grid-cols-3 gap-2.5">
+            {saleDiscField}
+            {purchaseDiscField}
+            {avgPriceField}
+          </div>
+        </>
+      )}
     </div>
   )
 }
@@ -610,7 +680,7 @@ export default function ProductFormPage() {
         })),
         reorder_level:             p.reorder_level            != null ? String(p.reorder_level) : '',
         reorder_qty:               p.reorder_qty              != null ? String(p.reorder_qty) : '',
-        reorder_period:            p.reorder_period           ?? '',
+        reorder_period:            p.reorder_period            != null ? String(p.reorder_period) : '',
         stock_releasing_method:    p.stock_releasing_method   ?? '',
         tracking_type:             p.tracking_type            ?? '',
         lock_purchase:              Boolean(p.lock_purchase),
@@ -631,10 +701,10 @@ export default function ProductFormPage() {
         })),
         cost_details:               (p.cost_details ?? []).map((c) => ({
           sales_channel_id:               String(c.sales_channel_id),
-          uom:                            c.uom                            ?? '',
           num_of_units:                   c.num_of_units                   != null ? String(c.num_of_units) : '',
           cost_price:                     c.cost_price                     != null ? String(c.cost_price) : '',
           margin:                         c.margin                         != null ? String(c.margin) : '',
+          margin_type:                    c.margin_type                    ?? 'percentage',
           selling_price:                  c.selling_price                  != null ? String(c.selling_price) : '',
           max_price:                      c.max_price                      != null ? String(c.max_price) : '',
           min_price:                      c.min_price                      != null ? String(c.min_price) : '',
@@ -679,10 +749,14 @@ export default function ProductFormPage() {
     setForm((prev) => ({ ...prev, cost_details: prev.cost_details.filter((_, i) => i !== idx) }))
   }
 
-  const handleCostChange = (idx, field, value) => {
+  const handleCostChange = (idx, fieldOrUpdates, value) => {
     setForm((prev) => ({
       ...prev,
-      cost_details: prev.cost_details.map((row, i) => i === idx ? { ...row, [field]: value } : row),
+      cost_details: prev.cost_details.map((row, i) => {
+        if (i !== idx) return row
+        if (typeof fieldOrUpdates === 'object') return { ...row, ...fieldOrUpdates }
+        return { ...row, [fieldOrUpdates]: value }
+      }),
     }))
   }
 
@@ -774,7 +848,7 @@ export default function ProductFormPage() {
         })),
       reorder_level:          toNum(form.reorder_level),
       reorder_qty:            toNum(form.reorder_qty),
-      reorder_period:         form.reorder_period || null,
+      reorder_period:         toNum(form.reorder_period),
       stock_releasing_method: form.stock_releasing_method || null,
       tracking_type:          form.tracking_type || null,
       supplier_ids:                form.supplier_ids,
@@ -799,10 +873,10 @@ export default function ProductFormPage() {
         .filter((r) => r.sales_channel_id)
         .map((r) => ({
           sales_channel_id:               Number(r.sales_channel_id),
-          uom:                            r.uom || null,
           num_of_units:                   toNum(r.num_of_units),
           cost_price:                     toNum(r.cost_price),
           margin:                         toNum(r.margin),
+          margin_type:                    r.margin_type || 'percentage',
           selling_price:                  toNum(r.selling_price),
           max_price:                      toNum(r.max_price),
           min_price:                      toNum(r.min_price),
@@ -1089,9 +1163,9 @@ export default function ProductFormPage() {
                   </Field>
                 </div>
                 <div className="grid grid-cols-1 gap-2">
-                  <Field label="Reorder Period">
-                    <SelectField name="reorder_period" value={f.reorder_period} onChange={handleChange} onBlur={handleBlur}
-                      options={REORDER_PERIODS} placeholder="— Select —" />
+                  <Field label="Reorder Period (Days)">
+                    <Input name="reorder_period" value={f.reorder_period} onChange={handleChange} onBlur={handleBlur}
+                      type="number" min="1" step="1" placeholder="e.g. 30" />
                   </Field>
                   <Field label="Stock Method">
                     <SelectField name="stock_releasing_method" value={f.stock_releasing_method} onChange={handleChange} onBlur={handleBlur}
@@ -1128,7 +1202,7 @@ export default function ProductFormPage() {
                 No channels added. Click <strong>+</strong> to configure pricing per sales channel.
               </p>
             ) : (
-              <div className="grid grid-cols-1 gap-2.5 xl:grid-cols-2">
+              <div className={f.cost_details.length === 1 ? '' : 'grid grid-cols-1 gap-2.5 xl:grid-cols-2'}>
                 {f.cost_details.map((row, idx) => (
                   <CostDetailCard
                     key={idx}
@@ -1139,6 +1213,7 @@ export default function ProductFormPage() {
                     usedChannelIds={usedChannelIds}
                     onChange={handleCostChange}
                     onRemove={removeCostRow}
+                    isSingle={f.cost_details.length === 1}
                   />
                 ))}
               </div>

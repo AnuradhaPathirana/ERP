@@ -97,10 +97,10 @@ class ProductService
             }
 
             $pivotData[$channelId] = [
-                'uom'                            => $row['uom']                            ?? null,
                 'num_of_units'                   => $row['num_of_units']                   ?? null,
                 'cost_price'                     => $row['cost_price']                     ?? null,
                 'margin'                         => $row['margin']                         ?? null,
+                'margin_type'                    => $row['margin_type']                    ?? 'percentage',
                 'selling_price'                  => $row['selling_price']                  ?? null,
                 'max_price'                      => $row['max_price']                      ?? null,
                 'min_price'                      => $row['min_price']                      ?? null,

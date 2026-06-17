@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Save, Trash2, X } from 'lucide-react'
 import {
-  createUnitCategory, deleteUnitCategory, getUnitCategories, getUnitCategory, updateUnitCategory,
+  createUnitCategories, deleteUnitCategory, getUnitCategories, getUnitCategory, updateUnitCategory,
 } from '../../api/unitCategories'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
@@ -14,15 +14,6 @@ const CRUMBS = [
 ]
 
 const EMPTY_FORM = { name: '', description: '' }
-
-function validate(field, value) {
-  if (field === 'name') {
-    if (!value.trim()) return 'Name is required.'
-    if (value.length > 100) return 'Max 100 characters.'
-  }
-  if (field === 'description' && value.length > 255) return 'Max 255 characters.'
-  return ''
-}
 
 const inputBase =
   'block w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
@@ -65,6 +56,28 @@ function UnitCategoryForm({ editId, onDone, onCancel }) {
     if (!isFetching) nameRef.current?.focus()
   }, [isFetching, editId])
 
+  // Parsed name chips — only relevant in create mode
+  const parsedNames = !isEditing
+    ? form.name.split(',').map((s) => s.trim()).filter(Boolean)
+    : []
+
+  const validate = (field, value) => {
+    if (field === 'name') {
+      if (!value.trim()) return 'Name is required.'
+      if (isEditing) {
+        if (value.length > 100) return 'Max 100 characters.'
+      } else {
+        const names = value.split(',').map((s) => s.trim()).filter(Boolean)
+        const overLimit = names.find((n) => n.length > 100)
+        if (overLimit) return `"${overLimit.substring(0, 25)}…" exceeds 100 characters.`
+        const lower = names.map((n) => n.toLowerCase())
+        if (lower.some((n, i) => lower.indexOf(n) !== i)) return 'Duplicate names detected.'
+      }
+    }
+    if (field === 'description' && value.length > 255) return 'Max 255 characters.'
+    return ''
+  }
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setForm((prev) => ({ ...prev, [name]: value }))
@@ -79,12 +92,16 @@ function UnitCategoryForm({ editId, onDone, onCancel }) {
 
   const mutation = useMutation({
     mutationFn: (payload) =>
-      isEditing ? updateUnitCategory(editId, payload) : createUnitCategory(payload),
-    onSuccess: () => {
+      isEditing ? updateUnitCategory(editId, payload) : createUnitCategories(payload),
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['unit-categories'] })
       queryClient.invalidateQueries({ queryKey: ['unit-categories-all'] })
       if (isEditing) queryClient.invalidateQueries({ queryKey: ['unit-category', editId] })
-      showSuccess(isEditing ? 'Unit category updated.' : 'Unit category created.')
+      const count = !isEditing ? (data?.data?.length ?? 1) : null
+      showSuccess(
+        isEditing ? 'Unit category updated.'
+          : count > 1 ? `${count} unit categories created.` : 'Unit category created.',
+      )
       onDone()
     },
     onError: (err) => {
@@ -104,7 +121,12 @@ function UnitCategoryForm({ editId, onDone, onCancel }) {
     setErrors({ name: nameErr, description: descErr })
     setTouched({ name: true, description: true })
     if (nameErr || descErr) return
-    mutation.mutate({ name: form.name.trim(), description: form.description.trim() || null })
+    if (isEditing) {
+      mutation.mutate({ name: form.name.trim(), description: form.description.trim() || null })
+    } else {
+      const names = form.name.split(',').map((s) => s.trim()).filter(Boolean)
+      mutation.mutate({ names, description: form.description.trim() || null })
+    }
   }
 
   if (isEditing && isFetching) {
@@ -116,10 +138,10 @@ function UnitCategoryForm({ editId, onDone, onCancel }) {
   return (
     <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3 p-4">
 
-      {/* Name */}
+      {/* Name(s) */}
       <div>
         <label className="mb-0.5 block text-xs font-medium text-slate-600">
-          Name <span className="text-red-500">*</span>
+          {isEditing ? 'Name' : 'Name(s)'} <span className="text-red-500">*</span>
         </label>
         <input
           ref={nameRef}
@@ -128,15 +150,31 @@ function UnitCategoryForm({ editId, onDone, onCancel }) {
           value={form.name}
           onChange={handleChange}
           onBlur={handleBlur}
-          placeholder="e.g. Weight, Length, Volume"
-          maxLength={100}
+          placeholder={isEditing ? 'e.g. Weight' : 'e.g. Weight, Length, Volume'}
+          maxLength={isEditing ? 100 : undefined}
           autoComplete="off"
           className={errors.name && touched.name ? inputErr : inputBase}
         />
-        {errors.name && touched.name
-          ? <p className="mt-0.5 text-[11px] text-red-600">{errors.name}</p>
-          : <p className="mt-0.5 text-[11px] text-slate-400">{form.name.length}/100</p>
-        }
+        {errors.name && touched.name ? (
+          <p className="mt-0.5 text-[11px] text-red-600">{errors.name}</p>
+        ) : isEditing ? (
+          <p className="mt-0.5 text-[11px] text-slate-400">{form.name.length}/100</p>
+        ) : (
+          <p className="mt-0.5 text-[11px] text-slate-400">Separate multiple names with commas</p>
+        )}
+        {/* Parsed name chips — visible when 2+ names are detected */}
+        {!isEditing && parsedNames.length > 1 && (
+          <div className="mt-1.5 flex flex-wrap gap-1">
+            {parsedNames.map((name, i) => (
+              <span
+                key={i}
+                className="inline-flex items-center rounded border border-indigo-100 bg-indigo-50 px-1.5 py-0.5 text-[11px] font-medium text-indigo-700"
+              >
+                {name}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Description */}
@@ -188,7 +226,13 @@ function UnitCategoryForm({ editId, onDone, onCancel }) {
           className="flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Save size={13} strokeWidth={2.5} />
-          {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Category'}
+          {mutation.isPending
+            ? 'Saving…'
+            : isEditing
+              ? 'Save Changes'
+              : parsedNames.length > 1
+                ? `Create ${parsedNames.length} Categories`
+                : 'Create Category'}
         </button>
       </div>
     </form>
