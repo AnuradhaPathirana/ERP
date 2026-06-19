@@ -1,0 +1,668 @@
+import { useEffect, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import {
+  Building2, CalendarDays, Package, Plus, RefreshCw, Save, Trash2,
+} from 'lucide-react'
+import {
+  createPurchaseOrder,
+  getPurchaseOrder,
+  loadPOFromPR,
+  updatePurchaseOrder,
+} from '../../api/purchaseOrders'
+import { getPurchaseRequests } from '../../api/purchaseRequests'
+import { getAllLocations } from '../../api/locations'
+import { getAllStores } from '../../api/stores'
+import { getAllSuppliers } from '../../api/suppliers'
+import { getAllUnitTypes } from '../../api/unitTypes'
+import Breadcrumb from '../../components/Breadcrumb'
+import { showError, showSuccess } from '../../utils/alerts'
+import api from '../../api/axios'
+
+const PAYMENT_TERMS = ['Net 15', 'Net 30', 'Net 45', 'Net 60', 'COD', 'Advance', 'LC']
+
+const ALL_STATUSES = [
+  { value: 'draft',              label: 'Draft' },
+  { value: 'sent',               label: 'Sent to Supplier' },
+  { value: 'confirmed',          label: 'Confirmed' },
+  { value: 'partially_received', label: 'Partially Received' },
+  { value: 'completed',          label: 'Completed' },
+  { value: 'cancelled',          label: 'Cancelled' },
+]
+
+const STATUS_SELECT_STYLES = {
+  draft:              { background: '#f1f5f9', color: '#475569', borderColor: '#94a3b8' },
+  sent:               { background: '#eff6ff', color: '#1d4ed8', borderColor: '#93c5fd' },
+  confirmed:          { background: '#eef2ff', color: '#4338ca', borderColor: '#a5b4fc' },
+  partially_received: { background: '#fffbeb', color: '#b45309', borderColor: '#fcd34d' },
+  completed:          { background: '#f0fdf4', color: '#15803d', borderColor: '#86efac' },
+  cancelled:          { background: '#fef2f2', color: '#dc2626', borderColor: '#fca5a5' },
+}
+
+const INPUT_CLS =
+  'block w-full rounded border border-slate-300 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20'
+const INPUT_ERR_CLS =
+  'block w-full rounded border border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-1 focus:ring-red-500/20'
+const SELECT_CLS =
+  'block w-full rounded border border-slate-300 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 cursor-pointer'
+const SELECT_ERR_CLS =
+  'block w-full rounded border border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-1 focus:ring-red-500/20 cursor-pointer'
+const SELECT_DISABLED_CLS =
+  'block w-full rounded border border-slate-200 bg-slate-100 px-2 py-1 text-xs text-slate-400 outline-none cursor-not-allowed'
+const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
+const ERR_CLS   = 'text-[10px] text-red-500 leading-tight'
+
+function SectionHeader({ icon: Icon, title, colorClass }) {
+  return (
+    <div className={`flex items-center gap-1.5 px-3 py-1.5 border-b rounded-t-lg ${colorClass}`}>
+      {Icon && <Icon size={12} />}
+      <h2 className="text-xs font-bold">{title}</h2>
+    </div>
+  )
+}
+
+function emptyItem() {
+  return {
+    _key:             Date.now() + Math.random(),
+    product_id:       '',
+    product_code:     '',
+    product_name:     '',
+    pr_item_id:       null,
+    quantity_ordered: '',
+    unit_id:          '',
+    unit_price:       '',
+    discount:         '',
+    tax:              '',
+  }
+}
+
+function calcItem(row) {
+  const qty     = parseFloat(row.quantity_ordered) || 0
+  const price   = parseFloat(row.unit_price)       || 0
+  const discPct = parseFloat(row.discount)         || 0
+  const taxPct  = parseFloat(row.tax)              || 0
+  const gross    = qty * price
+  const discAmt  = gross * (discPct / 100)
+  const taxAmt   = gross * (taxPct  / 100)
+  const amount   = gross - discAmt + taxAmt
+  return { gross, discAmt, taxAmt, amount }
+}
+
+const EMPTY_FORM = {
+  po_no:                  '',
+  pr_id:                  '',
+  supplier_id:            '',
+  location_id:            '',
+  store_id:               '',
+  order_date:             new Date().toISOString().slice(0, 10),
+  expected_delivery_date: '',
+  reference_no:           '',
+  payment_terms:          '',
+  contact_person_name:    '',
+  contact_person_phone:   '',
+  is_consignment:         false,
+  billing_address:        '',
+  shipping_address:       '',
+  remarks:                '',
+  status:                 '',
+}
+
+export default function PurchaseOrderFormPage() {
+  const { id }      = useParams()
+  const isEdit      = Boolean(id)
+  const navigate    = useNavigate()
+  const [search]    = useSearchParams()
+  const prIdFromUrl = search.get('pr_id')
+  const CRUMBS = [
+    { label: 'Inventory', to: '/inventory/products' },
+    { label: 'Purchase Orders', to: '/inventory/purchase-orders' },
+    { label: isEdit ? 'Edit PO' : 'New PO' },
+  ]
+
+  const today = new Date().toISOString().slice(0, 10)
+
+  const [form, setForm]         = useState({ ...EMPTY_FORM, pr_id: prIdFromUrl ?? '', order_date: today })
+  const [items, setItems]       = useState([emptyItem()])
+  const [errors, setErrors]     = useState({})
+  const [products, setProducts] = useState([])
+
+  const { data: locations  = [] } = useQuery({ queryKey: ['locations-all'],  queryFn: getAllLocations })
+  const { data: suppliers  = [] } = useQuery({ queryKey: ['suppliers-all'],  queryFn: getAllSuppliers })
+  const { data: stores     = [] } = useQuery({ queryKey: ['stores-all'],     queryFn: getAllStores })
+  const { data: unitTypes  = [] } = useQuery({ queryKey: ['unit-types-all'], queryFn: getAllUnitTypes })
+
+  const filteredStores = form.location_id
+    ? stores.filter((s) => String(s.location_id) === String(form.location_id))
+    : []
+
+  const { data: approvedPRs } = useQuery({
+    queryKey: ['prs-approved'],
+    queryFn:  () => getPurchaseRequests(1, { status: 'approved' }),
+  })
+
+  useEffect(() => {
+    api.get('/api/v1/products', { params: { per_page: 1000 } })
+      .then((r) => setProducts(r.data.data ?? []))
+      .catch(() => {})
+  }, [])
+
+  const { data: existingPO, isLoading: loadingPO } = useQuery({
+    queryKey: ['purchase-order', id],
+    queryFn:  () => getPurchaseOrder(id),
+    enabled:  isEdit,
+  })
+
+  useEffect(() => {
+    if (!existingPO?.data) return
+    const po = existingPO.data
+    setForm({
+      po_no:                  po.po_no                  ?? '',
+      pr_id:                  po.pr_id                  ?? '',
+      supplier_id:            po.supplier_id            ?? '',
+      location_id:            po.location_id            ?? '',
+      store_id:               po.store_id               ?? '',
+      order_date:             po.order_date             ?? today,
+      expected_delivery_date: po.expected_delivery_date ?? '',
+      reference_no:           po.reference_no           ?? '',
+      payment_terms:          po.payment_terms          ?? '',
+      contact_person_name:    po.contact_person_name    ?? '',
+      contact_person_phone:   po.contact_person_phone   ?? '',
+      is_consignment:         po.is_consignment         ?? false,
+      billing_address:        po.billing_address        ?? '',
+      shipping_address:       po.shipping_address       ?? '',
+      remarks:                po.remarks                ?? '',
+      status:                 po.status                 ?? '',
+    })
+    if (po.items?.length) {
+      setItems(po.items.map((it) => ({
+        _key:             it.id,
+        product_id:       it.product_id,
+        product_code:     it.product?.product_code ?? '',
+        product_name:     it.product?.name         ?? '',
+        pr_item_id:       it.pr_item_id            ?? null,
+        quantity_ordered: it.quantity_ordered,
+        unit_id:          it.unit_id               ?? '',
+        unit_price:       it.unit_price,
+        discount:         it.discount              ?? '',
+        tax:              it.tax                   ?? '',
+      })))
+    }
+  }, [existingPO])
+
+  const loadPRMutation = useMutation({
+    mutationFn: loadPOFromPR,
+    onSuccess: (result) => {
+      const data = result.data
+      if (data?.items?.length) {
+        setItems(data.items.map((it) => ({
+          _key:             Date.now() + Math.random(),
+          product_id:       it.product_id,
+          product_code:     it.product?.product_code ?? '',
+          product_name:     it.product?.name         ?? '',
+          pr_item_id:       it.pr_item_id,
+          quantity_ordered: it.quantity_ordered,
+          unit_id:          it.unit_id ?? '',
+          unit_price:       it.unit_price,
+          discount:         '',
+          tax:              '',
+        })))
+      }
+      if (data?.pr?.target_store_id) {
+        setForm((f) => ({ ...f, store_id: data.pr.target_store_id }))
+      }
+    },
+    onError: () => showError('Failed to load items from PR.'),
+  })
+
+  useEffect(() => {
+    if (prIdFromUrl && !isEdit) {
+      setForm((f) => ({ ...f, pr_id: prIdFromUrl }))
+      loadPRMutation.mutate(prIdFromUrl)
+    }
+  }, [prIdFromUrl])
+
+  const handlePRChange = (prId) => {
+    setForm((f) => ({ ...f, pr_id: prId }))
+    if (prId) loadPRMutation.mutate(prId)
+    else setItems([emptyItem()])
+  }
+
+  const handleLocationChange = (locationId) => {
+    setForm((f) => ({ ...f, location_id: locationId, store_id: '' }))
+    if (errors.location_id || errors.store_id) {
+      setErrors((prev) => ({ ...prev, location_id: undefined, store_id: undefined }))
+    }
+  }
+
+  const handleProductSelect = (idx, productId) => {
+    const product = products.find((p) => p.id === parseInt(productId))
+    setItems((prev) => prev.map((row, i) =>
+      i === idx
+        ? { ...row, product_id: productId, product_code: product?.product_code ?? '', product_name: product?.name ?? '' }
+        : row,
+    ))
+  }
+
+  const clearFieldError = (field) => {
+    if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }))
+  }
+
+  const addRows     = (n = 1) => setItems((prev) => [...prev, ...Array.from({ length: n }, emptyItem)])
+  const removeRow   = (idx)   => setItems((prev) => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
+  const setRowField = (idx, field, value) => setItems((prev) => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row))
+  const setField    = (field) => (e) => {
+    setForm((f) => ({ ...f, [field]: e.target.value }))
+    clearFieldError(field)
+  }
+
+  const totals = items.reduce(
+    (acc, row) => {
+      const { gross, discAmt, taxAmt, amount } = calcItem(row)
+      return { gross: acc.gross + gross, disc: acc.disc + discAmt, tax: acc.tax + taxAmt, total: acc.total + amount }
+    },
+    { gross: 0, disc: 0, tax: 0, total: 0 },
+  )
+
+  const saveMutation = useMutation({
+    mutationFn: (payload) => isEdit ? updatePurchaseOrder(id, payload) : createPurchaseOrder(payload),
+    onSuccess: () => {
+      showSuccess(isEdit ? 'Purchase order updated.' : 'Purchase order created.')
+      navigate('/inventory/purchase-orders')
+    },
+    onError: (e) => {
+      const data = e.response?.data
+      if (data?.errors) setErrors(data.errors)
+      showError(data?.message ?? 'Failed to save purchase order.')
+    },
+  })
+
+  const handleSubmit = () => {
+    const clientErrors = {}
+
+    if (!form.po_no.trim())
+      clientErrors.po_no = ['PO Number is required.']
+    else if (form.po_no.trim().length > 30)
+      clientErrors.po_no = ['PO Number must not exceed 30 characters.']
+
+    if (!form.supplier_id)
+      clientErrors.supplier_id = ['Supplier is required.']
+
+    if (!form.location_id)
+      clientErrors.location_id = ['Location is required.']
+
+    if (!form.store_id)
+      clientErrors.store_id = ['Store is required.']
+
+    if (!form.order_date)
+      clientErrors.order_date = ['Transaction Date is required.']
+
+    if (form.expected_delivery_date && form.order_date && form.expected_delivery_date < form.order_date)
+      clientErrors.expected_delivery_date = ['Expected delivery date must be on or after the transaction date.']
+
+    if (!form.contact_person_name.trim())
+      clientErrors.contact_person_name = ['Contact Person is required.']
+    else if (form.contact_person_name.trim().length > 100)
+      clientErrors.contact_person_name = ['Contact Person must not exceed 100 characters.']
+
+    if (!form.contact_person_phone.trim())
+      clientErrors.contact_person_phone = ['Contact Phone is required.']
+    else if (form.contact_person_phone.trim().length > 30)
+      clientErrors.contact_person_phone = ['Contact Phone must not exceed 30 characters.']
+
+    if (!form.billing_address.trim())
+      clientErrors.billing_address = ['Billing Address is required.']
+    else if (form.billing_address.trim().length > 500)
+      clientErrors.billing_address = ['Billing Address must not exceed 500 characters.']
+
+    if (form.shipping_address.trim().length > 500)
+      clientErrors.shipping_address = ['Shipping Address must not exceed 500 characters.']
+
+    if (form.remarks.trim().length > 1000)
+      clientErrors.remarks = ['Remarks must not exceed 1000 characters.']
+
+    const validItems = items.filter((r) => r.product_id && parseFloat(r.quantity_ordered) > 0)
+    if (validItems.length === 0)
+      clientErrors.items = ['At least one product with a valid quantity is required.']
+
+    if (Object.keys(clientErrors).length) {
+      setErrors(clientErrors)
+      showError('Please fill in all required fields.')
+      return
+    }
+
+    setErrors({})
+    saveMutation.mutate({
+      ...form,
+      po_no:       form.po_no.trim(),
+      pr_id:       form.pr_id       || null,
+      supplier_id: form.supplier_id || null,
+      location_id: form.location_id || null,
+      store_id:    form.store_id    || null,
+      status:      form.status      || null,
+      items: validItems.map((r) => ({
+        product_id:       parseInt(r.product_id),
+        pr_item_id:       r.pr_item_id ?? null,
+        unit_id:          r.unit_id ? parseInt(r.unit_id) : null,
+        quantity_ordered: parseFloat(r.quantity_ordered),
+        unit_price:       parseFloat(r.unit_price)  || 0,
+        discount:         parseFloat(r.discount)    || 0,
+        tax:              parseFloat(r.tax)         || 0,
+      })),
+    })
+  }
+
+  const handleClear = () => {
+    setForm({ ...EMPTY_FORM, order_date: today })
+    setItems([emptyItem()])
+    setErrors({})
+  }
+
+  const err = (f) => errors[f]?.[0]
+
+  if (isEdit && loadingPO) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="flex items-center gap-2 text-sm text-slate-400">
+          <RefreshCw size={14} className="animate-spin" /> Loading…
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="w-full">
+      {/* Page Header */}
+      <div className="mb-2 flex items-center justify-between">
+        <div>
+          <h1 className="text-base font-bold leading-none text-slate-800">
+            {isEdit ? 'Edit Purchase Order' : 'New Purchase Order'}
+          </h1>
+          <Breadcrumb crumbs={CRUMBS} />
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2">
+
+        {/* ── Order Details ── */}
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <SectionHeader icon={CalendarDays} title="Order Details" colorClass="text-indigo-700 bg-indigo-50 border-indigo-100" />
+          <div className="space-y-2 p-3">
+
+            {/* Row 1: PO No | Tx Date | Exp Delivery | Ref No | Payment Terms */}
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
+              <div>
+                <label className={LABEL_CLS}>PO Number <span className="text-red-500 normal-case font-bold">*</span></label>
+                <input className={err('po_no') ? INPUT_ERR_CLS : INPUT_CLS} placeholder="e.g. PO-2026-0001" value={form.po_no} onChange={setField('po_no')} />
+                {err('po_no') && <p className={ERR_CLS}>{err('po_no')}</p>}
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Transaction Date <span className="text-red-500 normal-case font-bold">*</span></label>
+                <input type="date" className={err('order_date') ? INPUT_ERR_CLS : INPUT_CLS} value={form.order_date} onChange={setField('order_date')} />
+                {err('order_date') && <p className={ERR_CLS}>{err('order_date')}</p>}
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Expected Delivery</label>
+                <input type="date" className={err('expected_delivery_date') ? INPUT_ERR_CLS : INPUT_CLS} value={form.expected_delivery_date} onChange={setField('expected_delivery_date')} />
+                {err('expected_delivery_date') && <p className={ERR_CLS}>{err('expected_delivery_date')}</p>}
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Reference No.</label>
+                <input className={INPUT_CLS} placeholder="e.g. REF-001" value={form.reference_no} onChange={setField('reference_no')} />
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Payment Terms</label>
+                <select className={SELECT_CLS} value={form.payment_terms} onChange={setField('payment_terms')}>
+                  <option value="">— Select —</option>
+                  {PAYMENT_TERMS.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Row 2: Location | Store | From PR | Consignment | Remarks */}
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
+              <div>
+                <label className={LABEL_CLS}>Location <span className="text-red-500 normal-case font-bold">*</span></label>
+                <select className={err('location_id') ? SELECT_ERR_CLS : SELECT_CLS} value={form.location_id} onChange={(e) => handleLocationChange(e.target.value)}>
+                  <option value="">— Select location —</option>
+                  {locations.map((l) => <option key={l.id} value={l.id}>{l.location_name ?? l.name}</option>)}
+                </select>
+                {err('location_id') && <p className={ERR_CLS}>{err('location_id')}</p>}
+              </div>
+              <div>
+                <label className={LABEL_CLS}>
+                  Store <span className="text-red-500 normal-case font-bold">*</span>
+                  {!form.location_id && <span className="ml-1 normal-case font-medium text-amber-500 text-[10px]">↑ first</span>}
+                </label>
+                {form.location_id ? (
+                  <select className={err('store_id') ? SELECT_ERR_CLS : SELECT_CLS} value={form.store_id} onChange={(e) => { setForm((f) => ({ ...f, store_id: e.target.value })); clearFieldError('store_id') }}>
+                    <option value="">— Select store —</option>
+                    {filteredStores.map((s) => <option key={s.id} value={s.id}>{s.store_name}</option>)}
+                  </select>
+                ) : (
+                  <select className={SELECT_DISABLED_CLS} disabled><option>— Select location first —</option></select>
+                )}
+                {err('store_id') && <p className={ERR_CLS}>{err('store_id')}</p>}
+              </div>
+              <div>
+                <label className={LABEL_CLS}>From PR (optional)</label>
+                <select className={SELECT_CLS} value={form.pr_id} onChange={(e) => handlePRChange(e.target.value)}>
+                  <option value="">— Direct PO —</option>
+                  {(approvedPRs?.data ?? []).map((pr) => <option key={pr.id} value={pr.id}>{pr.pr_no} — {pr.purpose || 'No purpose'}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Remarks</label>
+                <input className={err('remarks') ? INPUT_ERR_CLS : INPUT_CLS} placeholder="Notes…" value={form.remarks} onChange={setField('remarks')} />
+                {err('remarks') && <p className={ERR_CLS}>{err('remarks')}</p>}
+              </div>
+              <div className="flex items-end pb-0.5">
+                <label className="flex cursor-pointer select-none items-center gap-1.5 group">
+                  <input type="checkbox" checked={form.is_consignment} onChange={(e) => setForm((f) => ({ ...f, is_consignment: e.target.checked }))} className="sr-only" />
+                  <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border-2 transition-all ${form.is_consignment ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300 bg-white group-hover:border-indigo-400'}`}>
+                    {form.is_consignment && (
+                      <svg className="h-2 w-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    )}
+                  </span>
+                  <span className="text-[11px] font-semibold text-slate-600 group-hover:text-slate-800 transition-colors">Consignment</span>
+                </label>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+        {/* ── Supplier Details ── */}
+        <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
+          <SectionHeader icon={Building2} title="Supplier Details" colorClass="text-emerald-700 bg-emerald-50 border-emerald-100" />
+          <div className="p-3">
+            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
+              <div>
+                <label className={LABEL_CLS}>Supplier <span className="text-red-500 normal-case font-bold">*</span></label>
+                <select className={err('supplier_id') ? SELECT_ERR_CLS : SELECT_CLS} value={form.supplier_id} onChange={(e) => { setForm((f) => ({ ...f, supplier_id: e.target.value })); clearFieldError('supplier_id') }}>
+                  <option value="">— Select supplier —</option>
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+                {err('supplier_id') && <p className={ERR_CLS}>{err('supplier_id')}</p>}
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Contact Person <span className="text-red-500 normal-case font-bold">*</span></label>
+                <input className={err('contact_person_name') ? INPUT_ERR_CLS : INPUT_CLS} placeholder="Name" value={form.contact_person_name} onChange={setField('contact_person_name')} />
+                {err('contact_person_name') && <p className={ERR_CLS}>{err('contact_person_name')}</p>}
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Contact Phone <span className="text-red-500 normal-case font-bold">*</span></label>
+                <input className={err('contact_person_phone') ? INPUT_ERR_CLS : INPUT_CLS} placeholder="Phone" value={form.contact_person_phone} onChange={setField('contact_person_phone')} />
+                {err('contact_person_phone') && <p className={ERR_CLS}>{err('contact_person_phone')}</p>}
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Billing Address <span className="text-red-500 normal-case font-bold">*</span></label>
+                <input className={err('billing_address') ? INPUT_ERR_CLS : INPUT_CLS} placeholder="Billing address" value={form.billing_address} onChange={setField('billing_address')} />
+                {err('billing_address') && <p className={ERR_CLS}>{err('billing_address')}</p>}
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Shipping Address</label>
+                <input className={err('shipping_address') ? INPUT_ERR_CLS : INPUT_CLS} placeholder="Shipping address" value={form.shipping_address} onChange={setField('shipping_address')} />
+                {err('shipping_address') && <p className={ERR_CLS}>{err('shipping_address')}</p>}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── Order Items ── */}
+        <div className="flex flex-col rounded-lg border border-slate-200 bg-white shadow-sm">
+          <SectionHeader icon={Package} title="Order Items" colorClass="text-violet-700 bg-violet-50 border-violet-100" />
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="w-7 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">#</th>
+                  <th className="w-18 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Code</th>
+                  <th className="px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Product</th>
+                  <th className="w-16 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty</th>
+                  <th className="w-18 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit</th>
+                  <th className="w-20 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
+                  <th className="w-22 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Gross</th>
+                  <th className="w-14 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-amber-500">Disc%</th>
+                  <th className="w-14 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-emerald-600">Tax%</th>
+                  <th className="w-22 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-700">Amount</th>
+                  <th className="w-8"></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {items.map((row, idx) => {
+                  const { gross, amount } = calcItem(row)
+                  const usedIds = new Set(items.filter((_, i) => i !== idx).map((r) => r.product_id).filter(Boolean).map(Number))
+                  const availableProducts = products.filter((p) => !usedIds.has(p.id))
+                  return (
+                    <tr key={row._key} className="group hover:bg-slate-50/60 transition-colors">
+                      <td className="px-1.5 py-1 text-slate-400 font-medium tabular-nums">{idx + 1}</td>
+                      <td className="px-1.5 py-1">
+                        <input readOnly value={row.product_code} placeholder="—" className="block w-full rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs font-mono text-slate-500 outline-none cursor-not-allowed" />
+                      </td>
+                      <td className="px-1.5 py-1 min-w-36">
+                        <select value={row.product_id} onChange={(e) => handleProductSelect(idx, e.target.value)} className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white cursor-pointer">
+                          <option value="">— Select product —</option>
+                          {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <input type="number" min="0" step="0.0001" placeholder="0" value={row.quantity_ordered} onChange={(e) => setRowField(idx, 'quantity_ordered', e.target.value)} className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white" />
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <select value={row.unit_id} onChange={(e) => setRowField(idx, 'unit_id', e.target.value)} className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white cursor-pointer">
+                          <option value="">—</option>
+                          {unitTypes.map((u) => <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>)}
+                        </select>
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <input type="number" min="0" step="0.01" placeholder="0.00" value={row.unit_price} onChange={(e) => setRowField(idx, 'unit_price', e.target.value)} className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white" />
+                      </td>
+                      <td className="px-1.5 py-1 text-right font-medium text-slate-600 tabular-nums">
+                        {gross > 0 ? gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <input type="number" min="0" max="100" step="0.01" placeholder="0" value={row.discount} onChange={(e) => setRowField(idx, 'discount', e.target.value)} className="block w-full rounded border border-amber-200 bg-amber-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-amber-400 focus:bg-white" />
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <input type="number" min="0" max="100" step="0.01" placeholder="0" value={row.tax} onChange={(e) => setRowField(idx, 'tax', e.target.value)} className="block w-full rounded border border-emerald-200 bg-emerald-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-emerald-400 focus:bg-white" />
+                      </td>
+                      <td className="px-1.5 py-1 text-right font-bold text-slate-800 tabular-nums">
+                        {amount > 0 ? amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-slate-300 font-normal">—</span>}
+                      </td>
+                      <td className="px-1.5 py-1 text-center">
+                        <button type="button" onClick={() => removeRow(idx)} className="rounded p-1 text-slate-300 opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 transition-all" title="Remove row">
+                          <Trash2 size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+
+              <tfoot>
+                <tr className="border-t border-slate-200 bg-slate-50/50">
+                  <td colSpan={6} className="px-2 py-1.5">
+                    <div className="flex gap-1.5">
+                      <button type="button" onClick={() => addRows(1)} className="flex items-center gap-1 rounded border border-indigo-200 bg-white px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 transition-colors">
+                        <Plus size={10} /> Add Row
+                      </button>
+                      <button type="button" onClick={() => addRows(5)} className="flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors">
+                        <Plus size={10} /> Add 5
+                      </button>
+                    </div>
+                  </td>
+                  <td className="px-1.5 py-1.5 text-right text-xs font-semibold text-slate-600 tabular-nums">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td className="px-1.5 py-1.5 text-center text-xs font-bold text-amber-600 tabular-nums">-{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td className="px-1.5 py-1.5 text-center text-xs font-bold text-emerald-600 tabular-nums">+{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td className="px-1.5 py-1.5 text-right text-sm font-black text-slate-800 tabular-nums">{totals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td></td>
+                </tr>
+                <tr className="bg-indigo-50 border-t border-indigo-100">
+                  <td colSpan={6} className="px-3 py-1.5">
+                    <div className="flex items-center gap-4 text-xs">
+                      <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
+                      <span className="text-slate-500">Gross: <span className="font-bold text-slate-700">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+                      <span className="text-amber-600">Disc: <span className="font-bold">-{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+                      <span className="text-emerald-600">Tax: <span className="font-bold">+{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+                    </div>
+                  </td>
+                  <td colSpan={4} className="px-3 py-1.5 text-right">
+                    <div className="flex flex-col items-end leading-tight">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Net Total</span>
+                      <span className="text-base font-black text-indigo-700 tabular-nums">{totals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {err('items') && (
+            <div className="border-t border-red-100 bg-red-50 px-3 py-1.5 text-xs font-medium text-red-600">
+              {err('items')}
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-white px-3 py-2">
+
+            {/* ── Status (left, edit mode only) ── */}
+            {isEdit ? (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Status</span>
+                <select
+                  value={form.status}
+                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                  style={STATUS_SELECT_STYLES[form.status] ?? {}}
+                  className="block rounded border px-2 py-1 text-xs font-semibold outline-none cursor-pointer transition-all"
+                >
+                  {ALL_STATUSES.map((s) => (
+                    <option key={s.value} value={s.value}>{s.label}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
+              <div />
+            )}
+
+            {/* ── Form Actions (right) ── */}
+            <div className="flex items-center gap-2">
+              <button type="button" onClick={handleClear} className="flex items-center gap-1 rounded border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-500 transition-all hover:bg-red-50 active:scale-95">
+                <RefreshCw size={11} /> Clear
+              </button>
+              <button type="button" disabled={saveMutation.isPending} onClick={handleSubmit} className="flex items-center gap-1 rounded bg-indigo-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60 transition-all active:scale-95">
+                {saveMutation.isPending ? <><RefreshCw size={11} className="animate-spin" /> Saving…</> : isEdit ? <><Save size={11} /> Update PO</> : <><Save size={11} /> Create PO</>}
+              </button>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  )
+}

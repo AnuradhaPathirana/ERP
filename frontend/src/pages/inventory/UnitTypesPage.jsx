@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Save, Trash2, X } from 'lucide-react'
+import { Edit2, Ruler, Save, X } from 'lucide-react'
 import { getAllUnitCategories } from '../../api/unitCategories'
 import {
   createUnitType, deleteUnitType, getUnitType, getUnitTypes, updateUnitType,
@@ -9,6 +9,7 @@ import {
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
+import { DeleteBtn } from '../../components/ui/ActionButtons'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/unit-categories' },
@@ -54,9 +55,11 @@ function validate(field, value) {
 }
 
 const inputBase =
-  'block w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+  'block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15'
 const inputErr =
-  'block w-full rounded border border-red-400 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
+  'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
+const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
+const ERR_CLS   = 'mt-0.5 text-[10px] text-red-500'
 const fieldCls = (errors, touched, name) =>
   errors[name] && touched[name] ? inputErr : inputBase
 
@@ -158,16 +161,16 @@ function UnitTypeForm({ editId, onDone, onCancel }) {
 
   if (isEditing && isFetching) {
     return (
-      <div className="flex items-center justify-center py-12 text-xs text-slate-400">Loading…</div>
+      <div className="flex items-center justify-center py-8 text-xs text-slate-400">Loading…</div>
     )
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3 p-4">
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2 p-2.5">
 
       {/* Category */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+        <label className={LABEL_CLS}>
           Category <span className="text-red-500">*</span>
         </label>
         {loadingCategories ? (
@@ -192,14 +195,14 @@ function UnitTypeForm({ editId, onDone, onCancel }) {
           </select>
         )}
         {errors.unit_category_id && touched.unit_category_id && (
-          <p className="mt-0.5 text-[11px] text-red-600">{errors.unit_category_id}</p>
+          <p className={ERR_CLS}>{errors.unit_category_id}</p>
         )}
       </div>
 
       {/* Name + Symbol */}
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="mb-0.5 block text-xs font-medium text-slate-600">
+          <label className={LABEL_CLS}>
             Name <span className="text-red-500">*</span>
           </label>
           <input
@@ -215,11 +218,11 @@ function UnitTypeForm({ editId, onDone, onCancel }) {
             className={fieldCls(errors, touched, 'name')}
           />
           {errors.name && touched.name && (
-            <p className="mt-0.5 text-[11px] text-red-600">{errors.name}</p>
+            <p className={ERR_CLS}>{errors.name}</p>
           )}
         </div>
         <div>
-          <label className="mb-0.5 block text-xs font-medium text-slate-600">
+          <label className={LABEL_CLS}>
             Symbol <span className="text-red-500">*</span>
           </label>
           <input
@@ -234,15 +237,15 @@ function UnitTypeForm({ editId, onDone, onCancel }) {
             className={fieldCls(errors, touched, 'symbol')}
           />
           {errors.symbol && touched.symbol && (
-            <p className="mt-0.5 text-[11px] text-red-600">{errors.symbol}</p>
+            <p className={ERR_CLS}>{errors.symbol}</p>
           )}
         </div>
       </div>
 
       {/* Country */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">
-          Country <span className="text-[11px] font-normal text-slate-400">(optional)</span>
+        <label className={LABEL_CLS}>
+          Country <span className="text-[10px] font-normal text-slate-400">(optional)</span>
         </label>
         <input
           name="country"
@@ -256,7 +259,7 @@ function UnitTypeForm({ editId, onDone, onCancel }) {
           className={fieldCls(errors, touched, 'country')}
         />
         {errors.country && touched.country && (
-          <p className="mt-0.5 text-[11px] text-red-600">{errors.country}</p>
+          <p className={ERR_CLS}>{errors.country}</p>
         )}
       </div>
 
@@ -292,7 +295,7 @@ function UnitTypeForm({ editId, onDone, onCancel }) {
                     {isSelected && <span className="h-1.5 w-1.5 rounded-full bg-indigo-500" />}
                   </span>
                 </div>
-                <code className="text-[11px] text-slate-500">{opt.example(form.symbol)}</code>
+                <code className="text-[10px] text-slate-500">{opt.example(form.symbol)}</code>
               </label>
             )
           })}
@@ -300,18 +303,18 @@ function UnitTypeForm({ editId, onDone, onCancel }) {
       </div>
 
       {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-        <p className="text-xs text-red-600">
+        <p className="text-[10px] text-red-600">
           {mutation.error?.response?.data?.message ?? 'An unexpected error occurred.'}
         </p>
       )}
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-2 pt-1">
+      <div className="flex items-center justify-end gap-1.5 pt-0.5">
         {isEditing && (
           <button
             type="button"
             onClick={onCancel}
-            className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
+            className="flex items-center gap-1 rounded px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
           >
             <X size={12} />
             Cancel
@@ -320,9 +323,9 @@ function UnitTypeForm({ editId, onDone, onCancel }) {
         <button
           type="submit"
           disabled={mutation.isPending || (categories.length === 0 && !isEditing)}
-          className="flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Save size={13} strokeWidth={2.5} />
+          <Save size={12} strokeWidth={2.5} />
           {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Unit Type'}
         </button>
       </div>
@@ -372,10 +375,10 @@ export default function UnitTypesPage() {
         <Breadcrumb crumbs={CRUMBS} />
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-3">
 
         {/* ── LEFT: Table ─────────────────────────────────────────────── */}
-        <div className="lg:col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="lg:col-span-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           {isLoading && (
             <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading…</div>
           )}
@@ -404,7 +407,7 @@ export default function UnitTypesPage() {
                   <tbody className="divide-y divide-slate-100">
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
+                        <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-400">
                           No unit types yet. Use the form to create the first one.
                         </td>
                       </tr>
@@ -452,15 +455,7 @@ export default function UnitTypesPage() {
                                   </button>
                                 )}
                                 {can('delete_unit_types') && (
-                                  <button
-                                    type="button"
-                                    title="Delete"
-                                    onClick={() => handleDelete(ut.id, ut.name)}
-                                    disabled={deleteMutation.isPending}
-                                    className="rounded p-1 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                                  >
-                                    <Trash2 size={13} />
-                                  </button>
+                                  <DeleteBtn onClick={() => handleDelete(ut.id, ut.name)} disabled={deleteMutation.isPending} />
                                 )}
                               </div>
                             </td>
@@ -507,13 +502,16 @@ export default function UnitTypesPage() {
         </div>
 
         {/* ── RIGHT: Form panel ───────────────────────────────────────── */}
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm self-start">
-          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {editId ? 'Edit Unit Type' : 'New Unit Type'}
-            </h2>
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm self-start">
+          <div className="flex items-center justify-between border-b border-indigo-100 bg-indigo-50 px-3 py-2">
+            <div className="flex items-center gap-1.5 text-indigo-700">
+              <Ruler size={13} />
+              <h2 className="text-xs font-bold">
+                {editId ? 'Edit Unit Type' : 'New Unit Type'}
+              </h2>
+            </div>
             {editId && (
-              <span className="flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-600">
+              <span className="flex items-center gap-1 rounded bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">
                 <Edit2 size={10} /> Editing
               </span>
             )}
@@ -527,7 +525,7 @@ export default function UnitTypesPage() {
               onCancel={() => setEditId(null)}
             />
           ) : (
-            <div className="p-4 text-xs text-slate-400">
+            <div className="p-2.5 text-xs text-slate-400">
               You don't have permission to manage unit types.
             </div>
           )}

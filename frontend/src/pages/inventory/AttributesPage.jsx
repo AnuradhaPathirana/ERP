@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Save, Trash2, X } from 'lucide-react'
+import { Edit2, Save, Tag, X } from 'lucide-react'
 import { createAttribute, deleteAttribute, getAttribute, getAttributes, updateAttribute } from '../../api/attributes'
 import { getAllAttributeTypes } from '../../api/attributeTypes'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
+import { DeleteBtn } from '../../components/ui/ActionButtons'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/attributes' },
@@ -29,9 +30,11 @@ function validate(field, value) {
 }
 
 const inputBase =
-  'block w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+  'block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15'
 const inputErr =
-  'block w-full rounded border border-red-400 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
+  'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
+const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
+const ERR_CLS   = 'mt-0.5 text-[10px] text-red-500'
 const fieldCls = (errors, touched, name) =>
   errors[name] && touched[name] ? inputErr : inputBase
 
@@ -135,15 +138,15 @@ function AttributeForm({ editId, onDone, onCancel }) {
   }
 
   if (isEditing && isFetching) {
-    return <div className="flex items-center justify-center py-12 text-xs text-slate-400">Loading…</div>
+    return <div className="flex items-center justify-center py-8 text-xs text-slate-400">Loading…</div>
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3 p-4">
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2 p-2.5">
 
       {/* Attribute Type */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+        <label className={LABEL_CLS}>
           Attribute Type <span className="text-red-500">*</span>
         </label>
         <select
@@ -161,13 +164,13 @@ function AttributeForm({ editId, onDone, onCancel }) {
           ))}
         </select>
         {errors.attribute_type_id && touched.attribute_type_id && (
-          <p className="mt-0.5 text-[11px] text-red-600">{errors.attribute_type_id}</p>
+          <p className={ERR_CLS}>{errors.attribute_type_id}</p>
         )}
       </div>
 
       {/* Attribute Name(s) */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+        <label className={LABEL_CLS}>
           Attribute Name(s) <span className="text-red-500">*</span>
         </label>
         <input
@@ -182,20 +185,20 @@ function AttributeForm({ editId, onDone, onCancel }) {
           className={fieldCls(errors, touched, 'attribute_name')}
         />
         {errors.attribute_name && touched.attribute_name ? (
-          <p className="mt-0.5 text-[11px] text-red-600">{errors.attribute_name}</p>
+          <p className={ERR_CLS}>{errors.attribute_name}</p>
         ) : (
-          <p className="mt-0.5 text-[11px] text-slate-400">
+          <p className="mt-0.5 text-[10px] text-slate-400">
             {isEditing
               ? 'First name updates this record; additional names create new attributes.'
               : 'Separate multiple names with commas to create them all at once.'}
           </p>
         )}
         {parsedNames.length > 1 && (
-          <div className="mt-1.5 flex flex-wrap gap-1">
+          <div className="mt-1 flex flex-wrap gap-1">
             {parsedNames.map((name, i) => (
               <span
                 key={i}
-                className={`rounded px-1.5 py-0.5 text-[11px] font-medium border ${
+                className={`rounded px-1.5 py-0.5 text-[10px] font-medium border ${
                   isEditing && i === 0
                     ? 'bg-amber-50 text-amber-700 border-amber-100'
                     : 'bg-indigo-50 text-indigo-700 border-indigo-100'
@@ -209,18 +212,18 @@ function AttributeForm({ editId, onDone, onCancel }) {
       </div>
 
       {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-        <p className="text-xs text-red-600">
+        <p className="text-[10px] text-red-600">
           {mutation.error?.response?.data?.message ?? 'An unexpected error occurred.'}
         </p>
       )}
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-2 pt-1">
+      <div className="flex items-center justify-end gap-1.5 pt-0.5">
         {isEditing && (
           <button
             type="button"
             onClick={onCancel}
-            className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
+            className="flex items-center gap-1 rounded px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
           >
             <X size={12} />
             Cancel
@@ -229,9 +232,9 @@ function AttributeForm({ editId, onDone, onCancel }) {
         <button
           type="submit"
           disabled={mutation.isPending}
-          className="flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Save size={13} strokeWidth={2.5} />
+          <Save size={12} strokeWidth={2.5} />
           {mutation.isPending
             ? 'Saving…'
             : isEditing
@@ -290,10 +293,10 @@ export default function AttributesPage() {
         <Breadcrumb crumbs={CRUMBS} />
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-3">
 
         {/* ── LEFT: Table ─────────────────────────────────────────────── */}
-        <div className="lg:col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="lg:col-span-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           {isLoading && (
             <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading…</div>
           )}
@@ -320,7 +323,7 @@ export default function AttributesPage() {
                   <tbody className="divide-y divide-slate-100">
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-400">
+                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">
                           No attributes yet. Use the form to create the first one.
                         </td>
                       </tr>
@@ -358,15 +361,7 @@ export default function AttributesPage() {
                                 </button>
                               )}
                               {can('delete_attributes') && (
-                                <button
-                                  type="button"
-                                  title="Delete"
-                                  onClick={() => handleDelete(row.id, row.attribute_name)}
-                                  disabled={deleteMutation.isPending}
-                                  className="rounded p-1 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
+                                <DeleteBtn onClick={() => handleDelete(row.id, row.attribute_name)} disabled={deleteMutation.isPending} />
                               )}
                             </div>
                           </td>
@@ -412,13 +407,16 @@ export default function AttributesPage() {
         </div>
 
         {/* ── RIGHT: Form panel ───────────────────────────────────────── */}
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm self-start">
-          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {editId ? 'Edit Attribute' : 'New Attribute'}
-            </h2>
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm self-start">
+          <div className="flex items-center justify-between border-b border-indigo-100 bg-indigo-50 px-3 py-2">
+            <div className="flex items-center gap-1.5 text-indigo-700">
+              <Tag size={13} />
+              <h2 className="text-xs font-bold">
+                {editId ? 'Edit Attribute' : 'New Attribute'}
+              </h2>
+            </div>
             {editId && (
-              <span className="flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-600">
+              <span className="flex items-center gap-1 rounded bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">
                 <Edit2 size={10} /> Editing
               </span>
             )}
@@ -432,7 +430,7 @@ export default function AttributesPage() {
               onCancel={() => setEditId(null)}
             />
           ) : (
-            <div className="p-4 text-xs text-slate-400">
+            <div className="p-2.5 text-xs text-slate-400">
               You don't have permission to manage attributes.
             </div>
           )}

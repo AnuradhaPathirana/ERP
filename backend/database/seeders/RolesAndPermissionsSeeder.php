@@ -30,6 +30,18 @@ class RolesAndPermissionsSeeder extends Seeder
         'stores',
         'drivers',
         'vehicle_masters',
+        'purchase_requests',
+        'purchase_orders',
+    ];
+
+    /** Purchasing permissions that don't follow the standard CRUD pattern. */
+    private const PURCHASING_EXTRA_PERMISSIONS = [
+        'approve_purchase_requests',
+        'view_grns',
+        'create_grns',
+        'edit_grns',
+        'confirm_grns',
+        'delete_grns',
     ];
 
     public function run(): void
@@ -54,6 +66,17 @@ class RolesAndPermissionsSeeder extends Seeder
             }
 
             $viewPermissions[] = $view;
+        }
+
+        // ── Extra purchasing permissions (non-standard CRUD) ──────────────
+        foreach (self::PURCHASING_EXTRA_PERMISSIONS as $perm) {
+            Permission::firstOrCreate(['name' => $perm, 'guard_name' => 'web']);
+            $allPermissions[]  = $perm;
+            $crudPermissions[] = $perm;
+            // view_grns goes to staff read-only set
+            if (str_starts_with($perm, 'view_')) {
+                $viewPermissions[] = $perm;
+            }
         }
 
         // ── Roles ──────────────────────────────────────────────────────────

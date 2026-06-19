@@ -38,16 +38,18 @@
 
 .input {
   padding: 0.625rem 0.875rem;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
   font-size: 0.9375rem;
   color: #1e293b;
+  background: #f8fafc;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
 
 .input:focus {
   border-color: #6366f1;
+  background: #ffffff;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 

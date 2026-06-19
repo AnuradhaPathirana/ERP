@@ -11,12 +11,9 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('inv_vehicle_drivers', function (Blueprint $table): void {
-            $table->foreignId('vehicle_master_id')
-                ->constrained('inv_vehicle_masters')
-                ->cascadeOnDelete();
-            $table->foreignId('driver_id')
-                ->constrained('inv_drivers')
-                ->restrictOnDelete();
+            // Soft links — no hard FK constraints (architecture golden rule)
+            $table->unsignedBigInteger('vehicle_master_id');
+            $table->unsignedBigInteger('driver_id');
             $table->primary(['vehicle_master_id', 'driver_id']);
             $table->timestamps();
         });

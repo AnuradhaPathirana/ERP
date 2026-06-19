@@ -12,9 +12,38 @@ return new class extends Migration
     {
         Schema::create('inv_vehicle_masters', function (Blueprint $table): void {
             $table->id();
-            $table->string('vehicle_reg_no', 50)->unique();
-            $table->string('note', 255)->nullable();
+
+            // ── Identity ──────────────────────────────────────────────────
+            $table->string('vehicle_code', 20)->unique();
+            $table->string('registration_number', 50)->unique();
+
+            // ── Specifications ────────────────────────────────────────────
+            $table->string('make', 100)->nullable();
+            $table->string('model', 100)->nullable();
+            $table->unsignedSmallInteger('year')->nullable();
+            $table->string('color', 50)->nullable();
+            $table->enum('vehicle_type', ['Car', 'Van', 'Truck', 'Bus', 'Motorcycle', 'Heavy Truck'])->nullable();
+            $table->enum('fuel_type', ['Petrol', 'Diesel', 'Electric', 'Hybrid', 'CNG'])->nullable();
+            $table->string('engine_number', 100)->nullable();
+            $table->string('chassis_number', 100)->nullable();
+            $table->unsignedTinyInteger('seating_capacity')->nullable();
+            $table->decimal('payload_capacity', 10, 2)->nullable();
+
+            // ── Compliance ────────────────────────────────────────────────
+            $table->string('insurance_policy_no', 50)->nullable();
+            $table->date('insurance_expiry_date')->nullable();
+            $table->date('road_tax_expiry_date')->nullable();
+            $table->date('emission_test_expiry_date')->nullable();
+
+            // ── Assignment (soft ref — no FK constraint) ──────────────────
+            $table->unsignedBigInteger('assigned_driver_id')->nullable();   // inv_drivers.id
+
+            // ── Misc ──────────────────────────────────────────────────────
+            $table->enum('status', ['active', 'inactive', 'under_maintenance'])->default('active');
+            $table->text('notes')->nullable();
+
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

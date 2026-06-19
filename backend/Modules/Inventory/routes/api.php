@@ -21,6 +21,10 @@ use Modules\Inventory\Http\Controllers\VehicleController;
 use Modules\Inventory\Http\Controllers\UnitCategoryController;
 use Modules\Inventory\Http\Controllers\UnitConversionController;
 use Modules\Inventory\Http\Controllers\UnitTypeController;
+use Modules\Inventory\Http\Controllers\PurchaseRequestController;
+use Modules\Inventory\Http\Controllers\PurchaseOrderController;
+use Modules\Inventory\Http\Controllers\GoodsReceivedNoteController;
+use Modules\Inventory\Http\Controllers\StockController;
 
 Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(function (): void {
     // Named routes before apiResource so static segments are not swallowed by {unit_category}
@@ -141,4 +145,38 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
 
     Route::apiResource('vehicle-masters', VehicleController::class)
         ->names('inventory.vehicle-masters');
+
+    // ── Stock Queries ─────────────────────────────────────────────────────────
+    Route::get('stock/product', [StockController::class, 'productStock'])
+        ->name('inventory.stock.product');
+    Route::get('stock/by-store', [StockController::class, 'byStore'])
+        ->name('inventory.stock.by-store');
+
+    // ── Purchasing ────────────────────────────────────────────────────────────
+
+    // Purchase Requests
+    Route::post('purchase-requests/{purchase_request}/approve', [PurchaseRequestController::class, 'approve'])
+        ->name('inventory.purchase-requests.approve');
+    Route::post('purchase-requests/{purchase_request}/reject', [PurchaseRequestController::class, 'reject'])
+        ->name('inventory.purchase-requests.reject');
+    Route::post('purchase-requests/{purchase_request}/cancel', [PurchaseRequestController::class, 'cancel'])
+        ->name('inventory.purchase-requests.cancel');
+    Route::apiResource('purchase-requests', PurchaseRequestController::class)
+        ->names('inventory.purchase-requests');
+
+    // Purchase Orders
+    Route::get('purchase-orders/from-pr/{prId}', [PurchaseOrderController::class, 'loadFromPR'])
+        ->name('inventory.purchase-orders.from-pr');
+    Route::patch('purchase-orders/{purchase_order}/status', [PurchaseOrderController::class, 'updateStatus'])
+        ->name('inventory.purchase-orders.update-status');
+    Route::apiResource('purchase-orders', PurchaseOrderController::class)
+        ->names('inventory.purchase-orders');
+
+    // Goods Received Notes
+    Route::get('goods-received-notes/po-items/{poId}', [GoodsReceivedNoteController::class, 'poOutstandingItems'])
+        ->name('inventory.grns.po-items');
+    Route::post('goods-received-notes/{goods_received_note}/confirm', [GoodsReceivedNoteController::class, 'confirm'])
+        ->name('inventory.grns.confirm');
+    Route::apiResource('goods-received-notes', GoodsReceivedNoteController::class)
+        ->names('inventory.grns');
 });

@@ -77,18 +77,18 @@ export default function CompanyViewPage() {
         <div className="flex items-center gap-1.5">
           <Link
             to={`/inventory/companies/${id}/edit`}
-            className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            className="flex items-center gap-1.5 rounded-lg border-2 border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100"
           >
-            <Edit2 size={12} />
+            <Edit2 size={13} strokeWidth={2} />
             Edit
           </Link>
           <button
             type="button"
             onClick={handleDelete}
             disabled={deleteMutation.isPending}
-            className="flex items-center gap-1.5 rounded border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg border-2 border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} strokeWidth={2} />
             Delete
           </button>
         </div>

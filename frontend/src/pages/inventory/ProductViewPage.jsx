@@ -1,6 +1,6 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Trash2 } from 'lucide-react'
+import { BarChart2, Calendar, Edit2, Package, Settings, ShoppingCart, Tag, Trash2 } from 'lucide-react'
 import { deleteProduct, getProduct } from '../../api/products'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
@@ -85,7 +85,7 @@ export default function ProductViewPage() {
 
   return (
     <div className="w-full">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold leading-none text-slate-800">{p?.name}</h1>
           <Breadcrumb crumbs={crumbs} />
@@ -102,31 +102,32 @@ export default function ProductViewPage() {
             )}
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <Link
             to={`/inventory/products/${id}/edit`}
-            className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            className="flex items-center gap-1.5 rounded-lg border-2 border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100"
           >
-            <Edit2 size={12} />
-            Edit
+            <Edit2 size={13} strokeWidth={2} />
+            Edit Product
           </Link>
           <button
             type="button"
             onClick={handleDelete}
             disabled={deleteMutation.isPending}
-            className="flex items-center gap-1.5 rounded border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg border-2 border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} strokeWidth={2} />
             Delete
           </button>
         </div>
       </div>
-      <div className="space-y-2.5">
+      <div className="space-y-2">
 
         {/* Basic Information */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Basic Information</h2>
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 border-b border-indigo-100 bg-indigo-50 px-3 py-2 text-indigo-700">
+            <Package size={13} />
+            <h2 className="text-xs font-bold">Basic Information</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 px-4 py-1">
             <div className="divide-y divide-slate-50">
@@ -151,9 +152,10 @@ export default function ProductViewPage() {
         </section>
 
         {/* Suppliers */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Suppliers</h2>
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 border-b border-sky-100 bg-sky-50 px-3 py-2 text-sky-700">
+            <Tag size={13} />
+            <h2 className="text-xs font-bold">Suppliers</h2>
           </div>
           <div className="flex flex-wrap gap-1.5 px-4 py-2">
             {(p?.suppliers ?? []).length === 0 ? (
@@ -169,9 +171,10 @@ export default function ProductViewPage() {
         </section>
 
         {/* Stock & Reorder */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Stock &amp; Reorder Settings</h2>
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 border-b border-amber-100 bg-amber-50 px-3 py-2 text-amber-700">
+            <BarChart2 size={13} />
+            <h2 className="text-xs font-bold">Stock &amp; Reorder Settings</h2>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 px-4 py-1">
             <div className="divide-y divide-slate-50">
@@ -187,9 +190,10 @@ export default function ProductViewPage() {
         </section>
 
         {/* Cost Details */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Cost Details</h2>
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 border-b border-violet-100 bg-violet-50 px-3 py-2 text-violet-700">
+            <ShoppingCart size={13} />
+            <h2 className="text-xs font-bold">Cost Details</h2>
           </div>
           {costDetails.length === 0 ? (
             <p className="px-4 py-3 text-xs italic text-slate-400">No cost details configured.</p>
@@ -241,9 +245,10 @@ export default function ProductViewPage() {
         </section>
 
         {/* Product Options */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Product Options</h2>
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 border-b border-blue-100 bg-blue-50 px-3 py-2 text-blue-700">
+            <Settings size={13} />
+            <h2 className="text-xs font-bold">Product Options</h2>
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2 p-3">
             {BOOL_OPTIONS.map(({ key, label }) => (
@@ -253,9 +258,10 @@ export default function ProductViewPage() {
         </section>
 
         {/* Record Info */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Record Info</h2>
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-3 py-2 text-slate-600">
+            <Calendar size={13} />
+            <h2 className="text-xs font-bold">Record Info</h2>
           </div>
           <div className="divide-y divide-slate-50 px-4 py-1">
             <Row label="Created At" value={p?.created_at ? new Date(p.created_at).toLocaleString() : null} />
@@ -264,8 +270,8 @@ export default function ProductViewPage() {
         </section>
 
       </div>
-      <div className="mt-3">
-        <Link to="/inventory/products" className="text-xs font-medium text-slate-500 hover:text-slate800">
+      <div className="mt-2">
+        <Link to="/inventory/products" className="text-xs font-medium text-slate-500 hover:text-slate-800">
           ← Back to Products
         </Link>
       </div>

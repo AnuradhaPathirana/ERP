@@ -1,0 +1,258 @@
+import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Plus, ChevronDown, RefreshCw } from 'lucide-react'
+import {
+  deletePurchaseOrder,
+  getPurchaseOrders,
+  updatePurchaseOrderStatus,
+} from '../../api/purchaseOrders'
+import Breadcrumb from '../../components/Breadcrumb'
+import TableFilter, { FilterField } from '../../components/TableFilter'
+import { useTableFilter } from '../../hooks/useTableFilter'
+import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import Swal from 'sweetalert2'
+import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
+import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
+
+const CRUMBS = [
+  { label: 'Inventory', to: '/inventory/products' },
+  { label: 'Purchasing' },
+  { label: 'Purchase Orders' },
+]
+
+const INITIAL_FILTERS = { search: '', status: '', date_from: '', date_to: '' }
+
+const STATUS_STYLES = {
+  draft:              'bg-slate-100 text-slate-600',
+  sent:               'bg-blue-100 text-blue-700',
+  confirmed:          'bg-indigo-100 text-indigo-700',
+  partially_received: 'bg-amber-100 text-amber-700',
+  completed:          'bg-green-100 text-green-700',
+  cancelled:          'bg-red-100 text-red-500',
+}
+
+const STATUS_OPTIONS = [
+  { value: 'draft',              label: 'Draft' },
+  { value: 'sent',               label: 'Sent to Supplier' },
+  { value: 'confirmed',          label: 'Confirmed' },
+  { value: 'partially_received', label: 'Partially Received' },
+  { value: 'completed',          label: 'Completed' },
+  { value: 'cancelled',          label: 'Cancelled' },
+]
+
+const STATUS_TRANSITIONS = {
+  draft: [
+    { value: 'sent',      label: 'Send to Supplier', cls: 'text-blue-700 hover:bg-blue-50' },
+    { value: 'cancelled', label: 'Cancel PO',        cls: 'text-red-600 hover:bg-red-50' },
+  ],
+  sent: [
+    { value: 'confirmed', label: 'Mark Confirmed', cls: 'text-indigo-700 hover:bg-indigo-50' },
+    { value: 'cancelled', label: 'Cancel PO',      cls: 'text-red-600 hover:bg-red-50' },
+  ],
+  confirmed: [
+    { value: 'cancelled', label: 'Cancel PO', cls: 'text-red-600 hover:bg-red-50' },
+  ],
+}
+
+export default function PurchaseOrdersPage() {
+  const [page, setPage]             = useState(1)
+  const [openDropdown, setOpenDropdown] = useState(null)
+  const queryClient                 = useQueryClient()
+  const resetPage                   = () => setPage(1)
+
+  const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
+    useTableFilter(INITIAL_FILTERS)
+
+  // Close the status dropdown when clicking anywhere outside
+  useEffect(() => {
+    const handler = () => setOpenDropdown(null)
+    document.addEventListener('click', handler)
+    return () => document.removeEventListener('click', handler)
+  }, [])
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['purchase-orders', page, applied],
+    queryFn:  () => getPurchaseOrders(page, applied),
+    placeholderData: (prev) => prev,
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: deletePurchaseOrder,
+    onSuccess:  () => { queryClient.invalidateQueries({ queryKey: ['purchase-orders'] }); showSuccess('Purchase order deleted.') },
+    onError:    () => showError('Cannot delete — only draft POs can be removed.'),
+  })
+
+  const statusMutation = useMutation({
+    mutationFn: ({ id, status }) => updatePurchaseOrderStatus(id, status),
+    onSuccess:  () => { queryClient.invalidateQueries({ queryKey: ['purchase-orders'] }); showSuccess('PO status updated.') },
+    onError:    (err) => showError(err?.response?.data?.message ?? 'Status update failed.'),
+  })
+
+  const handleDelete = async (id, poNo) => {
+    if (await confirmDelete(poNo)) deleteMutation.mutate(id)
+  }
+
+  const handleStatusChange = async (id, poNo, toStatus, toLabel) => {
+    setOpenDropdown(null)
+    const isCancelling = toStatus === 'cancelled'
+    const result = await Swal.fire({
+      title: isCancelling ? `Cancel PO ${poNo}?` : `Update Status of ${poNo}?`,
+      text:  `Status will be changed to "${toLabel}".`,
+      icon:  isCancelling ? 'warning' : 'question',
+      showCancelButton:    true,
+      confirmButtonColor:  isCancelling ? '#dc2626' : '#4f46e5',
+      confirmButtonText:   isCancelling ? 'Yes, Cancel PO' : `Yes, ${toLabel}`,
+      cancelButtonText:    'No, Go Back',
+      reverseButtons:      true,
+    })
+    if (result.isConfirmed) statusMutation.mutate({ id, status: toStatus })
+  }
+
+  const meta = data?.meta
+  const rows = data?.data ?? []
+
+  return (
+    <div className="w-full">
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Purchase Orders</h1>
+          <Breadcrumb crumbs={CRUMBS} />
+        </div>
+        <Link
+          to="/inventory/purchase-orders/create"
+          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+        >
+          <Plus size={14} strokeWidth={2.5} />
+          New PO
+        </Link>
+      </div>
+
+      <TableFilter open={open} onToggle={toggle} onApply={() => apply(resetPage)} onClear={() => clear(resetPage)} activeCount={activeCount}>
+        <FilterField label="Search">
+          <input className={FILTER_INPUT_CLS} placeholder="PO No or supplier…" value={draft.search} onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))} />
+        </FilterField>
+        <FilterField label="Status">
+          <select className={FILTER_SELECT_CLS} value={draft.status} onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))}>
+            <option value="">All statuses</option>
+            {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+        </FilterField>
+        <FilterField label="Date From">
+          <input type="date" className={FILTER_INPUT_CLS} value={draft.date_from} onChange={(e) => setDraft((d) => ({ ...d, date_from: e.target.value }))} />
+        </FilterField>
+        <FilterField label="Date To">
+          <input type="date" className={FILTER_INPUT_CLS} value={draft.date_to} onChange={(e) => setDraft((d) => ({ ...d, date_to: e.target.value }))} />
+        </FilterField>
+      </TableFilter>
+
+      <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        {isLoading && <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>}
+        {isError && <div className="flex items-center justify-center py-14 text-sm text-red-500">Failed to load purchase orders.</div>}
+
+        {!isLoading && !isError && (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-left">
+                    <th className="w-8 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">#</th>
+                    <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">PO No</th>
+                    <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">PR Ref</th>
+                    <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Supplier</th>
+                    <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Order Date</th>
+                    <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Exp. Delivery</th>
+                    <th className="w-24 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Total</th>
+                    <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                    <th className="w-24 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {rows.length === 0 ? (
+                    <tr>
+                      <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">
+                        {activeCount > 0 ? 'No purchase orders match the current filters.' : (
+                          <><Link to="/inventory/purchase-orders/create" className="font-medium text-indigo-600 hover:underline">Create the first PO.</Link></>
+                        )}
+                      </td>
+                    </tr>
+                  ) : (
+                    rows.map((po, i) => (
+                      <tr key={po.id} className="transition-colors hover:bg-slate-50">
+                        <td className="px-3 py-2 text-slate-400">{(page - 1) * (meta?.per_page ?? 25) + i + 1}</td>
+                        <td className="px-3 py-2 font-mono font-medium text-indigo-600">
+                          <Link to={`/inventory/purchase-orders/${po.id}`} className="hover:underline">{po.po_no}</Link>
+                        </td>
+                        <td className="px-3 py-2 text-slate-500 font-mono">{po.purchase_request?.pr_no || <span className="italic text-slate-300">—</span>}</td>
+                        <td className="px-3 py-2 font-medium text-slate-700">{po.supplier?.name || <span className="italic text-slate-300">—</span>}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-slate-500">{po.order_date}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-slate-500">{po.expected_delivery_date || <span className="italic text-slate-300">—</span>}</td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-700">{Number(po.grand_total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2">
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[po.status] ?? 'bg-slate-100 text-slate-500'}`}>
+                            {po.status_label}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2">
+                          <div className="flex items-center justify-end gap-1">
+                            <ViewBtn to={`/inventory/purchase-orders/${po.id}`} />
+                            {(po.status === 'draft' || po.status === 'sent') && (
+                              <EditBtn to={`/inventory/purchase-orders/${po.id}/edit`} />
+                            )}
+                            {STATUS_TRANSITIONS[po.status] && (
+                              <div className="relative" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  type="button"
+                                  title="Change Status"
+                                  disabled={statusMutation.isPending}
+                                  onClick={() => setOpenDropdown(openDropdown === po.id ? null : po.id)}
+                                  className="inline-flex items-center gap-0.5 rounded-lg px-1.5 py-1.5 bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-40"
+                                >
+                                  <RefreshCw size={12} strokeWidth={2} />
+                                  <ChevronDown size={10} strokeWidth={2.5} />
+                                </button>
+                                {openDropdown === po.id && (
+                                  <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                                    <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Change Status</p>
+                                    {STATUS_TRANSITIONS[po.status].map((t) => (
+                                      <button
+                                        key={t.value}
+                                        type="button"
+                                        onClick={() => handleStatusChange(po.id, po.po_no, t.value, t.label)}
+                                        className={`w-full px-3 py-1.5 text-left text-xs font-medium transition-colors ${t.cls}`}
+                                      >
+                                        {t.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {po.status === 'draft' && (
+                              <DeleteBtn onClick={() => handleDelete(po.id, po.po_no)} disabled={deleteMutation.isPending} />
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {meta && meta.last_page > 1 && (
+              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2">
+                <p className="text-xs text-slate-500">Showing <span className="font-medium text-slate-700">{(page - 1) * meta.per_page + 1}–{Math.min(page * meta.per_page, meta.total)}</span> of <span className="font-medium text-slate-700">{meta.total}</span></p>
+                <div className="flex items-center gap-1.5">
+                  <button onClick={() => setPage((p) => p - 1)} disabled={page === 1} className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">← Prev</button>
+                  <span className="min-w-14 text-center text-xs text-slate-400">{page} / {meta.last_page}</span>
+                  <button onClick={() => setPage((p) => p + 1)} disabled={page === meta.last_page} className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next →</button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

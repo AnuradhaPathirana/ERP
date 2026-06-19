@@ -13,8 +13,10 @@ return new class extends Migration
         Schema::create('inv_store_types', function (Blueprint $table): void {
             $table->id();
             $table->string('store_type_name', 100);
-            $table->string('note', 255)->nullable();
+            $table->text('description')->nullable();
+            $table->boolean('is_active')->default(true);
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

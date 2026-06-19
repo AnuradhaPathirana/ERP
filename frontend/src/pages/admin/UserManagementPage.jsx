@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Loader2, Plus, Trash2, X } from 'lucide-react'
+import { Loader2, Plus, X } from 'lucide-react'
 import { createUser, deleteUser, getUsers, updateUser } from '../../api/users'
 import { getRoles } from '../../api/roles'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
 
 const CRUMBS = [{ label: 'Team Management' }]
 
@@ -127,9 +128,11 @@ function UserModal({ open, onClose, editing, roles, onSuccess, isSuperAdmin }) {
               onBlur={() => !form.name && setErrors(p => ({ ...p, name: ['Name is required.'] }))}
               placeholder="Jane Smith"
               className={[
-                'w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors',
-                'focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20',
-                errors.name ? 'border-red-400 bg-red-50' : 'border-slate-300 bg-white',
+                'block w-full rounded-lg border-2 px-3 py-1.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all',
+                'focus:bg-white focus:ring-2',
+                errors.name
+                  ? 'border-red-300 bg-red-50/40 focus:border-red-500 focus:ring-red-500/15'
+                  : 'border-slate-200 bg-slate-50 focus:border-indigo-500 focus:ring-indigo-500/15',
               ].join(' ')}
             />
             {errors.name && (
@@ -148,9 +151,11 @@ function UserModal({ open, onClose, editing, roles, onSuccess, isSuperAdmin }) {
               onChange={set('email')}
               placeholder="jane@company.com"
               className={[
-                'w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors',
-                'focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20',
-                errors.email ? 'border-red-400 bg-red-50' : 'border-slate-300 bg-white',
+                'block w-full rounded-lg border-2 px-3 py-1.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all',
+                'focus:bg-white focus:ring-2',
+                errors.email
+                  ? 'border-red-300 bg-red-50/40 focus:border-red-500 focus:ring-red-500/15'
+                  : 'border-slate-200 bg-slate-50 focus:border-indigo-500 focus:ring-indigo-500/15',
               ].join(' ')}
             />
             {errors.email && (
@@ -175,9 +180,11 @@ function UserModal({ open, onClose, editing, roles, onSuccess, isSuperAdmin }) {
               placeholder="••••••••"
               autoComplete="new-password"
               className={[
-                'w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors',
-                'focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20',
-                errors.password ? 'border-red-400 bg-red-50' : 'border-slate-300 bg-white',
+                'block w-full rounded-lg border-2 px-3 py-1.5 text-sm text-slate-800 placeholder-slate-400 outline-none transition-all',
+                'focus:bg-white focus:ring-2',
+                errors.password
+                  ? 'border-red-300 bg-red-50/40 focus:border-red-500 focus:ring-red-500/15'
+                  : 'border-slate-200 bg-slate-50 focus:border-indigo-500 focus:ring-indigo-500/15',
               ].join(' ')}
             />
             {errors.password && (
@@ -194,9 +201,11 @@ function UserModal({ open, onClose, editing, roles, onSuccess, isSuperAdmin }) {
               value={form.role}
               onChange={set('role')}
               className={[
-                'w-full rounded-lg border px-3 py-2 text-sm outline-none transition-colors',
-                'focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20',
-                errors.roles ? 'border-red-400 bg-red-50' : 'border-slate-300 bg-white',
+                'block w-full rounded-lg border-2 px-3 py-1.5 text-sm text-slate-800 outline-none transition-all cursor-pointer',
+                'focus:bg-white focus:ring-2',
+                errors.roles
+                  ? 'border-red-300 bg-red-50/40 focus:border-red-500 focus:ring-red-500/15'
+                  : 'border-slate-200 bg-slate-50 focus:border-indigo-500 focus:ring-indigo-500/15',
               ].join(' ')}
             >
               <option value="">Select a role…</option>
@@ -420,23 +429,8 @@ export default function UserManagementPage() {
                         </td>
                         <td className="sticky right-0 bg-white px-4 py-2.5 group-hover:bg-slate-50">
                           <div className="flex items-center justify-end gap-1">
-                            <button
-                              type="button"
-                              title="Edit"
-                              onClick={() => openEdit(user)}
-                              className="rounded-md p-1.5 text-amber-500 transition-colors hover:bg-amber-50 hover:text-amber-700"
-                            >
-                              <Edit2 size={14} />
-                            </button>
-                            <button
-                              type="button"
-                              title="Delete"
-                              onClick={() => handleDelete(user)}
-                              disabled={deleteMutation.isPending}
-                              className="rounded-md p-1.5 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            <EditBtn onClick={() => openEdit(user)} />
+                            <DeleteBtn onClick={() => handleDelete(user)} disabled={deleteMutation.isPending} />
                           </div>
                         </td>
                       </tr>

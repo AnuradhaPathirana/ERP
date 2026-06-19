@@ -66,6 +66,10 @@ This document establishes the strict UI/UX standards for the SaaS ERP applicatio
 
 - set appropriate colors for each Actions buttons in each Data Table, as a Example Delete icon in Red color.
 
+- Use attractive UI components and Action buttons, because user need to visible all input fields and actions without any hesitations
+
+- need to compact the page, because I need to show all withing the screen , so reduce input fields height and Unnessary margin and Padding and white spaces
+
 ---
 
 ## 1. Usability and Ease of Use

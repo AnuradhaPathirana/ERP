@@ -1,6 +1,6 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Trash2 } from 'lucide-react'
+import { Calendar, Edit2, Info, ShoppingBag, Trash2 } from 'lucide-react'
 import { deleteSalesChannel, getSalesChannel } from '../../api/salesChannels'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
@@ -68,7 +68,7 @@ export default function SalesChannelViewPage() {
   return (
     <div className="w-full">
       {/* Header */}
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold leading-none text-slate-800">{c?.sales_channel_name}</h1>
           <Breadcrumb crumbs={crumbs} />
@@ -88,31 +88,32 @@ export default function SalesChannelViewPage() {
         <div className="flex items-center gap-1.5">
           <Link
             to={`/inventory/sales-channels/${id}/edit`}
-            className="flex items-center gap-1.5 rounded border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50"
+            className="flex items-center gap-1.5 rounded-lg border-2 border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100"
           >
-            <Edit2 size={12} />
+            <Edit2 size={13} strokeWidth={2} />
             Edit
           </Link>
           <button
             type="button"
             onClick={handleDelete}
             disabled={deleteMutation.isPending}
-            className="flex items-center gap-1.5 rounded border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50"
+            className="flex items-center gap-1.5 rounded-lg border-2 border-red-200 bg-red-50 px-3 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-100 disabled:opacity-50"
           >
-            <Trash2 size={12} />
+            <Trash2 size={13} strokeWidth={2} />
             Delete
           </button>
         </div>
       </div>
 
-      <div className="space-y-2.5">
+      <div className="space-y-2">
 
         {/* Details */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Channel Details</h2>
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 border-b border-indigo-100 bg-indigo-50 px-3 py-2 text-indigo-700">
+            <ShoppingBag size={13} />
+            <h2 className="text-xs font-bold">Channel Details</h2>
           </div>
-          <div className="grid grid-cols-1 gap-x-6 px-4 py-1 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-x-6 px-3 py-1 md:grid-cols-2">
             <div className="divide-y divide-slate-50">
               <Row label="Channel Type"  value={c?.type} />
               <Row label="Channel Name"  value={c?.sales_channel_name} />
@@ -125,7 +126,7 @@ export default function SalesChannelViewPage() {
             </div>
           </div>
           {c?.description && (
-            <div className="border-t border-slate-50 px-4 py-2">
+            <div className="border-t border-slate-50 px-3 py-2">
               <span className="text-xs text-slate-500">Description</span>
               <p className="mt-0.5 text-xs text-slate-700">{c.description}</p>
             </div>
@@ -133,11 +134,12 @@ export default function SalesChannelViewPage() {
         </section>
 
         {/* Record Info */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Record Info</h2>
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+          <div className="flex items-center gap-1.5 border-b border-slate-100 bg-slate-50 px-3 py-2 text-slate-600">
+            <Calendar size={13} />
+            <h2 className="text-xs font-bold">Record Info</h2>
           </div>
-          <div className="divide-y divide-slate-50 px-4 py-1">
+          <div className="divide-y divide-slate-50 px-3 py-1">
             <Row label="Created At" value={c?.created_at ? new Date(c.created_at).toLocaleString() : null} />
             <Row label="Updated At" value={c?.updated_at ? new Date(c.updated_at).toLocaleString() : null} />
           </div>
@@ -145,7 +147,7 @@ export default function SalesChannelViewPage() {
 
       </div>
 
-      <div className="mt-3">
+      <div className="mt-2">
         <Link to="/inventory/sales-channels" className="text-xs font-medium text-slate-500 hover:text-slate-800">
           ← Back to Sales Channels
         </Link>

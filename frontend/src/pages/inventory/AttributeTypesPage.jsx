@@ -1,12 +1,13 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronDown, ChevronRight, Edit2, Save, Trash2, X } from 'lucide-react'
+import { ChevronDown, ChevronRight, Edit2, ListFilter, Save, X } from 'lucide-react'
 import { createAttributeType, deleteAttributeType, getAttributeType, getAttributeTypes, updateAttributeType } from '../../api/attributeTypes'
 import { getAllCategories } from '../../api/categories'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
+import { DeleteBtn } from '../../components/ui/ActionButtons'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/attribute-types' },
@@ -134,7 +135,7 @@ function NestedCategorySelect({ value, onChange, onBlur, categories, hasError })
         type="button"
         onClick={() => (open ? setOpen(false) : openDropdown())}
         onKeyDown={(e) => e.key === 'Escape' && setOpen(false)}
-        className={`flex w-full items-center justify-between rounded border bg-white px-2.5 py-1.5 text-xs outline-none transition focus:ring-2 ${
+        className={`flex w-full items-center justify-between rounded border bg-white px-2 py-1 text-xs outline-none transition focus:ring-2 ${
           hasError
             ? 'border-red-400 focus:border-red-400 focus:ring-red-500/20'
             : 'border-slate-300 focus:border-indigo-400 focus:ring-indigo-500/20'
@@ -163,9 +164,11 @@ function NestedCategorySelect({ value, onChange, onBlur, categories, hasError })
 
 // ── Inline form panel ───────────────────────────────────────────────────────
 const inputBase =
-  'block w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+  'block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15'
 const inputErr =
-  'block w-full rounded border border-red-400 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
+  'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
+const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
+const ERR_CLS   = 'mt-0.5 text-[10px] text-red-500'
 
 function AttributeTypeForm({ editId, onDone, onCancel }) {
   const isEditing   = Boolean(editId)
@@ -261,15 +264,15 @@ function AttributeTypeForm({ editId, onDone, onCancel }) {
   }
 
   if (isEditing && isFetching) {
-    return <div className="flex items-center justify-center py-12 text-xs text-slate-400">Loading…</div>
+    return <div className="flex items-center justify-center py-8 text-xs text-slate-400">Loading…</div>
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3 p-4">
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2 p-2.5">
 
       {/* Category */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+        <label className={LABEL_CLS}>
           Category <span className="text-red-500">*</span>
         </label>
         <NestedCategorySelect
@@ -280,16 +283,16 @@ function AttributeTypeForm({ editId, onDone, onCancel }) {
           hasError={!!(errors.category_id && touched.category_id)}
         />
         {errors.category_id && touched.category_id && (
-          <p className="mt-0.5 text-[11px] text-red-600">{errors.category_id}</p>
+          <p className={ERR_CLS}>{errors.category_id}</p>
         )}
       </div>
 
       {/* Type radio */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+        <label className={LABEL_CLS}>
           Type <span className="text-red-500">*</span>
         </label>
-        <div className={`flex items-center gap-4 rounded border px-2.5 py-1.5 ${
+        <div className={`flex items-center gap-4 rounded border px-2 py-1 ${
           errors.product_service_type && touched.product_service_type
             ? 'border-red-400 bg-red-50'
             : 'border-slate-300 bg-white'
@@ -310,13 +313,13 @@ function AttributeTypeForm({ editId, onDone, onCancel }) {
           ))}
         </div>
         {errors.product_service_type && touched.product_service_type && (
-          <p className="mt-0.5 text-[11px] text-red-600">{errors.product_service_type}</p>
+          <p className={ERR_CLS}>{errors.product_service_type}</p>
         )}
       </div>
 
       {/* Attribute Type Name */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+        <label className={LABEL_CLS}>
           Attribute Type Name <span className="text-red-500">*</span>
         </label>
         <input
@@ -332,14 +335,14 @@ function AttributeTypeForm({ editId, onDone, onCancel }) {
           className={errors.attribute_type_name && touched.attribute_type_name ? inputErr : inputBase}
         />
         {errors.attribute_type_name && touched.attribute_type_name && (
-          <p className="mt-0.5 text-[11px] text-red-600">{errors.attribute_type_name}</p>
+          <p className={ERR_CLS}>{errors.attribute_type_name}</p>
         )}
       </div>
 
       {/* Description */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">
-          Description <span className="text-[11px] font-normal text-slate-400">(optional)</span>
+        <label className={LABEL_CLS}>
+          Description <span className="text-[10px] font-normal text-slate-400">(optional)</span>
         </label>
         <div className="relative">
           <textarea
@@ -349,7 +352,7 @@ function AttributeTypeForm({ editId, onDone, onCancel }) {
             onBlur={handleBlur}
             placeholder="Briefly describe this attribute type…"
             maxLength={255}
-            rows={3}
+            rows={2}
             className={`${errors.description && touched.description ? inputErr : inputBase} resize-none pb-5`}
           />
           <span className="absolute bottom-1.5 right-2 text-[10px] text-slate-400">
@@ -357,23 +360,23 @@ function AttributeTypeForm({ editId, onDone, onCancel }) {
           </span>
         </div>
         {errors.description && touched.description && (
-          <p className="mt-0.5 text-[11px] text-red-600">{errors.description}</p>
+          <p className={ERR_CLS}>{errors.description}</p>
         )}
       </div>
 
       {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-        <p className="text-xs text-red-600">
+        <p className="text-[10px] text-red-600">
           {mutation.error?.response?.data?.message ?? 'An unexpected error occurred.'}
         </p>
       )}
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-2 pt-1">
+      <div className="flex items-center justify-end gap-1.5 pt-0.5">
         {isEditing && (
           <button
             type="button"
             onClick={onCancel}
-            className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
+            className="flex items-center gap-1 rounded px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
           >
             <X size={12} />
             Cancel
@@ -382,9 +385,9 @@ function AttributeTypeForm({ editId, onDone, onCancel }) {
         <button
           type="submit"
           disabled={mutation.isPending}
-          className="flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Save size={13} strokeWidth={2.5} />
+          <Save size={12} strokeWidth={2.5} />
           {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Attribute Type'}
         </button>
       </div>
@@ -434,10 +437,10 @@ export default function AttributeTypesPage() {
         <Breadcrumb crumbs={CRUMBS} />
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-3">
 
         {/* ── LEFT: Table ─────────────────────────────────────────────── */}
-        <div className="lg:col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="lg:col-span-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           {isLoading && (
             <div className="flex items-center justify-center py-16 text-sm text-slate-400">Loading…</div>
           )}
@@ -466,7 +469,7 @@ export default function AttributeTypesPage() {
                   <tbody className="divide-y divide-slate-100">
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
+                        <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-400">
                           No attribute types yet. Use the form to create the first one.
                         </td>
                       </tr>
@@ -514,15 +517,7 @@ export default function AttributeTypesPage() {
                                 </button>
                               )}
                               {can('delete_attribute_types') && (
-                                <button
-                                  type="button"
-                                  title="Delete"
-                                  onClick={() => handleDelete(row.id, row.attribute_type_name)}
-                                  disabled={deleteMutation.isPending}
-                                  className="rounded p-1 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
+                                <DeleteBtn onClick={() => handleDelete(row.id, row.attribute_type_name)} disabled={deleteMutation.isPending} />
                               )}
                             </div>
                           </td>
@@ -568,13 +563,16 @@ export default function AttributeTypesPage() {
         </div>
 
         {/* ── RIGHT: Form panel ───────────────────────────────────────── */}
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm self-start">
-          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {editId ? 'Edit Attribute Type' : 'New Attribute Type'}
-            </h2>
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm self-start">
+          <div className="flex items-center justify-between border-b border-indigo-100 bg-indigo-50 px-3 py-2">
+            <div className="flex items-center gap-1.5 text-indigo-700">
+              <ListFilter size={13} />
+              <h2 className="text-xs font-bold">
+                {editId ? 'Edit Attribute Type' : 'New Attribute Type'}
+              </h2>
+            </div>
             {editId && (
-              <span className="flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-600">
+              <span className="flex items-center gap-1 rounded bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">
                 <Edit2 size={10} /> Editing
               </span>
             )}
@@ -588,7 +586,7 @@ export default function AttributeTypesPage() {
               onCancel={() => setEditId(null)}
             />
           ) : (
-            <div className="p-4 text-xs text-slate-400">
+            <div className="p-2.5 text-xs text-slate-400">
               You don't have permission to manage attribute types.
             </div>
           )}

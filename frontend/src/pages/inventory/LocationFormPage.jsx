@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save } from 'lucide-react'
+import { ClipboardList, CreditCard, MapPin, Package, Phone, Save, Settings2 } from 'lucide-react'
 import { createLocation, getLocation, updateLocation } from '../../api/locations'
 import { getCompanies } from '../../api/companies'
 import { getAllIndustries } from '../../api/industries'
@@ -95,14 +95,17 @@ function validate(field, value, form) {
 }
 
 // ── Style helpers ──────────────────────────────────────────────────────────────
-const inputBase = 'block w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
-const inputErr  = 'block w-full rounded border border-red-400 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
+const inputBase = 'block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15'
+const inputErr  = 'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
 
 const fieldCls = (errors, touched, name) => errors[name] && touched[name] ? inputErr : inputBase
 
+const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
+const ERR_CLS   = 'mt-0.5 text-[10px] text-red-500'
+
 function Label({ children, required }) {
   return (
-    <label className="mb-0.5 block text-xs font-medium text-slate-600">
+    <label className={LABEL_CLS}>
       {children}{required && <span className="ml-0.5 text-red-500">*</span>}
     </label>
   )
@@ -110,19 +113,23 @@ function Label({ children, required }) {
 
 function FieldError({ errors, touched, name }) {
   if (!errors[name] || !touched[name]) return null
-  return <p className="mt-0.5 text-[11px] text-red-600">{errors[name]}</p>
+  return <p className={ERR_CLS}>{errors[name]}</p>
 }
 
-function SectionHeader({ title }) {
+function SectionHeader({ icon: Icon, title, colorClass }) {
   return (
-    <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</h2>
+    <div className={`flex items-center gap-1.5 px-3 py-2 border-b ${colorClass}`}>
+      {Icon && <Icon size={13} />}
+      <h2 className="text-xs font-bold">{title}</h2>
     </div>
   )
 }
 
 // ── Tab constants ──────────────────────────────────────────────────────────────
-const TABS = ['Basic Details', 'Contact Info']
+const TABS = [
+  { label: 'Basic Details', icon: ClipboardList },
+  { label: 'Contact Info',  icon: Phone },
+]
 
 export default function LocationFormPage() {
   const { id }      = useParams()
@@ -340,31 +347,33 @@ export default function LocationFormPage() {
       </div>
       <form onSubmit={handleSubmit} noValidate>
         {/* ── Tab bar ── */}
-        <div className="overflow-hidden rounded-t-xl border border-slate-200 bg-white">
-          <div className="flex border-b border-slate-200">
-            {TABS.map((tab, idx) => (
-              <button
-                key={tab}
-                type="button"
-                onClick={() => setActiveTab(idx)}
-                className={[
-                  'px-5 py-2.5 text-xs font-semibold transition-colors',
-                  activeTab === idx
-                    ? 'border-b-2 border-indigo-600 text-indigo-600'
-                    : 'text-slate-500 hover:text-slate-700',
-                ].join(' ')}
-              >
-                {tab}
-              </button>
-            ))}
-          </div>
+        <div className="mb-2 inline-flex gap-1 rounded-lg bg-slate-100 p-1 shadow-inner">
+          {TABS.map((tab, idx) => (
+            <button
+              key={tab.label}
+              type="button"
+              onClick={() => setActiveTab(idx)}
+              className={[
+                'flex items-center gap-1.5 rounded-md px-4 py-1.5 text-xs font-semibold transition-all duration-150',
+                activeTab === idx
+                  ? 'bg-white text-indigo-600 shadow-sm ring-1 ring-slate-200'
+                  : 'text-slate-500 hover:text-slate-700',
+              ].join(' ')}
+            >
+              <tab.icon size={12} strokeWidth={2.5} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
 
           {/* ── Tab 1: Basic Details ── */}
           {activeTab === 0 && (
-            <div className="p-3 space-y-3">
+            <div className="p-2.5 space-y-2">
 
               {/* Row 1 */}
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                 <div>
                   <Label required>Company Name</Label>
                   <select
@@ -435,7 +444,7 @@ export default function LocationFormPage() {
               </div>
 
               {/* Row 2 */}
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
                 <div>
                   <Label required>Location Code</Label>
                   <input
@@ -486,12 +495,12 @@ export default function LocationFormPage() {
               </div>
 
               {/* Address cards — two column */}
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
 
                 {/* Location Address */}
-                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                  <SectionHeader title="Location Address" />
-                  <div className="p-3 space-y-2.5">
+                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                  <SectionHeader icon={MapPin} title="Location Address" colorClass="text-emerald-700 bg-emerald-50 border-emerald-100" />
+                  <div className="p-2.5 space-y-2">
                     <div>
                       <Label required>Street Address</Label>
                       <input
@@ -507,7 +516,7 @@ export default function LocationFormPage() {
                       />
                       <FieldError errors={errors} touched={touched} name="loc_street_address" />
                     </div>
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
                         <Label required>City</Label>
                         <input
@@ -572,9 +581,9 @@ export default function LocationFormPage() {
                 </div>
 
                 {/* Billing Address */}
-                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                  <SectionHeader title="Billing Address" />
-                  <div className="p-3 space-y-2.5">
+                <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                  <SectionHeader icon={CreditCard} title="Billing Address" colorClass="text-amber-700 bg-amber-50 border-amber-100" />
+                  <div className="p-2.5 space-y-2">
                     <div>
                       <Label>Street Address</Label>
                       <input
@@ -590,7 +599,7 @@ export default function LocationFormPage() {
                         className={`${fieldCls(errors, touched, 'bill_street_address')} ${form.billing_same_as_location ? 'bg-slate-50 text-slate-400' : ''}`}
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-2 gap-2">
                       <div>
                         <Label required={!form.billing_same_as_location}>City</Label>
                         <input
@@ -674,10 +683,10 @@ export default function LocationFormPage() {
 
           {/* ── Tab 2: Contact Info ── */}
           {activeTab === 1 && (
-            <div className="p-3 space-y-3">
+            <div className="p-2.5 space-y-2">
 
               {/* Contact fields — 4 col */}
-              <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                 <div>
                   <Label>Company email</Label>
                   <input name="company_email" type="email" value={form.company_email}
@@ -732,7 +741,7 @@ export default function LocationFormPage() {
               </div>
 
               {/* Map URL */}
-              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
                 <div>
                   <Label>Select Location / Enter URL</Label>
                   <input name="map_url" type="text" value={form.map_url}
@@ -741,17 +750,17 @@ export default function LocationFormPage() {
                     maxLength={500} autoComplete="off" className={fieldCls(errors, touched, 'map_url')} />
                 </div>
                 {form.map_url && (
-                  <div className="flex h-24 items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50">
+                  <div className="flex h-14 items-center justify-center overflow-hidden rounded border border-slate-200 bg-slate-50">
                     <p className="text-xs text-slate-400 text-center px-2 truncate">{form.map_url}</p>
                   </div>
                 )}
               </div>
 
               {/* Advanced Settings */}
-              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                <SectionHeader title="Advance Info" />
-                <div className="p-3 space-y-2.5">
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <SectionHeader icon={Settings2} title="Advanced Settings" colorClass="text-violet-700 bg-violet-50 border-violet-100" />
+                <div className="p-2.5 space-y-2">
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                     <div>
                       <Label>Date Format</Label>
                       <select name="date_format" value={form.date_format} onChange={handleChange}
@@ -782,7 +791,7 @@ export default function LocationFormPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                     <div>
                       <Label required>Base Currency</Label>
                       <select name="base_currency" value={form.base_currency}
@@ -818,11 +827,11 @@ export default function LocationFormPage() {
                         <span className="text-xs text-slate-500 shrink-0">From</span>
                         <input name="open_hours_from" type="time" value={form.open_hours_from}
                           onChange={handleChange}
-                          className="block w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+                          className="block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15" />
                         <span className="text-xs text-slate-500 shrink-0">To:</span>
                         <input name="open_hours_to" type="time" value={form.open_hours_to}
                           onChange={handleChange}
-                          className="block w-full rounded border border-slate-300 bg-white px-2 py-1.5 text-xs outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20" />
+                          className="block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15" />
                       </div>
                     </div>
                   </div>
@@ -830,14 +839,14 @@ export default function LocationFormPage() {
               </div>
 
               {/* Modules & Stock */}
-              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-                <SectionHeader title="Advance Info" />
-                <div className="grid grid-cols-1 gap-3 p-3 lg:grid-cols-2">
+              <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+                <SectionHeader icon={Package} title="Modules & Stock" colorClass="text-blue-700 bg-blue-50 border-blue-100" />
+                <div className="grid grid-cols-1 gap-2 p-2.5 lg:grid-cols-2">
 
                   {/* Available Modules */}
                   <div>
                     <Label>Available Modules</Label>
-                    <div className="mt-1 flex flex-wrap gap-3">
+                    <div className="mt-1 flex flex-wrap gap-2">
                       {ALL_MODULES.map((mod) => (
                         <label key={mod} className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-700">
                           <input
@@ -882,35 +891,35 @@ export default function LocationFormPage() {
         </div>
 
         {/* ── Footer ── */}
-        <div className="mt-3 flex items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-2">
-          <p className="text-[11px] text-slate-400">* Required</p>
+        <div className="mt-2 flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-1.5">
+          <p className="text-[10px] text-slate-400">* Required</p>
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={handleClear}
-              className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+              className="rounded px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
             >
               Clear
             </button>
             <Link
               to="/inventory/locations"
-              className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+              className="rounded px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
             >
               Cancel
             </Link>
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Save size={13} strokeWidth={2.5} />
+              <Save size={12} strokeWidth={2.5} />
               {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create & Close'}
             </button>
           </div>
         </div>
 
         {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-          <p className="mt-2 text-xs text-red-600">
+          <p className="mt-1 text-[10px] text-red-600">
             {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
           </p>
         )}

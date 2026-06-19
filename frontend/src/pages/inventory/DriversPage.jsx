@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Eye, Plus, Search, Trash2 } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { deleteDriver, getDrivers } from '../../api/drivers'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
+import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
+import { FILTER_INPUT_CLS } from '../../utils/fieldStyles'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -81,7 +83,7 @@ export default function DriversPage() {
         )}
       </div>
       {/* Search bar */}
-      <form onSubmit={handleSearch} className="mt-3 flex items-center gap-2">
+      <form onSubmit={handleSearch} className="mt-2 flex items-center gap-2">
         <div className="relative flex-1 max-w-xs">
           <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -89,7 +91,7 @@ export default function DriversPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by name, code or licence…"
-            className="w-full rounded border border-slate-300 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+            className={`${FILTER_INPUT_CLS} pl-8`}
           />
         </div>
         <button
@@ -109,7 +111,7 @@ export default function DriversPage() {
         )}
       </form>
 
-      <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
         )}
@@ -139,7 +141,7 @@ export default function DriversPage() {
                 <tbody className="divide-y divide-slate-100">
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">
+                      <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-400">
                         {q ? `No drivers found for "${q}".` : 'No drivers yet.'}{' '}
                         {!q && can('create_drivers') && (
                           <Link to="/inventory/drivers/create" className="font-medium text-indigo-600 hover:underline">
@@ -186,32 +188,12 @@ export default function DriversPage() {
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex items-center justify-end gap-1">
-                            <Link
-                              to={`/inventory/drivers/${d.id}`}
-                              title="View"
-                              className="rounded p-1 text-blue-500 transition-colors hover:bg-blue-50 hover:text-blue-700"
-                            >
-                              <Eye size={13} />
-                            </Link>
+                            <ViewBtn to={`/inventory/drivers/${d.id}`} />
                             {can('edit_drivers') && (
-                              <Link
-                                to={`/inventory/drivers/${d.id}/edit`}
-                                title="Edit"
-                                className="rounded p-1 text-amber-500 transition-colors hover:bg-amber-50 hover:text-amber-700"
-                              >
-                                <Edit2 size={13} />
-                              </Link>
+                              <EditBtn to={`/inventory/drivers/${d.id}/edit`} />
                             )}
                             {can('delete_drivers') && (
-                              <button
-                                type="button"
-                                title="Delete"
-                                onClick={() => handleDelete(d.id, d.full_name)}
-                                disabled={deleteMutation.isPending}
-                                className="rounded p-1 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              <DeleteBtn onClick={() => handleDelete(d.id, d.full_name)} disabled={deleteMutation.isPending} />
                             )}
                           </div>
                         </td>
@@ -239,7 +221,7 @@ export default function DriversPage() {
                   >
                     ← Prev
                   </button>
-                  <span className="min-w-[3.5rem] text-center text-xs text-slate-400">
+                  <span className="min-w-14 text-center text-xs text-slate-400">
                     {page} / {meta.last_page}
                   </span>
                   <button

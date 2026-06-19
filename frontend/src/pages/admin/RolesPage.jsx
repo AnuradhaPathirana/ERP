@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Loader2, Plus, Shield, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Shield } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { deleteRole, getRoles } from '../../api/roles'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
 
 const CRUMBS = [{ label: 'Roles & Permissions' }]
 
@@ -135,24 +136,9 @@ export default function RolesPage() {
                       </td>
                       <td className="sticky right-0 bg-white px-4 py-2.5">
                         <div className="flex items-center justify-end gap-1">
-                          <button
-                            type="button"
-                            title="Edit permissions"
-                            onClick={() => navigate(`/admin/roles/${role.id}/edit`)}
-                            className="rounded-md p-1.5 text-amber-500 transition-colors hover:bg-amber-50 hover:text-amber-700"
-                          >
-                            <Edit2 size={14} />
-                          </button>
+                          <EditBtn onClick={() => navigate(`/admin/roles/${role.id}/edit`)} title="Edit permissions" />
                           {!role.is_system && (
-                            <button
-                              type="button"
-                              title="Delete role"
-                              onClick={() => handleDelete(role)}
-                              disabled={deleteMutation.isPending}
-                              className="rounded-md p-1.5 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                            <DeleteBtn onClick={() => handleDelete(role)} disabled={deleteMutation.isPending} title="Delete role" />
                           )}
                         </div>
                       </td>

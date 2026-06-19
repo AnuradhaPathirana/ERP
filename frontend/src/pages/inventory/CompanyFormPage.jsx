@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save } from 'lucide-react'
+import { Building2, MapPin, Phone, Save } from 'lucide-react'
 import { createCompany, getCompany, updateCompany } from '../../api/companies'
 import { getAllIndustries } from '../../api/industries'
 import Breadcrumb from '../../components/Breadcrumb'
@@ -77,16 +77,19 @@ function validate(field, value) {
 }
 
 const inputBase =
-  'block w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+  'block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15'
 const inputErr =
-  'block w-full rounded border border-red-400 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
+  'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
 
 const fieldCls = (errors, touched, name) =>
   errors[name] && touched[name] ? inputErr : inputBase
 
+const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
+const ERR_CLS   = 'mt-0.5 text-[10px] text-red-500'
+
 function Label({ children, required }) {
   return (
-    <label className="mb-0.5 block text-xs font-medium text-slate-600">
+    <label className={LABEL_CLS}>
       {children}{required && <span className="ml-0.5 text-red-500">*</span>}
     </label>
   )
@@ -94,13 +97,14 @@ function Label({ children, required }) {
 
 function FieldError({ errors, touched, name }) {
   if (!errors[name] || !touched[name]) return null
-  return <p className="mt-0.5 text-[11px] text-red-600">{errors[name]}</p>
+  return <p className={ERR_CLS}>{errors[name]}</p>
 }
 
-function SectionHeader({ title }) {
+function SectionHeader({ icon: Icon, title, colorClass }) {
   return (
-    <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-      <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</h2>
+    <div className={`flex items-center gap-1.5 px-3 py-2 border-b ${colorClass}`}>
+      {Icon && <Icon size={13} />}
+      <h2 className="text-xs font-bold">{title}</h2>
     </div>
   )
 }
@@ -221,22 +225,22 @@ export default function CompanyFormPage() {
 
   return (
     <div className="w-full">
-      <div>
+      <div className="mb-2">
         <h1 className="text-xl font-bold leading-none text-slate-800">
           {isEditing ? 'Edit Company' : 'New Company'}
         </h1>
         <Breadcrumb crumbs={crumbs} />
       </div>
       <form onSubmit={handleSubmit} noValidate>
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
 
           {/* ── Left column ── */}
-          <div className="space-y-3">
+          <div className="space-y-2">
 
             {/* Basic Information */}
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <SectionHeader title="Basic Information" />
-              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <SectionHeader icon={Building2} title="Basic Information" colorClass="text-indigo-700 bg-indigo-50 border-indigo-100" />
+              <div className="grid grid-cols-1 gap-2 p-2.5 sm:grid-cols-2">
 
                 <div>
                   <Label required>Company Type</Label>
@@ -325,9 +329,9 @@ export default function CompanyFormPage() {
             </div>
 
             {/* Contact */}
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <SectionHeader title="Contact Details" />
-              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <SectionHeader icon={Phone} title="Contact Details" colorClass="text-sky-700 bg-sky-50 border-sky-100" />
+              <div className="grid grid-cols-1 gap-2 p-2.5 sm:grid-cols-2">
 
                 <div>
                   <Label>Company Email</Label>
@@ -368,9 +372,9 @@ export default function CompanyFormPage() {
 
           {/* ── Right column — Address ── */}
           <div>
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <SectionHeader title="Address" />
-              <div className="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+              <SectionHeader icon={MapPin} title="Address" colorClass="text-emerald-700 bg-emerald-50 border-emerald-100" />
+              <div className="grid grid-cols-1 gap-2 p-2.5 sm:grid-cols-2">
 
                 <div className="sm:col-span-2">
                   <Label required>Street Address</Label>
@@ -459,25 +463,25 @@ export default function CompanyFormPage() {
         </div>
 
         {/* Footer */}
-        <div className="mt-3 flex items-center justify-end gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2">
+        <div className="mt-2 flex items-center justify-end gap-2 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
           <Link
             to="/inventory/companies"
-            className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+            className="rounded px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
           >
             Cancel
           </Link>
           <button
             type="submit"
             disabled={mutation.isPending}
-            className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Save size={13} strokeWidth={2.5} />
+            <Save size={12} strokeWidth={2.5} />
             {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Company'}
           </button>
         </div>
 
         {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-          <p className="mt-2 text-xs text-red-600">
+          <p className="mt-1 text-[10px] text-red-600">
             {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
           </p>
         )}

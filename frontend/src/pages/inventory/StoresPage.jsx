@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Plus, Trash2 } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { deleteStore, getStores } from '../../api/stores'
 import { getAllStoreTypes } from '../../api/storeTypes'
 import { getAllLocations } from '../../api/locations'
@@ -10,6 +10,8 @@ import TableFilter, { FilterField } from '../../components/TableFilter'
 import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
+import { EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
+import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/stores' },
@@ -17,12 +19,6 @@ const CRUMBS = [
 ]
 
 const INITIAL_FILTERS = { search: '', store_type_id: '', is_active: '', location_id: '' }
-
-const INPUT_CLS =
-  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
-
-const SELECT_CLS =
-  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
 
 export default function StoresPage() {
   const [page, setPage] = useState(1)
@@ -96,7 +92,7 @@ export default function StoresPage() {
       >
         <FilterField label="Search">
           <input
-            className={INPUT_CLS}
+            className={FILTER_INPUT_CLS}
             placeholder="Name or code…"
             value={draft.search}
             onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
@@ -105,7 +101,7 @@ export default function StoresPage() {
 
         <FilterField label="Store Type">
           <select
-            className={SELECT_CLS}
+            className={FILTER_SELECT_CLS}
             value={draft.store_type_id}
             onChange={(e) => setDraft((d) => ({ ...d, store_type_id: e.target.value }))}
           >
@@ -118,7 +114,7 @@ export default function StoresPage() {
 
         <FilterField label="Status">
           <select
-            className={SELECT_CLS}
+            className={FILTER_SELECT_CLS}
             value={draft.is_active}
             onChange={(e) => setDraft((d) => ({ ...d, is_active: e.target.value }))}
           >
@@ -130,7 +126,7 @@ export default function StoresPage() {
 
         <FilterField label="Location">
           <select
-            className={SELECT_CLS}
+            className={FILTER_SELECT_CLS}
             value={draft.location_id}
             onChange={(e) => setDraft((d) => ({ ...d, location_id: e.target.value }))}
           >
@@ -144,7 +140,7 @@ export default function StoresPage() {
       </TableFilter>
 
       {/* ── Data Table ── */}
-      <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
         )}
@@ -165,7 +161,6 @@ export default function StoresPage() {
                     <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Store Name</th>
                     <th className="w-32 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Type</th>
                     <th className="w-36 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Location</th>
-                    <th className="w-20 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">UOM</th>
                     <th className="w-24 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Capacity</th>
                     <th className="w-20 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Status</th>
                     <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Created</th>
@@ -176,7 +171,7 @@ export default function StoresPage() {
                 <tbody className="divide-y divide-slate-100">
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-400">
+                      <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-400">
                         {activeCount > 0
                           ? 'No stores match the current filters.'
                           : (
@@ -216,7 +211,6 @@ export default function StoresPage() {
                         <td className="max-w-36 truncate px-3 py-2 text-slate-500">
                           {row.location?.name ?? <span className="italic text-slate-300">—</span>}
                         </td>
-                        <td className="px-3 py-2 text-slate-500">{row.uom}</td>
                         <td className="px-3 py-2 text-right font-medium text-slate-700">
                           {Number(row.capacity).toLocaleString(undefined, { maximumFractionDigits: 2 })}
                         </td>
@@ -233,24 +227,10 @@ export default function StoresPage() {
                         <td className="px-3 py-2">
                           <div className="flex items-center justify-end gap-1">
                             {can('edit_stores') && (
-                              <Link
-                                to={`/inventory/stores/${row.id}/edit`}
-                                title="Edit"
-                                className="rounded p-1 text-amber-500 transition-colors hover:bg-amber-50 hover:text-amber-700"
-                              >
-                                <Edit2 size={13} />
-                              </Link>
+                              <EditBtn to={`/inventory/stores/${row.id}/edit`} />
                             )}
                             {can('delete_stores') && (
-                              <button
-                                type="button"
-                                title="Delete"
-                                onClick={() => handleDelete(row.id, row.store_name)}
-                                disabled={deleteMutation.isPending}
-                                className="rounded p-1 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              <DeleteBtn onClick={() => handleDelete(row.id, row.store_name)} disabled={deleteMutation.isPending} />
                             )}
                           </div>
                         </td>

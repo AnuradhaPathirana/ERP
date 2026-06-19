@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save } from 'lucide-react'
+import { Car, FileText, Save, Settings, ShieldCheck, Truck, UserCheck } from 'lucide-react'
 import { createVehicle, getVehicle, updateVehicle } from '../../api/vehicles'
 import { getAllDrivers } from '../../api/drivers'
 import Breadcrumb from '../../components/Breadcrumb'
@@ -77,8 +77,10 @@ function validate(field, value) {
   return ''
 }
 
-const inputBase = 'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
-const inputErr  = 'block w-full rounded border border-red-400 bg-white px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
+const inputBase = 'block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15'
+const inputErr  = 'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
+const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
+const ERR_CLS   = 'mt-0.5 text-[10px] text-red-500'
 
 function fieldCls(errors, touched, name) {
   return errors[name] && touched[name] ? inputErr : inputBase
@@ -86,7 +88,7 @@ function fieldCls(errors, touched, name) {
 
 function Label({ children, required }) {
   return (
-    <label className="mb-0.5 block text-xs font-medium text-slate-600">
+    <label className={LABEL_CLS}>
       {children}{required && <span className="ml-0.5 text-red-500">*</span>}
     </label>
   )
@@ -94,16 +96,17 @@ function Label({ children, required }) {
 
 function FieldError({ errors, touched, name }) {
   if (!errors[name] || !touched[name]) return null
-  return <p className="mt-0.5 text-[11px] text-red-600">{errors[name]}</p>
+  return <p className={ERR_CLS}>{errors[name]}</p>
 }
 
-function SectionCard({ title, children }) {
+function SectionCard({ icon: Icon, title, colorClass, children }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</h2>
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className={`flex items-center gap-1.5 px-3 py-2 border-b ${colorClass}`}>
+        {Icon && <Icon size={13} />}
+        <h2 className="text-xs font-bold">{title}</h2>
       </div>
-      <div className="space-y-2 p-3">{children}</div>
+      <div className="space-y-2 p-2.5">{children}</div>
     </div>
   )
 }
@@ -234,20 +237,20 @@ export default function VehicleFormPage() {
 
   return (
     <div className="w-full">
-      <div>
+      <div className="mb-2">
         <h1 className="text-xl font-bold leading-none text-slate-800">
           {isEditing ? 'Edit Vehicle' : 'New Vehicle'}
         </h1>
         <Breadcrumb crumbs={crumbs} />
       </div>
       <form onSubmit={handleSubmit} noValidate>
-        <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
 
           {/* ── LEFT column ─────────────────────────────────────────────── */}
-          <div className="space-y-2.5">
+          <div className="space-y-2">
 
             {/* Identity */}
-            <SectionCard title="Identity">
+            <SectionCard icon={Car} title="Identity" colorClass="text-indigo-700 bg-indigo-50 border-indigo-100">
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label required>Vehicle Code</Label>
@@ -263,7 +266,7 @@ export default function VehicleFormPage() {
             </SectionCard>
 
             {/* Specifications */}
-            <SectionCard title="Specifications">
+            <SectionCard icon={Settings} title="Specifications" colorClass="text-sky-700 bg-sky-50 border-sky-100">
               <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
                 <div>
                   <Label>Make</Label>
@@ -307,7 +310,7 @@ export default function VehicleFormPage() {
             </SectionCard>
 
             {/* Engine & Chassis */}
-            <SectionCard title="Engine & Chassis">
+            <SectionCard icon={Truck} title="Engine & Chassis" colorClass="text-amber-700 bg-amber-50 border-amber-100">
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label>Engine Number</Label>
@@ -337,10 +340,10 @@ export default function VehicleFormPage() {
           </div>
 
           {/* ── RIGHT column ────────────────────────────────────────────── */}
-          <div className="space-y-2.5">
+          <div className="space-y-2">
 
             {/* Assignment */}
-            <SectionCard title="Driver Assignment">
+            <SectionCard icon={UserCheck} title="Driver Assignment" colorClass="text-violet-700 bg-violet-50 border-violet-100">
               <div>
                 <Label>Assigned Driver</Label>
                 <select {...inp('assigned_driver_id')}>
@@ -356,7 +359,7 @@ export default function VehicleFormPage() {
             </SectionCard>
 
             {/* Compliance */}
-            <SectionCard title="Compliance & Insurance">
+            <SectionCard icon={ShieldCheck} title="Compliance & Insurance" colorClass="text-emerald-700 bg-emerald-50 border-emerald-100">
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label>Insurance Policy No.</Label>
@@ -384,7 +387,7 @@ export default function VehicleFormPage() {
             </SectionCard>
 
             {/* Status & Notes */}
-            <SectionCard title="Status & Notes">
+            <SectionCard icon={FileText} title="Status & Notes" colorClass="text-blue-700 bg-blue-50 border-blue-100">
               <div>
                 <Label>Status</Label>
                 <select {...inp('status')}>
@@ -397,7 +400,7 @@ export default function VehicleFormPage() {
               <div>
                 <Label>Notes</Label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   placeholder="Additional notes…"
                   {...inp('notes')}
                   className={`${fieldCls(errors, touched, 'notes')} resize-none`}
@@ -410,25 +413,25 @@ export default function VehicleFormPage() {
         </div>
 
         {/* ── Footer ──────────────────────────────────────────────────────── */}
-        <div className="mt-2.5 flex items-center justify-end gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2">
+        <div className="mt-2 flex items-center justify-end gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
           <Link
             to="/inventory/vehicles"
-            className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+            className="rounded px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
           >
             Cancel
           </Link>
           <button
             type="submit"
             disabled={mutation.isPending}
-            className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <Save size={13} strokeWidth={2.5} />
+            <Save size={12} strokeWidth={2.5} />
             {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Vehicle'}
           </button>
         </div>
 
         {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-          <p className="mt-1.5 text-xs text-red-600">
+          <p className="mt-1 text-[10px] text-red-600">
             {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
           </p>
         )}

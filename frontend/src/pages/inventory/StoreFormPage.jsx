@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Save } from 'lucide-react'
+import { FileText, MapPin, Phone, Save, Settings2, Warehouse } from 'lucide-react'
 import { createStore, getStore, updateStore } from '../../api/stores'
 import { getAllStores } from '../../api/stores'
 import { getAllStoreTypes } from '../../api/storeTypes'
@@ -56,9 +56,12 @@ function validate(field, value) {
 }
 
 const inputBase =
-  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+  'block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15'
 const inputErr =
-  'block w-full rounded border border-red-400 bg-red-50/40 px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
+  'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
+
+const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
+const ERR_CLS   = 'mt-0.5 text-[10px] text-red-500'
 
 function cls(errors, touched, name) {
   return errors[name] && touched[name] ? inputErr : inputBase
@@ -66,7 +69,7 @@ function cls(errors, touched, name) {
 
 function Label({ children, required }) {
   return (
-    <label className="mb-0.5 block text-xs font-medium text-slate-600">
+    <label className={LABEL_CLS}>
       {children}{required && <span className="ml-0.5 text-red-500">*</span>}
     </label>
   )
@@ -74,16 +77,17 @@ function Label({ children, required }) {
 
 function FieldError({ errors, touched, name }) {
   if (!errors[name] || !touched[name]) return null
-  return <p className="mt-0.5 text-[11px] text-red-600">{errors[name]}</p>
+  return <p className={ERR_CLS}>{errors[name]}</p>
 }
 
-function SectionCard({ title, children }) {
+function SectionCard({ icon: Icon, title, colorClass, children }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-        <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">{title}</h2>
+    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+      <div className={`flex items-center gap-1.5 px-3 py-2 border-b ${colorClass}`}>
+        {Icon && <Icon size={13} />}
+        <h2 className="text-xs font-bold">{title}</h2>
       </div>
-      <div className="space-y-2 p-3">{children}</div>
+      <div className="space-y-2 p-2.5">{children}</div>
     </div>
   )
 }
@@ -267,20 +271,20 @@ export default function StoreFormPage() {
 
   return (
     <div className="w-full">
-      <div>
+      <div className="mb-2">
         <h1 className="text-xl font-bold leading-none text-slate-800">
           {isEditing ? 'Edit Store' : 'New Store'}
         </h1>
         <Breadcrumb crumbs={crumbs} />
       </div>
       <form onSubmit={handleSubmit} noValidate>
-        <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
 
           {/* ── LEFT + CENTRE (2 cols) ───────────────────────────── */}
-          <div className="space-y-2.5 lg:col-span-2">
+          <div className="space-y-2 lg:col-span-2">
 
             {/* Store Details */}
-            <SectionCard title="Store Details">
+            <SectionCard icon={Warehouse} title="Store Details" colorClass="text-indigo-700 bg-indigo-50 border-indigo-100">
               <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
 
                 {/* Store Type */}
@@ -338,7 +342,7 @@ export default function StoreFormPage() {
             </SectionCard>
 
             {/* Address */}
-            <SectionCard title="Address">
+            <SectionCard icon={MapPin} title="Address" colorClass="text-emerald-700 bg-emerald-50 border-emerald-100">
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <Label>Address Line 1</Label>
@@ -376,7 +380,7 @@ export default function StoreFormPage() {
             </SectionCard>
 
             {/* Contact */}
-            <SectionCard title="Contact">
+            <SectionCard icon={Phone} title="Contact" colorClass="text-sky-700 bg-sky-50 border-sky-100">
               <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
                 <div>
                   <Label>Manager Name</Label>
@@ -399,8 +403,8 @@ export default function StoreFormPage() {
           </div>
 
           {/* ── RIGHT column ────────────────────────────────────── */}
-          <div className="space-y-2.5">
-            <SectionCard title="Settings">
+          <div className="space-y-2">
+            <SectionCard icon={Settings2} title="Settings" colorClass="text-violet-700 bg-violet-50 border-violet-100">
               <label className="flex cursor-pointer items-center gap-3">
                 <div className="relative">
                   <input
@@ -417,15 +421,15 @@ export default function StoreFormPage() {
                   {form.is_active ? 'Active' : 'Inactive'}
                 </span>
               </label>
-              <p className="text-[11px] text-slate-400">
+              <p className="text-[10px] text-slate-400">
                 Inactive stores are hidden from stock movement dropdowns.
               </p>
             </SectionCard>
 
             {/* Description */}
-            <SectionCard title="Description">
+            <SectionCard icon={FileText} title="Description" colorClass="text-amber-700 bg-amber-50 border-amber-100">
               <textarea
-                rows={5}
+                rows={4}
                 placeholder="Additional notes about this store…"
                 className={`${inputBase} resize-none`}
                 name="description"
@@ -436,23 +440,23 @@ export default function StoreFormPage() {
             </SectionCard>
 
             {/* Actions */}
-            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white p-3 flex flex-col gap-2">
+            <div className="overflow-hidden rounded-lg border border-slate-200 bg-white p-2.5 flex flex-col gap-1.5">
               <button
                 type="submit"
                 disabled={mutation.isPending}
-                className="flex w-full items-center justify-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                className="flex w-full items-center justify-center gap-1.5 rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <Save size={13} strokeWidth={2.5} />
+                <Save size={12} strokeWidth={2.5} />
                 {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Store'}
               </button>
               <Link
                 to="/inventory/stores"
-                className="block w-full rounded border border-slate-200 px-3 py-1.5 text-center text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
+                className="block w-full rounded border border-slate-200 px-3 py-1 text-center text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100"
               >
                 Cancel
               </Link>
               {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-                <p className="text-xs text-red-600">
+                <p className="text-[10px] text-red-600">
                   {mutation.error?.response?.data?.message ?? 'An unexpected error occurred. Please try again.'}
                 </p>
               )}

@@ -6,8 +6,10 @@ import {
   Building2,
   Bus,
   Car,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ClipboardList,
   DollarSign,
   FolderTree,
   LayoutDashboard,
@@ -16,8 +18,11 @@ import {
   LogOut,
   MapPin,
   Package,
+  PackageCheck,
   Ruler,
+  Settings2,
   Shield,
+  ShoppingBag,
   ShoppingCart,
   SlidersHorizontal,
   Tag,
@@ -46,23 +51,33 @@ const NAV_ITEMS = [
     icon: Package,
     moduleKey: 'inventory',
     children: [
-      { label: 'Industries',       to: '/inventory/industries',        icon: Building2,       permissionGuard: 'view_industries' },
-      { label: 'Companies',        to: '/inventory/companies',         icon: Building2,       permissionGuard: 'view_companies' },
-      { label: 'Locations',        to: '/inventory/locations',         icon: MapPin,          permissionGuard: 'view_locations' },
-      { label: 'Stores',           to: '/inventory/stores',            icon: Store,           permissionGuard: 'view_stores' },
-      { label: 'Store Types',      to: '/inventory/store-types',       icon: Warehouse,       permissionGuard: 'view_store_types' },
-      { label: 'Customers',        to: '/inventory/customers',         icon: UsersRound,      permissionGuard: 'view_customer_masters' },
-      { label: 'Suppliers',        to: '/inventory/suppliers',         icon: Truck,           permissionGuard: 'view_supplier_masters' },
-      { label: 'Unit Categories',  to: '/inventory/unit-categories',   icon: Tag,             permissionGuard: 'view_unit_categories' },
-      { label: 'Unit Types',       to: '/inventory/unit-types',        icon: Ruler,           permissionGuard: 'view_unit_types' },
-      { label: 'Unit Conversions', to: '/inventory/unit-conversions',  icon: ArrowLeftRight,  permissionGuard: 'view_unit_conversions' },
-      { label: 'Attribute Types',  to: '/inventory/attribute-types',   icon: Layers,          permissionGuard: 'view_attribute_types' },
-      { label: 'Attributes',       to: '/inventory/attributes',        icon: SlidersHorizontal, permissionGuard: 'view_attributes' },
-      { label: 'Drivers',          to: '/inventory/drivers',           icon: Car,             permissionGuard: 'view_drivers' },
-      { label: 'Vehicles',         to: '/inventory/vehicles',          icon: Bus,             permissionGuard: 'view_vehicle_masters' },
-      { label: 'Categories',       to: '/inventory/categories',        icon: FolderTree,      permissionGuard: 'view_categories' },
-      { label: 'Products',         to: '/inventory/products',          icon: Box,             permissionGuard: 'view_products' },
-      { label: 'Sales Channels',   to: '/inventory/sales-channels',    icon: ShoppingCart,    permissionGuard: 'view_sales_channels' },
+      { label: 'Purchase Requests', to: '/inventory/purchase-requests', icon: ClipboardList, permissionGuard: 'view_purchase_requests' },
+      { label: 'Purchase Orders',   to: '/inventory/purchase-orders',   icon: ShoppingBag,   permissionGuard: 'view_purchase_orders' },
+      { label: 'GRN',               to: '/inventory/goods-received-notes', icon: PackageCheck, permissionGuard: 'view_grns' },
+      {
+        label: 'Settings & Configurations',
+        icon: Settings2,
+        isSubgroup: true,
+        children: [
+          { label: 'Industries',       to: '/inventory/industries',       icon: Building2,         permissionGuard: 'view_industries' },
+          { label: 'Companies',        to: '/inventory/companies',        icon: Building2,         permissionGuard: 'view_companies' },
+          { label: 'Locations',        to: '/inventory/locations',        icon: MapPin,            permissionGuard: 'view_locations' },
+          { label: 'Stores',           to: '/inventory/stores',           icon: Store,             permissionGuard: 'view_stores' },
+          { label: 'Store Types',      to: '/inventory/store-types',      icon: Warehouse,         permissionGuard: 'view_store_types' },
+          { label: 'Customers',        to: '/inventory/customers',        icon: UsersRound,        permissionGuard: 'view_customer_masters' },
+          { label: 'Suppliers',        to: '/inventory/suppliers',        icon: Truck,             permissionGuard: 'view_supplier_masters' },
+          { label: 'Unit Categories',  to: '/inventory/unit-categories',  icon: Tag,               permissionGuard: 'view_unit_categories' },
+          { label: 'Unit Types',       to: '/inventory/unit-types',       icon: Ruler,             permissionGuard: 'view_unit_types' },
+          { label: 'Unit Conversions', to: '/inventory/unit-conversions', icon: ArrowLeftRight,    permissionGuard: 'view_unit_conversions' },
+          { label: 'Attribute Types',  to: '/inventory/attribute-types',  icon: Layers,            permissionGuard: 'view_attribute_types' },
+          { label: 'Attributes',       to: '/inventory/attributes',       icon: SlidersHorizontal, permissionGuard: 'view_attributes' },
+          { label: 'Drivers',          to: '/inventory/drivers',          icon: Car,               permissionGuard: 'view_drivers' },
+          { label: 'Vehicles',         to: '/inventory/vehicles',         icon: Bus,               permissionGuard: 'view_vehicle_masters' },
+          { label: 'Categories',       to: '/inventory/categories',       icon: FolderTree,        permissionGuard: 'view_categories' },
+          { label: 'Products',         to: '/inventory/products',         icon: Box,               permissionGuard: 'view_products' },
+          { label: 'Sales Channels',   to: '/inventory/sales-channels',   icon: ShoppingCart,      permissionGuard: 'view_sales_channels' },
+        ],
+      },
     ],
   },
   {
@@ -125,7 +140,11 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
   const isSuperAdmin    = userRoles.includes('super_admin')
   const navigate        = useNavigate()
 
-  const [lockedModule, setLockedModule] = useState(null)
+  const [lockedModule, setLockedModule]       = useState(null)
+  const [openSubgroups, setOpenSubgroups]     = useState({})
+
+  const toggleSubgroup = (key) =>
+    setOpenSubgroups((prev) => ({ ...prev, [key]: !prev[key] }))
 
   const userName    = localStorage.getItem('user_name')  || ''
   const userEmail   = localStorage.getItem('user_email') || ''
@@ -288,31 +307,81 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
                 )}
 
                 {/* Children — always visible when expanded */}
-                {!collapsed && children?.filter(({ permissionGuard }) =>
-                  !permissionGuard || isSuperAdmin || userPermissions.includes(permissionGuard)
-                ).map(({ label: cl, to: ct, icon: CI }) => (
-                  <NavLink
-                    key={cl}
-                    to={ct}
-                    className={({ isActive }) =>
-                      [
-                        'flex items-center gap-3 rounded-lg pl-5 pr-3 py-2 text-sm transition-colors duration-150',
-                        isActive
-                          ? 'bg-indigo-600/20 text-indigo-400 font-medium'
-                          : 'text-slate-400 hover:bg-slate-800 hover:text-white',
-                      ].join(' ')
-                    }
-                  >
-                    {CI
-                      ? <CI size={16} className="shrink-0" />
-                      : <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
-                    }
-                    <span>{cl}</span>
-                  </NavLink>
-                ))}
+                {!collapsed && children?.map((child) => {
+                  if (child.isSubgroup) {
+                    const { label: sg, icon: SGIcon, children: sgChildren } = child
+                    const sgKey = `${label}__${sg}`
+                    const isOpen = !!openSubgroups[sgKey]
+                    const visibleSgChildren = sgChildren?.filter(({ permissionGuard }) =>
+                      !permissionGuard || isSuperAdmin || userPermissions.includes(permissionGuard)
+                    )
+                    if (!visibleSgChildren?.length) return null
+                    return (
+                      <div key={sgKey}>
+                        <button
+                          type="button"
+                          onClick={() => toggleSubgroup(sgKey)}
+                          className="flex w-full items-center gap-2 rounded-lg pl-5 pr-3 py-2 text-sm text-slate-400 hover:bg-slate-800 hover:text-white transition-colors duration-150"
+                        >
+                          {SGIcon && <SGIcon size={16} className="shrink-0" />}
+                          <span className="flex-1 text-left">{sg}</span>
+                          <ChevronDown
+                            size={14}
+                            className={['shrink-0 transition-transform duration-200', isOpen ? 'rotate-180' : ''].join(' ')}
+                          />
+                        </button>
+                        {isOpen && visibleSgChildren.map(({ label: cl, to: ct, icon: CI }) => (
+                          <NavLink
+                            key={cl}
+                            to={ct}
+                            className={({ isActive }) =>
+                              [
+                                'flex items-center gap-3 rounded-lg pl-9 pr-3 py-1.5 text-sm transition-colors duration-150',
+                                isActive
+                                  ? 'bg-indigo-600/20 text-indigo-400 font-medium'
+                                  : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+                              ].join(' ')
+                            }
+                          >
+                            {CI
+                              ? <CI size={14} className="shrink-0" />
+                              : <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
+                            }
+                            <span>{cl}</span>
+                          </NavLink>
+                        ))}
+                      </div>
+                    )
+                  }
 
-                {/* Collapsed: show each child icon */}
-                {collapsed && children?.filter(({ permissionGuard }) =>
+                  const { permissionGuard, label: cl, to: ct, icon: CI } = child
+                  if (permissionGuard && !isSuperAdmin && !userPermissions.includes(permissionGuard)) return null
+                  return (
+                    <NavLink
+                      key={cl}
+                      to={ct}
+                      className={({ isActive }) =>
+                        [
+                          'flex items-center gap-3 rounded-lg pl-5 pr-3 py-2 text-sm transition-colors duration-150',
+                          isActive
+                            ? 'bg-indigo-600/20 text-indigo-400 font-medium'
+                            : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+                        ].join(' ')
+                      }
+                    >
+                      {CI
+                        ? <CI size={16} className="shrink-0" />
+                        : <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
+                      }
+                      <span>{cl}</span>
+                    </NavLink>
+                  )
+                })}
+
+                {/* Collapsed: show each child icon (flatten subgroups) */}
+                {collapsed && children?.flatMap((child) =>
+                  child.isSubgroup ? child.children ?? [] : [child]
+                ).filter(({ permissionGuard }) =>
                   !permissionGuard || isSuperAdmin || userPermissions.includes(permissionGuard)
                 ).map(({ label: cl, to: ct, icon: CI }) => (
                   <NavLink

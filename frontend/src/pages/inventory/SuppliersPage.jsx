@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Eye, Plus, Trash2 } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { deleteSupplier, getSuppliers } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
+import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
 import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
+import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -17,12 +19,6 @@ const CRUMBS = [
 const INITIAL_FILTERS = { search: '', supplier_type: '', bil_city: '', bil_country: '' }
 
 const SUPPLIER_TYPES = ['Local', 'Foreign', 'Service', 'Manufacturer', 'Distributor', 'Other']
-
-const INPUT_CLS =
-  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
-
-const SELECT_CLS =
-  'block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
 
 export default function SuppliersPage() {
   const [page, setPage] = useState(1)
@@ -84,7 +80,7 @@ export default function SuppliersPage() {
       >
         <FilterField label="Search">
           <input
-            className={INPUT_CLS}
+            className={FILTER_INPUT_CLS}
             placeholder="Name, code or email…"
             value={draft.search}
             onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
@@ -93,7 +89,7 @@ export default function SuppliersPage() {
 
         <FilterField label="Supplier Type">
           <select
-            className={SELECT_CLS}
+            className={FILTER_SELECT_CLS}
             value={draft.supplier_type}
             onChange={(e) => setDraft((d) => ({ ...d, supplier_type: e.target.value }))}
           >
@@ -106,7 +102,7 @@ export default function SuppliersPage() {
 
         <FilterField label="Billing City">
           <input
-            className={INPUT_CLS}
+            className={FILTER_INPUT_CLS}
             placeholder="City…"
             value={draft.bil_city}
             onChange={(e) => setDraft((d) => ({ ...d, bil_city: e.target.value }))}
@@ -115,7 +111,7 @@ export default function SuppliersPage() {
 
         <FilterField label="Billing Country">
           <input
-            className={INPUT_CLS}
+            className={FILTER_INPUT_CLS}
             placeholder="Country…"
             value={draft.bil_country}
             onChange={(e) => setDraft((d) => ({ ...d, bil_country: e.target.value }))}
@@ -124,7 +120,7 @@ export default function SuppliersPage() {
       </TableFilter>
 
       {/* ── Data Table ── */}
-      <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
         )}
@@ -153,7 +149,7 @@ export default function SuppliersPage() {
                 <tbody className="divide-y divide-slate-100">
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
+                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-400">
                         {activeCount > 0
                           ? 'No suppliers match the current filters.'
                           : (
@@ -199,32 +195,15 @@ export default function SuppliersPage() {
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex items-center justify-end gap-1">
-                            <Link
-                              to={`/inventory/suppliers/${s.id}`}
-                              title="View"
-                              className="rounded p-1 text-blue-500 transition-colors hover:bg-blue-50 hover:text-blue-700"
-                            >
-                              <Eye size={13} />
-                            </Link>
+                            <ViewBtn to={`/inventory/suppliers/${s.id}`} />
                             {can('edit_supplier_masters') && (
-                              <Link
-                                to={`/inventory/suppliers/${s.id}/edit`}
-                                title="Edit"
-                                className="rounded p-1 text-amber-500 transition-colors hover:bg-amber-50 hover:text-amber-700"
-                              >
-                                <Edit2 size={13} />
-                              </Link>
+                              <EditBtn to={`/inventory/suppliers/${s.id}/edit`} />
                             )}
                             {can('delete_supplier_masters') && (
-                              <button
-                                type="button"
-                                title="Delete"
+                              <DeleteBtn
                                 onClick={() => handleDelete(s.id, s.supplier_name)}
                                 disabled={deleteMutation.isPending}
-                                className="rounded p-1 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              />
                             )}
                           </div>
                         </td>

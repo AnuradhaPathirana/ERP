@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Eye, Plus, Trash2 } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import { deleteCompany, getCompanies } from '../../api/companies'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
+import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -57,7 +58,7 @@ export default function CompaniesPage() {
           </Link>
         )}
       </div>
-      <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
         )}
@@ -86,7 +87,7 @@ export default function CompaniesPage() {
                 <tbody className="divide-y divide-slate-100">
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
+                      <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-400">
                         No companies yet.{' '}
                         {can('create_companies') && (
                           <Link to="/inventory/companies/create" className="font-medium text-indigo-600 hover:underline">
@@ -124,32 +125,12 @@ export default function CompaniesPage() {
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex items-center justify-end gap-1">
-                            <Link
-                              to={`/inventory/companies/${company.id}`}
-                              title="View"
-                              className="rounded p-1 text-blue-500 transition-colors hover:bg-blue-50 hover:text-blue-700"
-                            >
-                              <Eye size={13} />
-                            </Link>
+                            <ViewBtn to={`/inventory/companies/${company.id}`} />
                             {can('edit_companies') && (
-                              <Link
-                                to={`/inventory/companies/${company.id}/edit`}
-                                title="Edit"
-                                className="rounded p-1 text-amber-500 transition-colors hover:bg-amber-50 hover:text-amber-700"
-                              >
-                                <Edit2 size={13} />
-                              </Link>
+                              <EditBtn to={`/inventory/companies/${company.id}/edit`} />
                             )}
                             {can('delete_companies') && (
-                              <button
-                                type="button"
-                                title="Delete"
-                                onClick={() => handleDelete(company.id, company.company_name)}
-                                disabled={deleteMutation.isPending}
-                                className="rounded p-1 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              <DeleteBtn onClick={() => handleDelete(company.id, company.company_name)} disabled={deleteMutation.isPending} />
                             )}
                           </div>
                         </td>
@@ -177,7 +158,7 @@ export default function CompaniesPage() {
                   >
                     ← Prev
                   </button>
-                  <span className="min-w-[3.5rem] text-center text-xs text-slate-400">
+                  <span className="min-w-14 text-center text-xs text-slate-400">
                     {page} / {meta.last_page}
                   </span>
                   <button

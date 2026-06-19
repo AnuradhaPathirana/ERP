@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Eye, Plus, Search, Trash2 } from 'lucide-react'
+import { Plus, Search } from 'lucide-react'
 import { deleteVehicle, getVehicles } from '../../api/vehicles'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
+import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
+import { FILTER_INPUT_CLS } from '../../utils/fieldStyles'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -105,7 +107,7 @@ export default function VehiclesPage() {
         )}
       </div>
       {/* Search */}
-      <form onSubmit={handleSearch} className="mt-3 flex items-center gap-2">
+      <form onSubmit={handleSearch} className="mt-2 flex items-center gap-2">
         <div className="relative max-w-xs flex-1">
           <Search size={13} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -113,7 +115,7 @@ export default function VehiclesPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by code, reg no. or make…"
-            className="w-full rounded border border-slate-300 bg-white py-1.5 pl-8 pr-3 text-xs text-slate-700 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20"
+            className={`${FILTER_INPUT_CLS} pl-8`}
           />
         </div>
         <button
@@ -133,7 +135,7 @@ export default function VehiclesPage() {
         )}
       </form>
 
-      <div className="mt-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         {isLoading && (
           <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
         )}
@@ -163,7 +165,7 @@ export default function VehiclesPage() {
                 <tbody className="divide-y divide-slate-100">
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">
+                      <td colSpan={9} className="px-4 py-8 text-center text-sm text-slate-400">
                         {q ? `No vehicles found for "${q}".` : 'No vehicles yet.'}{' '}
                         {!q && can('create_vehicle_masters') && (
                           <Link to="/inventory/vehicles/create" className="font-medium text-indigo-600 hover:underline">
@@ -200,7 +202,7 @@ export default function VehiclesPage() {
                         <td className="px-3 py-2 text-slate-500">
                           {v.fuel_type ?? <span className="italic text-slate-300">—</span>}
                         </td>
-                        <td className="max-w-[128px] truncate px-3 py-2 text-slate-500">
+                        <td className="max-w-32 truncate px-3 py-2 text-slate-500">
                           {v.assigned_driver?.name ?? <span className="italic text-slate-300">Unassigned</span>}
                         </td>
                         <td className="px-3 py-2">
@@ -208,32 +210,12 @@ export default function VehiclesPage() {
                         </td>
                         <td className="px-3 py-2">
                           <div className="flex items-center justify-end gap-1">
-                            <Link
-                              to={`/inventory/vehicles/${v.id}`}
-                              title="View"
-                              className="rounded p-1 text-blue-500 transition-colors hover:bg-blue-50 hover:text-blue-700"
-                            >
-                              <Eye size={13} />
-                            </Link>
+                            <ViewBtn to={`/inventory/vehicles/${v.id}`} />
                             {can('edit_vehicle_masters') && (
-                              <Link
-                                to={`/inventory/vehicles/${v.id}/edit`}
-                                title="Edit"
-                                className="rounded p-1 text-amber-500 transition-colors hover:bg-amber-50 hover:text-amber-700"
-                              >
-                                <Edit2 size={13} />
-                              </Link>
+                              <EditBtn to={`/inventory/vehicles/${v.id}/edit`} />
                             )}
                             {can('delete_vehicle_masters') && (
-                              <button
-                                type="button"
-                                title="Delete"
-                                onClick={() => handleDelete(v.id, v.vehicle_code ?? v.registration_number)}
-                                disabled={deleteMutation.isPending}
-                                className="rounded p-1 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                              >
-                                <Trash2 size={13} />
-                              </button>
+                              <DeleteBtn onClick={() => handleDelete(v.id, v.vehicle_code ?? v.registration_number)} disabled={deleteMutation.isPending} />
                             )}
                           </div>
                         </td>
@@ -261,7 +243,7 @@ export default function VehiclesPage() {
                   >
                     ← Prev
                   </button>
-                  <span className="min-w-[3.5rem] text-center text-xs text-slate-400">
+                  <span className="min-w-14 text-center text-xs text-slate-400">
                     {page} / {meta.last_page}
                   </span>
                   <button

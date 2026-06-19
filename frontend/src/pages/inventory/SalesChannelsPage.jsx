@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Eye, Save, Trash2, X } from 'lucide-react'
+import { Edit2, Save, ShoppingBag, Trash2, X } from 'lucide-react'
 import {
   createSalesChannel,
   deleteSalesChannel,
@@ -12,6 +12,7 @@ import {
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
+import { ViewBtn, DeleteBtn } from '../../components/ui/ActionButtons'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -67,15 +68,17 @@ function validate(field, value, allValues = {}) {
 }
 
 const inputBase =
-  'block w-full rounded border border-slate-300 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-500/20'
+  'block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15'
 const inputErr =
-  'block w-full rounded border border-red-400 bg-white px-2.5 py-1.5 text-xs text-slate-800 placeholder-slate-300 outline-none transition focus:border-red-400 focus:ring-2 focus:ring-red-500/20'
+  'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
+const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
+const ERR_CLS   = 'mt-0.5 text-[10px] text-red-500'
 const fieldCls = (errors, touched, name) =>
   errors[name] && touched[name] ? inputErr : inputBase
 
 function FieldError({ errors, touched, name }) {
   if (!errors[name] || !touched[name]) return null
-  return <p className="mt-0.5 text-[11px] text-red-600">{errors[name]}</p>
+  return <p className={ERR_CLS}>{errors[name]}</p>
 }
 
 // ── Inline form panel ─────────────────────────────────────────────────────────
@@ -174,15 +177,15 @@ function SalesChannelForm({ editId, onDone, onCancel }) {
   }
 
   if (isEditing && isFetching) {
-    return <div className="flex items-center justify-center py-12 text-xs text-slate-400">Loading…</div>
+    return <div className="flex items-center justify-center py-8 text-xs text-slate-400">Loading…</div>
   }
 
   return (
-    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3 p-4">
+    <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-2 p-2.5">
 
       {/* Channel Type */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+        <label className={LABEL_CLS}>
           Channel Type <span className="text-red-500">*</span>
         </label>
         <select name="type" value={form.type} onChange={handleChange} onBlur={handleBlur} className={fieldCls(errors, touched, 'type')}>
@@ -194,7 +197,7 @@ function SalesChannelForm({ editId, onDone, onCancel }) {
 
       {/* Channel Name */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">
+        <label className={LABEL_CLS}>
           Channel Name <span className="text-red-500">*</span>
         </label>
         <input
@@ -214,7 +217,7 @@ function SalesChannelForm({ editId, onDone, onCancel }) {
 
       {/* Status */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">Status</label>
+        <label className={LABEL_CLS}>Status</label>
         <select name="status" value={form.status} onChange={handleChange} onBlur={handleBlur} className={fieldCls(errors, touched, 'status')}>
           <option value="">— Select —</option>
           {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -224,8 +227,8 @@ function SalesChannelForm({ editId, onDone, onCancel }) {
 
       {/* Max Quantity */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">
-          Max Quantity <span className="text-[11px] font-normal text-slate-400">(optional)</span>
+        <label className={LABEL_CLS}>
+          Max Quantity <span className="text-[10px] font-normal text-slate-400">(optional)</span>
         </label>
         <input
           name="max_qty"
@@ -244,7 +247,7 @@ function SalesChannelForm({ editId, onDone, onCancel }) {
       {/* Date range */}
       <div className="grid grid-cols-2 gap-2">
         <div>
-          <label className="mb-0.5 block text-xs font-medium text-slate-600">Applicable From</label>
+          <label className={LABEL_CLS}>Applicable From</label>
           <input
             name="applicable_from"
             type="date"
@@ -256,7 +259,7 @@ function SalesChannelForm({ editId, onDone, onCancel }) {
           <FieldError errors={errors} touched={touched} name="applicable_from" />
         </div>
         <div>
-          <label className="mb-0.5 block text-xs font-medium text-slate-600">Applicable To</label>
+          <label className={LABEL_CLS}>Applicable To</label>
           <input
             name="applicable_to"
             type="date"
@@ -271,13 +274,13 @@ function SalesChannelForm({ editId, onDone, onCancel }) {
 
       {/* Description */}
       <div>
-        <label className="mb-0.5 block text-xs font-medium text-slate-600">
-          Description <span className="text-[11px] font-normal text-slate-400">(optional)</span>
+        <label className={LABEL_CLS}>
+          Description <span className="text-[10px] font-normal text-slate-400">(optional)</span>
         </label>
         <div className="relative">
           <textarea
             name="description"
-            rows={3}
+            rows={2}
             value={form.description}
             onChange={handleChange}
             onBlur={handleBlur}
@@ -293,18 +296,18 @@ function SalesChannelForm({ editId, onDone, onCancel }) {
       </div>
 
       {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-        <p className="text-xs text-red-600">
+        <p className="text-[10px] text-red-600">
           {mutation.error?.response?.data?.message ?? 'An unexpected error occurred.'}
         </p>
       )}
 
       {/* Actions */}
-      <div className="flex items-center justify-end gap-2 pt-1">
+      <div className="flex items-center justify-end gap-1.5 pt-0.5">
         {isEditing && (
           <button
             type="button"
             onClick={onCancel}
-            className="flex items-center gap-1 rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
+            className="flex items-center gap-1 rounded px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-200"
           >
             <X size={12} />
             Cancel
@@ -313,9 +316,9 @@ function SalesChannelForm({ editId, onDone, onCancel }) {
         <button
           type="submit"
           disabled={mutation.isPending}
-          className="flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+          className="flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Save size={13} strokeWidth={2.5} />
+          <Save size={12} strokeWidth={2.5} />
           {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Channel'}
         </button>
       </div>
@@ -365,10 +368,10 @@ export default function SalesChannelsPage() {
         <Breadcrumb crumbs={CRUMBS} />
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+      <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-3">
 
         {/* ── LEFT: Table ─────────────────────────────────────────────── */}
-        <div className="lg:col-span-2 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="lg:col-span-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           {isLoading && (
             <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>
           )}
@@ -397,7 +400,7 @@ export default function SalesChannelsPage() {
                   <tbody className="divide-y divide-slate-100">
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
+                        <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-400">
                           No sales channels yet. Use the form to create the first one.
                         </td>
                       </tr>
@@ -436,13 +439,7 @@ export default function SalesChannelsPage() {
                           </td>
                           <td className="px-3 py-2">
                             <div className="flex items-center justify-end gap-1">
-                              <Link
-                                to={`/inventory/sales-channels/${c.id}`}
-                                title="View"
-                                className="rounded p-1 text-blue-500 transition-colors hover:bg-blue-50 hover:text-blue-700"
-                              >
-                                <Eye size={13} />
-                              </Link>
+                              <ViewBtn to={`/inventory/sales-channels/${c.id}`} />
                               {can('edit_sales_channels') && (
                                 <button
                                   type="button"
@@ -454,15 +451,7 @@ export default function SalesChannelsPage() {
                                 </button>
                               )}
                               {can('delete_sales_channels') && (
-                                <button
-                                  type="button"
-                                  title="Delete"
-                                  onClick={() => handleDelete(c.id, c.sales_channel_name)}
-                                  disabled={deleteMutation.isPending}
-                                  className="rounded p-1 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:opacity-40"
-                                >
-                                  <Trash2 size={13} />
-                                </button>
+                                <DeleteBtn onClick={() => handleDelete(c.id, c.sales_channel_name)} disabled={deleteMutation.isPending} />
                               )}
                             </div>
                           </td>
@@ -508,13 +497,16 @@ export default function SalesChannelsPage() {
         </div>
 
         {/* ── RIGHT: Form panel ───────────────────────────────────────── */}
-        <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm self-start">
-          <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-              {editId ? 'Edit Channel' : 'New Channel'}
-            </h2>
+        <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm self-start">
+          <div className="flex items-center justify-between border-b border-indigo-100 bg-indigo-50 px-3 py-2">
+            <div className="flex items-center gap-1.5 text-indigo-700">
+              <ShoppingBag size={13} />
+              <h2 className="text-xs font-bold">
+                {editId ? 'Edit Channel' : 'New Channel'}
+              </h2>
+            </div>
             {editId && (
-              <span className="flex items-center gap-1 rounded bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-indigo-600">
+              <span className="flex items-center gap-1 rounded bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold text-indigo-600">
                 <Edit2 size={10} /> Editing
               </span>
             )}
@@ -528,7 +520,7 @@ export default function SalesChannelsPage() {
               onCancel={() => setEditId(null)}
             />
           ) : (
-            <div className="p-4 text-xs text-slate-400">
+            <div className="p-2.5 text-xs text-slate-400">
               You don't have permission to manage sales channels.
             </div>
           )}

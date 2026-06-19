@@ -22,7 +22,7 @@ export default function Layout() {
         onClose={() => setMobileOpen(false)}
       />
 
-      <main className="flex-1 overflow-y-auto" style={{ padding: '1.5%' }}>
+      <main className="flex-1 overflow-y-auto" style={{ padding: '0.75%' }}>
         <Outlet />
       </main>
     </div>

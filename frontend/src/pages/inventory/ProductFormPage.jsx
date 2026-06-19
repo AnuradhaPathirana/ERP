@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Check, ChevronDown, HelpCircle, Plus, RefreshCw, Save, Trash2, X } from 'lucide-react'
+import { BarChart2, Check, ChevronDown, HelpCircle, Package, Plus, RefreshCw, Save, Settings, ShoppingCart, Tag, Trash2, X } from 'lucide-react'
 import { checkProductCode, createProduct, getProduct, updateProduct } from '../../api/products'
 import { getAllAttributes } from '../../api/attributes'
 import { getAllAttributeTypes } from '../../api/attributeTypes'
@@ -120,10 +120,13 @@ function computeAverage(costPrice, sellingPrice) {
   return ((cp + sp) / 2).toFixed(4)
 }
 
+const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
+const ERR_CLS   = 'mt-0.5 text-[10px] text-red-500'
+
 function Field({ label, required, helpText, error, touched, children }) {
   return (
     <div>
-      <label className="mb-0.5 flex items-center gap-1 text-xs font-medium text-slate-600">
+      <label className={`${LABEL_CLS} flex items-center gap-1`}>
         {label}
         {required && <span className="text-red-500">*</span>}
         {helpText && (
@@ -133,7 +136,7 @@ function Field({ label, required, helpText, error, touched, children }) {
         )}
       </label>
       {children}
-      {error && touched && <p className="mt-0.5 text-xs text-red-600">{error}</p>}
+      {error && touched && <p className={ERR_CLS}>{error}</p>}
     </div>
   )
 }
@@ -147,12 +150,12 @@ function Input({ name, value, onChange, onBlur, error, touched, ...props }) {
       onBlur={onBlur}
       autoComplete="off"
       className={[
-        'block w-full rounded border px-2 py-1 text-sm text-slate-800',
-        'placeholder-slate-300 outline-none transition-all',
-        'focus:ring-1 focus:ring-indigo-500/30',
+        'block w-full rounded-md border-2 px-2 py-1 text-xs text-slate-800',
+        'placeholder-slate-400 outline-none transition-all',
+        'focus:ring-2',
         error && touched
-          ? 'border-red-400 focus:border-red-400'
-          : 'border-slate-300 focus:border-indigo-400',
+          ? 'border-red-300 bg-red-50/40 focus:border-red-500 focus:bg-white focus:ring-red-500/15'
+          : 'border-slate-200 bg-slate-50 focus:border-indigo-500 focus:bg-white focus:ring-indigo-500/15',
       ].join(' ')}
       {...props}
     />
@@ -167,12 +170,12 @@ function SelectField({ name, value, onChange, onBlur, error, touched, placeholde
       onChange={onChange}
       onBlur={onBlur}
       className={[
-        'block w-full rounded border px-2 py-1 text-sm text-slate-800 bg-white',
-        'outline-none transition-all',
-        'focus:ring-1 focus:ring-indigo-500/30',
+        'block w-full rounded-md border-2 px-2 py-1 text-xs text-slate-800',
+        'outline-none transition-all cursor-pointer',
+        'focus:ring-2',
         error && touched
-          ? 'border-red-400 focus:border-red-400'
-          : 'border-slate-300 focus:border-indigo-400',
+          ? 'border-red-300 bg-red-50/40 focus:border-red-500 focus:bg-white focus:ring-red-500/15'
+          : 'border-slate-200 bg-slate-50 focus:border-indigo-500 focus:bg-white focus:ring-indigo-500/15',
       ].join(' ')}
     >
       <option value="">{placeholder ?? '— Select —'}</option>
@@ -196,10 +199,10 @@ function CostInput({ value, onChange, disabled, placeholder, type = 'number', ..
       placeholder={placeholder}
       autoComplete="off"
       className={[
-        'block w-full rounded border px-2 py-1 text-xs outline-none transition-all',
+        'block w-full rounded-md border-2 px-2 py-1 text-xs outline-none transition-all',
         disabled
-          ? 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed'
-          : 'border-slate-300 text-slate-800 focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30',
+          ? 'border-slate-100 bg-slate-100 text-slate-400 cursor-not-allowed'
+          : 'border-slate-200 bg-slate-50 text-slate-800 focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15',
       ].join(' ')}
       {...props}
     />
@@ -211,7 +214,7 @@ function CostSelect({ value, onChange, children, placeholder }) {
     <select
       value={value}
       onChange={onChange}
-      className="block w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30"
+      className="block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer"
     >
       <option value="">{placeholder ?? '— Select —'}</option>
       {children}
@@ -253,14 +256,14 @@ function SupplierMultiSelect({ suppliers, selectedIds, onChange, error, touched 
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={[
-          'flex w-full items-center justify-between rounded border px-2 py-1 bg-white text-left outline-none transition-all',
-          'focus:ring-1 focus:ring-indigo-500/30',
+          'flex w-full items-center justify-between rounded-md border-2 px-2 py-1 text-left outline-none transition-all',
+          'focus:ring-2',
           error && touched
-            ? 'border-red-400 focus:border-red-400'
-            : 'border-slate-300 focus:border-indigo-400',
+            ? 'border-red-300 bg-red-50/40 focus:border-red-500 focus:bg-white focus:ring-red-500/15'
+            : 'border-slate-200 bg-slate-50 focus:border-indigo-500 focus:bg-white focus:ring-indigo-500/15',
         ].join(' ')}
       >
-        <span className={`flex-1 truncate text-sm ${selectedNames.length === 0 ? 'text-slate-400' : 'text-slate-800'}`}>
+        <span className={`flex-1 truncate text-xs ${selectedNames.length === 0 ? 'text-slate-400' : 'text-slate-800'}`}>
           {selectedNames.length === 0 ? 'Select suppliers...' : selectedNames.join(', ')}
         </span>
         <ChevronDown size={14} className={`ml-1 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
@@ -275,7 +278,7 @@ function SupplierMultiSelect({ suppliers, selectedIds, onChange, error, touched 
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search suppliers..."
               autoFocus
-              className="block w-full rounded border border-slate-300 px-2 py-1 text-xs outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30"
+              className="block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15"
             />
           </div>
           <div className="max-h-48 overflow-y-auto">
@@ -329,11 +332,11 @@ function AttributeRow({ row, idx, attributeTypes, allAttributes, usedAttributeId
   return (
     <div className="flex items-end gap-1.5">
       <div className="flex-1">
-        {idx === 0 && <label className="mb-0.5 block text-xs font-medium text-slate-600">Attribute Type</label>}
+        {idx === 0 && <label className={LABEL_CLS}>Attribute Type</label>}
         <select
           value={row.attribute_type_id}
           onChange={(e) => onChange(idx, 'attribute_type_id', e.target.value)}
-          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30"
+          className="w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer"
         >
           <option value="">— Type —</option>
           {attributeTypes.map((t) => (
@@ -342,12 +345,12 @@ function AttributeRow({ row, idx, attributeTypes, allAttributes, usedAttributeId
         </select>
       </div>
       <div className="flex-1">
-        {idx === 0 && <label className="mb-0.5 block text-xs font-medium text-slate-600">Attribute</label>}
+        {idx === 0 && <label className={LABEL_CLS}>Attribute</label>}
         <select
           value={row.attribute_id}
           onChange={(e) => onChange(idx, 'attribute_id', e.target.value)}
           disabled={!row.attribute_type_id}
-          className="w-full rounded border border-slate-300 bg-white px-2 py-1 text-xs text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30 disabled:bg-slate-50 disabled:text-slate-400"
+          className="w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 disabled:border-slate-100 disabled:bg-slate-100 disabled:text-slate-400 cursor-pointer"
         >
           <option value="">— Attribute —</option>
           {filteredAttrs.map((a) => (
@@ -388,7 +391,7 @@ function calcMarginValue(costPrice, sellingPrice, marginType) {
 function MarginField({ row, handle, toggleMarginType }) {
   return (
     <Field label={row.margin_type === 'percentage' ? 'Margin %' : 'Margin (Amt)'}>
-      <div className="flex overflow-hidden rounded border border-slate-300 bg-white focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-500/30">
+      <div className="flex overflow-hidden rounded-md border-2 border-slate-200 bg-slate-50 focus-within:border-indigo-500 focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-500/15">
         <input
           type="number"
           value={row.margin}
@@ -917,7 +920,7 @@ export default function ProductFormPage() {
 
   return (
     <div className="w-full">
-      <div className="mb-3 flex items-center justify-between">
+      <div className="mb-2 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold leading-none text-slate-800">
             {isEditing ? 'Edit Product' : 'New Product'}
@@ -925,15 +928,16 @@ export default function ProductFormPage() {
           <Breadcrumb crumbs={crumbs} />
         </div>
       </div>
-      <form onSubmit={handleSubmit} noValidate className="space-y-2.5">
+      <form onSubmit={handleSubmit} noValidate className="space-y-2">
 
         {/* ── Top grid: Basic Info (wide) + Supplier & Stock (narrow) ── */}
-        <div className="grid grid-cols-1 gap-2.5 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 lg:grid-cols-3">
 
           {/* Basic Information — 2/3 width */}
           <section className="rounded-lg border border-slate-200 bg-white lg:col-span-2">
-            <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-              <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Basic Information</h2>
+            <div className="flex items-center gap-1.5 border-b border-indigo-100 bg-indigo-50 px-3 py-2 text-indigo-700">
+              <Package size={13} />
+              <h2 className="text-xs font-bold">Basic Information</h2>
             </div>
             <div className="space-y-2 p-3">
               <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
@@ -958,13 +962,13 @@ export default function ProductFormPage() {
                     )}
                   </div>
                   {f.product_code.trim() && codeStatus === 'checking' && (
-                    <p className="mt-0.5 text-[11px] text-slate-400">Checking availability…</p>
+                    <p className="mt-0.5 text-[10px] text-slate-400">Checking availability…</p>
                   )}
                   {f.product_code.trim() && codeStatus === 'available' && (
-                    <p className="mt-0.5 text-[11px] text-emerald-600">Code is available.</p>
+                    <p className="mt-0.5 text-[10px] text-emerald-600">Code is available.</p>
                   )}
                   {f.product_code.trim() && codeStatus === 'taken' && (
-                    <p className="mt-0.5 text-[11px] text-red-600">Code already in use.</p>
+                    <p className="mt-0.5 text-[10px] text-red-600">Code already in use.</p>
                   )}
                 </Field>
                 <Field label="Reference No" error={e.reference_no} touched={t.reference_no}>
@@ -1009,7 +1013,7 @@ export default function ProductFormPage() {
               <Field label="Description">
                 <textarea name="description" value={f.description} onChange={handleChange} rows={2}
                   placeholder="Optional product description…"
-                  className="block w-full resize-none rounded border border-slate-300 px-2 py-1 text-xs text-slate-800 placeholder-slate-300 outline-none transition-all focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30" />
+                  className="block w-full resize-none rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15" />
               </Field>
 
               {/* ── Product Attributes + Location & Store side-by-side ── */}
@@ -1030,7 +1034,7 @@ export default function ProductFormPage() {
                     </button>
                   </div>
                   {f.product_attributes.length === 0 ? (
-                    <p className="text-[11px] italic text-slate-400">
+                    <p className="text-[10px] italic text-slate-400">
                       {f.category_id ? 'No attributes. Click + to add.' : 'Select a category to add attributes.'}
                     </p>
                   ) : (
@@ -1064,7 +1068,7 @@ export default function ProductFormPage() {
                     </button>
                   </div>
                   {f.location_stores.length === 0 ? (
-                    <p className="text-[11px] italic text-slate-400">No locations added. Click + to add.</p>
+                    <p className="text-[10px] italic text-slate-400">No locations added. Click + to add.</p>
                   ) : (
                     <div className="space-y-1.5">
                       {f.location_stores.map((row, idx) => {
@@ -1074,7 +1078,7 @@ export default function ProductFormPage() {
                         return (
                           <div key={idx} className="grid grid-cols-2 gap-1.5 items-end">
                             <div>
-                              {idx === 0 && <label className="mb-0.5 block text-xs font-medium text-slate-600">Location</label>}
+                              {idx === 0 && <label className={LABEL_CLS}>Location</label>}
                               <TreeSelect
                                 name={`location_stores_${idx}_location_id`}
                                 value={row.location_id}
@@ -1088,11 +1092,11 @@ export default function ProductFormPage() {
                             </div>
                             <div className="flex items-end gap-1">
                               <div className="flex-1">
-                                {idx === 0 && <label className="mb-0.5 block text-xs font-medium text-slate-600">Store</label>}
+                                {idx === 0 && <label className={LABEL_CLS}>Store</label>}
                                 <select
                                   value={row.store_id}
                                   onChange={(e) => handleLocationStoreChange(idx, 'store_id', e.target.value)}
-                                  className="block w-full rounded border border-slate-300 bg-white px-2 py-1 text-sm text-slate-800 outline-none focus:border-indigo-400 focus:ring-1 focus:ring-indigo-500/30"
+                                  className="block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer"
                                 >
                                   <option value="">{row.location_id ? '— Store —' : '— Select location first —'}</option>
                                   {rowStores.map((s) => (
@@ -1120,16 +1124,15 @@ export default function ProductFormPage() {
           </section>
 
           {/* Right column: Supplier + Stock & Reorder — 1/3 width */}
-          <div className="space-y-2.5">
+          <div className="space-y-2">
 
             {/* Supplier */}
             <section className="overflow-visible rounded-lg border border-slate-200 bg-white">
-              <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                  Supplier <span className="text-red-500">*</span>
-                </h2>
+              <div className="flex items-center gap-1.5 border-b border-sky-100 bg-sky-50 px-3 py-2 text-sky-700">
+                <Tag size={13} />
+                <h2 className="text-xs font-bold">Supplier <span className="text-red-500">*</span></h2>
               </div>
-              <div className="p-3">
+              <div className="p-2.5">
                 <SupplierMultiSelect
                   suppliers={suppliers}
                   selectedIds={f.supplier_ids}
@@ -1141,15 +1144,16 @@ export default function ProductFormPage() {
                   touched={t.supplier_ids}
                 />
                 {e.supplier_ids && t.supplier_ids && (
-                  <p className="mt-1 text-xs text-red-600">{e.supplier_ids}</p>
+                  <p className={`mt-1 ${ERR_CLS}`}>{e.supplier_ids}</p>
                 )}
               </div>
             </section>
 
             {/* Stock & Reorder Settings */}
             <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Stock &amp; Reorder</h2>
+              <div className="flex items-center gap-1.5 border-b border-emerald-100 bg-emerald-50 px-3 py-2 text-emerald-700">
+                <Settings size={13} />
+                <h2 className="text-xs font-bold">Stock &amp; Reorder</h2>
               </div>
               <div className="space-y-2 p-3">
                 <div className="grid grid-cols-2 gap-2">
@@ -1184,8 +1188,11 @@ export default function ProductFormPage() {
 
         {/* ── Channels — full width ── */}
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5 flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Channels</h2>
+          <div className="flex items-center justify-between border-b border-amber-100 bg-amber-50 px-3 py-2 text-amber-700">
+            <div className="flex items-center gap-1.5">
+              <ShoppingCart size={13} />
+              <h2 className="text-xs font-bold">Channels</h2>
+            </div>
             <button
               type="button"
               onClick={addCostRow}
@@ -1223,8 +1230,9 @@ export default function ProductFormPage() {
 
         {/* ── Product Options — full width ── */}
         <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-          <div className="border-b border-slate-100 bg-slate-50 px-3 py-1.5">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Product Options</h2>
+          <div className="flex items-center gap-1.5 border-b border-violet-100 bg-violet-50 px-3 py-2 text-violet-700">
+            <BarChart2 size={13} />
+            <h2 className="text-xs font-bold">Product Options</h2>
           </div>
           <div className="grid grid-cols-3 gap-x-4 gap-y-2 p-3 md:grid-cols-6 lg:grid-cols-11">
             {BOOL_OPTIONS.map(({ key, label }) => (
@@ -1238,19 +1246,19 @@ export default function ProductFormPage() {
         </section>
 
         {/* ── Footer ── */}
-        <div className="flex items-center justify-end gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+        <div className="mt-2 flex items-center justify-end gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
           {mutation.isError && !Object.keys(mutation.error?.response?.data?.errors ?? {}).length && (
-            <p className="mr-auto text-xs text-red-600">
+            <p className={`mr-auto ${ERR_CLS}`}>
               {mutation.error?.response?.data?.message ?? 'An unexpected error occurred.'}
             </p>
           )}
           <Link to="/inventory/products"
-            className="rounded px-3 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100">
+            className="rounded px-3 py-1 text-xs font-medium text-slate-600 transition-colors hover:bg-slate-100">
             Cancel
           </Link>
           <button type="submit" disabled={mutation.isPending}
-            className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
-            <Save size={13} strokeWidth={2.5} />
+            className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">
+            <Save size={12} strokeWidth={2.5} />
             {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Product'}
           </button>
         </div>

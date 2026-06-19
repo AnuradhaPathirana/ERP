@@ -161,7 +161,7 @@ export default function UnitConversionsPage() {
           <select
             value={selectedCategoryId}
             onChange={handleCategoryChange}
-            className="min-w-55 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            className="min-w-55 rounded-lg border-2 border-slate-200 bg-slate-50 px-3 py-1.5 text-sm text-slate-700 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer"
           >
             <option value="">— Select —</option>
             {categories.map((cat) => (
@@ -256,7 +256,7 @@ export default function UnitConversionsPage() {
                                   onKeyDown={(e) => e.key === 'Enter' && handleSave()}
                                   placeholder="Enter rate"
                                   disabled={!baseUnitId}
-                                  className="w-40 rounded border border-slate-300 bg-white px-2.5 py-1 text-sm text-slate-700 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+                                  className="w-40 rounded-md border-2 border-slate-200 bg-slate-50 px-2.5 py-1 text-sm text-slate-700 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 disabled:border-slate-100 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed"
                                 />
                                 {isAutoFilled && (
                                   <span className="flex items-center gap-0.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-500 ring-1 ring-indigo-200">

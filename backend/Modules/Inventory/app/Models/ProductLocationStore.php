@@ -15,12 +15,14 @@ class ProductLocationStore extends Model
         'product_id',
         'location_id',
         'store_id',
+        'current_stock',
     ];
 
     protected $casts = [
-        'product_id'  => 'integer',
-        'location_id' => 'integer',
-        'store_id'    => 'integer',
+        'product_id'    => 'integer',
+        'location_id'   => 'integer',
+        'store_id'      => 'integer',
+        'current_stock' => 'decimal:4',
     ];
 
     public function product(): BelongsTo
