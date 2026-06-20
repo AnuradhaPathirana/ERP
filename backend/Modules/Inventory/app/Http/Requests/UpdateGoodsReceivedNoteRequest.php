@@ -38,6 +38,16 @@ class UpdateGoodsReceivedNoteRequest extends FormRequest
             'items.*.tax'                 => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.batch_no'            => ['nullable', 'string', 'max:100'],
             'items.*.expiry_date'         => ['nullable', 'date'],
+
+            'items.*.batches'                         => ['nullable', 'array'],
+            'items.*.batches.*.batch_no'              => ['required_with:items.*.batches', 'string', 'max:100'],
+            'items.*.batches.*.quantity'              => ['required_with:items.*.batches', 'numeric', 'min:0.0001'],
+            'items.*.batches.*.mfg_date'              => ['nullable', 'date'],
+            'items.*.batches.*.expiry_date'           => ['nullable', 'date'],
+            'items.*.batches.*.supplier_batch_no'     => ['nullable', 'string', 'max:100'],
+            'items.*.batches.*.status'                => ['nullable', 'string', 'in:active,quarantine,on_hold'],
+            'items.*.batches.*.country_of_origin'     => ['nullable', 'string', 'max:100'],
+            'items.*.batches.*.notes'                 => ['nullable', 'string', 'max:500'],
         ];
     }
 }

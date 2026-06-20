@@ -7,10 +7,13 @@ namespace Modules\Inventory\Services;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Modules\Inventory\DTOs\GoodsReceivedNoteData;
+use Modules\Inventory\Enums\BatchStatus;
 use Modules\Inventory\Enums\GrnStatus;
 use Modules\Inventory\Enums\PurchaseOrderStatus;
+use Modules\Inventory\Models\Batch;
 use Modules\Inventory\Models\GoodsReceivedNote;
 use Modules\Inventory\Models\GoodsReceivedNoteItem;
+use Modules\Inventory\Models\GrnItemBatch;
 use Modules\Inventory\Models\ProductLocationStore;
 use Modules\Inventory\Models\PurchaseOrder;
 use Modules\Inventory\Models\PurchaseOrderItem;
@@ -62,6 +65,7 @@ class GoodsReceivedNoteService
             'items.product',
             'items.unit',
             'items.poItem',
+            'items.batchAssignments.batch',
             'purchaseOrder.items.product',
             'supplier',
             'store',
@@ -257,7 +261,7 @@ class GoodsReceivedNoteService
         }
 
         return DB::transaction(function () use ($grn): GoodsReceivedNote {
-            $grn->load('items.product');
+            $grn->load(['items.product', 'items.batchAssignments.batch']);
 
             // Collect affected PO IDs from items (supports multi-PO GRNs)
             $poItemIds     = $grn->items->pluck('po_item_id')->filter()->unique()->values();
@@ -267,49 +271,91 @@ class GoodsReceivedNoteService
                 ->values();
 
             foreach ($grn->items as $item) {
-                // 1. Post stock transaction ledger entry (always, even without store)
-                StockTransaction::create([
-                    'transaction_date' => now(),
-                    'reference_type'   => 'grn',
-                    'reference_id'     => $grn->id,
-                    'product_id'       => $item->product_id,
-                    'store_id'         => $grn->store_id,
-                    'location_id'      => $grn->location_id,
-                    'batch_no'         => $item->batch_no,
-                    'expiry_date'      => $item->expiry_date,
-                    'qty_in'           => $item->quantity_received,
-                    'qty_out'          => 0,
-                    'unit_id'          => $item->unit_id,
-                    'unit_price'       => $item->unit_price,
-                    'created_by'       => auth()->id(),
-                ]);
+                $batchAssignments = $item->batchAssignments;
 
-                // 2. Update denormalized stock balance only if store is assigned
-                if ($grn->store_id) {
-                    $pivot = ProductLocationStore::firstOrCreate(
-                        [
-                            'product_id'  => $item->product_id,
-                            'store_id'    => $grn->store_id,
-                            'location_id' => $grn->location_id,
-                        ],
-                        ['current_stock' => 0]
-                    );
+                if ($batchAssignments->isNotEmpty()) {
+                    // Batch-tracked product: one stock transaction + batch record per assignment
+                    foreach ($batchAssignments as $assignment) {
+                        $batch = $assignment->batch;
 
-                    $pivot->increment('current_stock', (float) $item->quantity_received);
+                        // Create stock transaction per batch slice
+                        StockTransaction::create([
+                            'transaction_date' => now(),
+                            'reference_type'   => 'grn',
+                            'reference_id'     => $grn->id,
+                            'product_id'       => $item->product_id,
+                            'store_id'         => $grn->store_id,
+                            'location_id'      => $grn->location_id,
+                            'batch_no'         => $batch->batch_no,
+                            'batch_id'         => $batch->id,
+                            'expiry_date'      => $batch->expiry_date,
+                            'qty_in'           => $assignment->quantity,
+                            'qty_out'          => 0,
+                            'unit_id'          => $item->unit_id,
+                            'unit_price'       => $item->unit_price,
+                            'created_by'       => auth()->id(),
+                        ]);
+
+                        // Update batch current_qty (set to initial_qty on first confirmation)
+                        $batch->update(['current_qty' => $batch->initial_qty]);
+
+                        // Update denormalized stock balance per batch quantity
+                        if ($grn->store_id) {
+                            $pivot = ProductLocationStore::firstOrCreate(
+                                [
+                                    'product_id'  => $item->product_id,
+                                    'store_id'    => $grn->store_id,
+                                    'location_id' => $grn->location_id,
+                                ],
+                                ['current_stock' => 0]
+                            );
+                            $pivot->increment('current_stock', (float) $assignment->quantity);
+                        }
+                    }
+                } else {
+                    // Non-batch product: single stock transaction as before
+                    StockTransaction::create([
+                        'transaction_date' => now(),
+                        'reference_type'   => 'grn',
+                        'reference_id'     => $grn->id,
+                        'product_id'       => $item->product_id,
+                        'store_id'         => $grn->store_id,
+                        'location_id'      => $grn->location_id,
+                        'batch_no'         => $item->batch_no,
+                        'batch_id'         => null,
+                        'expiry_date'      => $item->expiry_date,
+                        'qty_in'           => $item->quantity_received,
+                        'qty_out'          => 0,
+                        'unit_id'          => $item->unit_id,
+                        'unit_price'       => $item->unit_price,
+                        'created_by'       => auth()->id(),
+                    ]);
+
+                    if ($grn->store_id) {
+                        $pivot = ProductLocationStore::firstOrCreate(
+                            [
+                                'product_id'  => $item->product_id,
+                                'store_id'    => $grn->store_id,
+                                'location_id' => $grn->location_id,
+                            ],
+                            ['current_stock' => 0]
+                        );
+                        $pivot->increment('current_stock', (float) $item->quantity_received);
+                    }
                 }
 
-                // 3. Update quantity_received on the linked PO item
+                // Update quantity_received on the linked PO item
                 PurchaseOrderItem::where('id', $item->po_item_id)
                     ->increment('quantity_received', (float) $item->quantity_received);
             }
 
-            // 4. Mark GRN as confirmed
+            // Mark GRN as confirmed
             $grn->update([
                 'status'       => GrnStatus::Confirmed,
                 'confirmed_at' => now(),
             ]);
 
-            // 5. Recompute status for all affected POs
+            // Recompute status for all affected POs
             foreach ($affectedPoIds as $poId) {
                 $this->syncPoStatusAfterGrn($poId);
             }
@@ -364,10 +410,15 @@ class GoodsReceivedNoteService
     }
 
     /**
-     * @param array<array{po_item_id:int, product_id:int, unit_id:?int, quantity_received:float, unit_price:float, discount:?float, tax:?float, batch_no:?string, expiry_date:?string}> $items
+     * @param array<array{po_item_id:int, product_id:int, unit_id:?int, quantity_received:float, unit_price:float, discount:?float, tax:?float, batch_no:?string, expiry_date:?string, batches:?array}> $items
      */
     private function syncItems(GoodsReceivedNote $grn, array $items): void
     {
+        // Delete old bridge records first, then items
+        $oldItemIds = $grn->items()->pluck('id');
+        if ($oldItemIds->isNotEmpty()) {
+            GrnItemBatch::whereIn('grn_item_id', $oldItemIds)->delete();
+        }
         $grn->items()->delete();
 
         $poItem = PurchaseOrderItem::whereIn(
@@ -375,42 +426,80 @@ class GoodsReceivedNoteService
             collect($items)->pluck('po_item_id')->filter()->unique()->values()
         )->get()->keyBy('id');
 
-        $rows = collect($items)
+        $validItems = collect($items)
             ->filter(fn (array $row) => !empty($row['po_item_id']) && ($row['quantity_received'] ?? 0) > 0)
-            ->map(function (array $row) use ($grn, $poItem): array {
-                $ordered    = (float) ($poItem[$row['po_item_id']]?->quantity_ordered ?? 0);
-                $qtyRcv     = (float) $row['quantity_received'];
-                $unitPrice  = (float) ($row['unit_price'] ?? 0);
-                $discountPct = (float) ($row['discount'] ?? 0);
-                $taxPct      = (float) ($row['tax'] ?? 0);
+            ->values();
 
-                $gross      = $qtyRcv * $unitPrice;
-                $discAmt    = $gross * ($discountPct / 100);
-                $taxAmt     = $gross * ($taxPct / 100);
-                $lineTotal  = $gross - $discAmt + $taxAmt;
+        foreach ($validItems as $row) {
+            $ordered     = (float) ($poItem[$row['po_item_id']]?->quantity_ordered ?? 0);
+            $qtyRcv      = (float) $row['quantity_received'];
+            $unitPrice   = (float) ($row['unit_price'] ?? 0);
+            $discountPct = (float) ($row['discount'] ?? 0);
+            $taxPct      = (float) ($row['tax'] ?? 0);
 
-                return [
-                    'grn_id'            => $grn->id,
-                    'po_item_id'        => (int) $row['po_item_id'],
-                    'product_id'        => (int) $row['product_id'],
-                    'unit_id'           => !empty($row['unit_id']) ? (int) $row['unit_id'] : null,
-                    'quantity_ordered'  => $ordered,
-                    'quantity_received' => $qtyRcv,
-                    'unit_price'        => $unitPrice,
-                    'discount'          => $discountPct,
-                    'tax'               => $taxPct,
-                    'line_total'        => $lineTotal,
-                    'batch_no'          => $row['batch_no'] ?? null,
-                    'expiry_date'       => !empty($row['expiry_date']) ? $row['expiry_date'] : null,
-                    'created_at'        => now(),
-                    'updated_at'        => now(),
-                ];
-            })
-            ->values()
-            ->all();
+            $gross     = $qtyRcv * $unitPrice;
+            $discAmt   = $gross * ($discountPct / 100);
+            $taxAmt    = $gross * ($taxPct / 100);
+            $lineTotal = $gross - $discAmt + $taxAmt;
 
-        if (!empty($rows)) {
-            GoodsReceivedNoteItem::insert($rows);
+            $batches   = $row['batches'] ?? [];
+            // Derive first batch's no/expiry for the denormalized columns (backward compat display)
+            $firstBatch    = !empty($batches) ? $batches[0] : null;
+            $batchNoSnap   = $firstBatch['batch_no']    ?? ($row['batch_no']    ?? null);
+            $expirySnap    = $firstBatch['expiry_date'] ?? ($row['expiry_date'] ?? null);
+
+            $grnItem = GoodsReceivedNoteItem::create([
+                'grn_id'            => $grn->id,
+                'po_item_id'        => (int) $row['po_item_id'],
+                'product_id'        => (int) $row['product_id'],
+                'unit_id'           => !empty($row['unit_id']) ? (int) $row['unit_id'] : null,
+                'quantity_ordered'  => $ordered,
+                'quantity_received' => $qtyRcv,
+                'unit_price'        => $unitPrice,
+                'discount'          => $discountPct,
+                'tax'               => $taxPct,
+                'line_total'        => $lineTotal,
+                'batch_no'          => $batchNoSnap,
+                'expiry_date'       => !empty($expirySnap) ? $expirySnap : null,
+            ]);
+
+            // Create batch master + bridge records for batch-tracked products
+            if (!empty($batches)) {
+                foreach ($batches as $batchRow) {
+                    $batchQty = (float) ($batchRow['quantity'] ?? 0);
+                    if ($batchQty <= 0) {
+                        continue;
+                    }
+
+                    $batch = Batch::firstOrCreate(
+                        [
+                            'product_id' => (int) $row['product_id'],
+                            'batch_no'   => trim((string) $batchRow['batch_no']),
+                        ],
+                        [
+                            'supplier_id'       => $grn->supplier_id,
+                            'supplier_batch_no' => $batchRow['supplier_batch_no'] ?? null,
+                            'mfg_date'          => !empty($batchRow['mfg_date'])     ? $batchRow['mfg_date']     : null,
+                            'expiry_date'       => !empty($batchRow['expiry_date'])  ? $batchRow['expiry_date']  : null,
+                            'received_date'     => $grn->grn_date,
+                            'initial_qty'       => $batchQty,
+                            'current_qty'       => $batchQty,
+                            'unit_cost'         => $unitPrice,
+                            'status'            => BatchStatus::from($batchRow['status'] ?? 'active'),
+                            'country_of_origin' => $batchRow['country_of_origin'] ?? null,
+                            'notes'             => $batchRow['notes']             ?? null,
+                            'created_by'        => auth()->id(),
+                        ]
+                    );
+
+                    GrnItemBatch::create([
+                        'grn_item_id' => $grnItem->id,
+                        'batch_id'    => $batch->id,
+                        'quantity'    => $batchQty,
+                        'unit_cost'   => $unitPrice,
+                    ]);
+                }
+            }
         }
     }
 

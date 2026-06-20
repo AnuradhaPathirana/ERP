@@ -6,6 +6,7 @@ namespace Modules\Inventory\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class GoodsReceivedNoteItem extends Model
 {
@@ -58,5 +59,10 @@ class GoodsReceivedNoteItem extends Model
     public function unit(): BelongsTo
     {
         return $this->belongsTo(UnitType::class, 'unit_id');
+    }
+
+    public function batchAssignments(): HasMany
+    {
+        return $this->hasMany(GrnItemBatch::class, 'grn_item_id');
     }
 }

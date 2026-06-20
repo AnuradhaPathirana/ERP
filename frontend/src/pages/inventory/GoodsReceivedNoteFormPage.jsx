@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { ClipboardList, PackageCheck, Plus, ShoppingCart, Trash2, X } from 'lucide-react'
+import { ClipboardList, Layers, PackageCheck, Plus, ShoppingCart, Trash2, X } from 'lucide-react'
 import {
   createGoodsReceivedNote,
   getGoodsReceivedNote,
@@ -13,6 +13,7 @@ import {
 import { getPurchaseOrders } from '../../api/purchaseOrders'
 import { getAllSuppliers } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
+import BatchAssignModal from '../../components/inventory/BatchAssignModal'
 import { showError, showSuccess } from '../../utils/alerts'
 
 /* ── Style tokens ─────────────────────────────────────────────── */
@@ -113,8 +114,9 @@ export default function GoodsReceivedNoteFormPage() {
   const [loadingItems,  setLoadingItems]  = useState(false)
 
   /* ── GRN items state ──────────────────────────────────────── */
-  const [items,  setItems]  = useState([])
-  const [errors, setErrors] = useState({})
+  const [items,         setItems]         = useState([])
+  const [errors,        setErrors]        = useState({})
+  const [batchModalIdx, setBatchModalIdx] = useState(null)
 
   /* ── Next GRN number preview ─────────────────────────────── */
   useEffect(() => {
@@ -170,23 +172,33 @@ export default function GoodsReceivedNoteFormPage() {
     })
     if (grn.items?.length) {
       setItems(grn.items.map((it) => ({
-        _key:              it.id,
-        po_id:             grn.po_id ?? null,
-        po_no:             grn.purchase_order?.po_no ?? '',
-        po_item_id:        it.po_item_id,
-        product_id:        it.product_id,
-        product_code:      it.product?.product_code ?? '',
-        product_name:      it.product?.name ?? '',
-        quantity_ordered:  it.quantity_ordered,
-        already_received:  null,  // not available in edit context
-        remaining_qty:     null,
-        quantity_received: it.quantity_received,
-        unit_price:        it.unit_price,
-        discount:          it.discount ?? '',
-        tax:               it.tax      ?? '',
-        is_batch:          it.product?.is_batch ?? false,
-        batch_no:          it.batch_no    ?? '',
-        expiry_date:       it.expiry_date ?? '',
+        _key:               it.id,
+        po_id:              grn.po_id ?? null,
+        po_no:              grn.purchase_order?.po_no ?? '',
+        po_item_id:         it.po_item_id,
+        product_id:         it.product_id,
+        product_code:       it.product?.product_code ?? '',
+        product_name:       it.product?.name ?? '',
+        quantity_ordered:   it.quantity_ordered,
+        already_received:   null,
+        remaining_qty:      null,
+        quantity_received:  it.quantity_received,
+        unit_price:         it.unit_price,
+        discount:           it.discount ?? '',
+        tax:                it.tax      ?? '',
+        is_batch:           it.product?.is_batch ?? false,
+        batch_no:           it.batch_no    ?? '',
+        expiry_date:        it.expiry_date ?? '',
+        batch_assignments:  it.batch_assignments ?? [],
+        batches:            (it.batch_assignments ?? []).map((a) => ({
+          batch_no:          a.batch_no          ?? '',
+          quantity:          a.quantity           ?? '',
+          mfg_date:          a.mfg_date           ?? '',
+          expiry_date:       a.expiry_date        ?? '',
+          supplier_batch_no: a.supplier_batch_no  ?? '',
+          status:            a.status             ?? 'active',
+          notes:             a.notes              ?? '',
+        })),
       })))
     }
   }, [existingGRN])
@@ -234,6 +246,7 @@ export default function GoodsReceivedNoteFormPage() {
     is_batch:          it.product?.is_batch ?? false,
     batch_no:          '',
     expiry_date:       '',
+    batches:           [],
   })
 
   /* Select All — fetches all selected POs at once, replaces items */
@@ -354,6 +367,17 @@ export default function GoodsReceivedNoteFormPage() {
         tax:               parseFloat(r.tax)        || 0,
         batch_no:          r.batch_no    || null,
         expiry_date:       r.expiry_date || null,
+        batches:           r.is_batch && r.batches?.length
+          ? r.batches.map((b) => ({
+              batch_no:          b.batch_no,
+              quantity:          parseFloat(b.quantity) || 0,
+              mfg_date:          b.mfg_date          || null,
+              expiry_date:       b.expiry_date        || null,
+              supplier_batch_no: b.supplier_batch_no  || null,
+              status:            b.status             || 'active',
+              notes:             b.notes              || null,
+            }))
+          : [],
       })),
     }
     setErrors({})
@@ -694,12 +718,20 @@ export default function GoodsReceivedNoteFormPage() {
                         </td>
                         <td className="px-2 py-1">
                           {row.is_batch ? (
-                            <input
-                              className={TABLE_INPUT + ' w-20'}
-                              placeholder="Batch"
-                              value={row.batch_no}
-                              onChange={(e) => setRowField(idx, 'batch_no', e.target.value)}
-                            />
+                            <button
+                              type="button"
+                              onClick={() => setBatchModalIdx(idx)}
+                              className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                                row.batches?.length
+                                  ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                                  : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                              }`}
+                            >
+                              <Layers size={10} />
+                              {row.batches?.length
+                                ? `${row.batches.length} batch${row.batches.length !== 1 ? 'es' : ''}`
+                                : 'Assign'}
+                            </button>
                           ) : <span className="text-slate-300 italic px-2">—</span>}
                         </td>
                         <td className="px-2 py-1 text-right font-bold text-slate-800 tabular-nums">
@@ -778,6 +810,26 @@ export default function GoodsReceivedNoteFormPage() {
         </div>
 
       </div>
+
+      {/* Batch Assignment Modal */}
+      {batchModalIdx !== null && items[batchModalIdx] && (
+        <BatchAssignModal
+          item={items[batchModalIdx]}
+          onApply={(assignedBatches) => {
+            setItems((prev) => prev.map((row, i) => i === batchModalIdx
+              ? {
+                  ...row,
+                  batches:     assignedBatches,
+                  batch_no:    assignedBatches[0]?.batch_no    ?? row.batch_no,
+                  expiry_date: assignedBatches[0]?.expiry_date ?? row.expiry_date,
+                }
+              : row
+            ))
+            setBatchModalIdx(null)
+          }}
+          onClose={() => setBatchModalIdx(null)}
+        />
+      )}
     </div>
   )
 }

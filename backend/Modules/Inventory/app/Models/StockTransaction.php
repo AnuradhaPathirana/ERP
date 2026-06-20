@@ -19,6 +19,7 @@ class StockTransaction extends Model
         'store_id',
         'location_id',
         'batch_no',
+        'batch_id',
         'expiry_date',
         'qty_in',
         'qty_out',
@@ -37,6 +38,7 @@ class StockTransaction extends Model
         'product_id'       => 'integer',
         'store_id'         => 'integer',
         'location_id'      => 'integer',
+        'batch_id'         => 'integer',
         'unit_id'          => 'integer',
         'created_by'       => 'integer',
     ];
@@ -54,5 +56,10 @@ class StockTransaction extends Model
     public function location(): BelongsTo
     {
         return $this->belongsTo(Location::class, 'location_id');
+    }
+
+    public function batch(): BelongsTo
+    {
+        return $this->belongsTo(Batch::class, 'batch_id');
     }
 }

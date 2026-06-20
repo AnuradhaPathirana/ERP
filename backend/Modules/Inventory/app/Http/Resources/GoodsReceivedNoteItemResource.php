@@ -38,6 +38,21 @@ class GoodsReceivedNoteItemResource extends JsonResource
                 'id'   => $this->unit->id,
                 'name' => $this->unit->name,
             ]),
+            'batch_assignments' => $this->whenLoaded('batchAssignments', fn () =>
+                $this->batchAssignments->map(fn ($a) => [
+                    'id'                 => $a->id,
+                    'batch_id'           => $a->batch_id,
+                    'quantity'           => (float) $a->quantity,
+                    'unit_cost'          => (float) $a->unit_cost,
+                    'batch_no'           => $a->batch?->batch_no,
+                    'supplier_batch_no'  => $a->batch?->supplier_batch_no,
+                    'mfg_date'           => $a->batch?->mfg_date?->toDateString(),
+                    'expiry_date'        => $a->batch?->expiry_date?->toDateString(),
+                    'status'             => $a->batch?->status?->value,
+                    'status_label'       => $a->batch?->status?->label(),
+                    'notes'              => $a->batch?->notes,
+                ])
+            ),
         ];
     }
 }

@@ -23,6 +23,7 @@ use Modules\Inventory\Http\Controllers\UnitConversionController;
 use Modules\Inventory\Http\Controllers\UnitTypeController;
 use Modules\Inventory\Http\Controllers\PurchaseRequestController;
 use Modules\Inventory\Http\Controllers\PurchaseOrderController;
+use Modules\Inventory\Http\Controllers\BatchController;
 use Modules\Inventory\Http\Controllers\GoodsReceivedNoteController;
 use Modules\Inventory\Http\Controllers\StockController;
 
@@ -175,6 +176,16 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.purchase-orders.update-status');
     Route::apiResource('purchase-orders', PurchaseOrderController::class)
         ->names('inventory.purchase-orders');
+
+    // Batches
+    Route::get('batches/next-batch-no', [BatchController::class, 'nextBatchNo'])
+        ->name('inventory.batches.next-batch-no');
+    Route::patch('batches/{batch}/status', [BatchController::class, 'updateStatus'])
+        ->name('inventory.batches.update-status');
+    Route::get('batches/{id}', [BatchController::class, 'show'])
+        ->name('inventory.batches.show');
+    Route::get('batches', [BatchController::class, 'index'])
+        ->name('inventory.batches.index');
 
     // Goods Received Notes
     Route::get('goods-received-notes/next-grn-no', [GoodsReceivedNoteController::class, 'nextGrnNo'])
