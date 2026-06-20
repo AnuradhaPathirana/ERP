@@ -155,6 +155,8 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
     // ── Purchasing ────────────────────────────────────────────────────────────
 
     // Purchase Requests
+    Route::get('purchase-requests/next-reference-no', [PurchaseRequestController::class, 'nextReferenceNo'])
+        ->name('inventory.purchase-requests.next-reference-no');
     Route::post('purchase-requests/{purchase_request}/approve', [PurchaseRequestController::class, 'approve'])
         ->name('inventory.purchase-requests.approve');
     Route::post('purchase-requests/{purchase_request}/reject', [PurchaseRequestController::class, 'reject'])
@@ -165,6 +167,8 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->names('inventory.purchase-requests');
 
     // Purchase Orders
+    Route::get('purchase-orders/next-po-no', [PurchaseOrderController::class, 'nextPoNo'])
+        ->name('inventory.purchase-orders.next-po-no');
     Route::get('purchase-orders/from-pr/{prId}', [PurchaseOrderController::class, 'loadFromPR'])
         ->name('inventory.purchase-orders.from-pr');
     Route::patch('purchase-orders/{purchase_order}/status', [PurchaseOrderController::class, 'updateStatus'])
@@ -173,6 +177,10 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->names('inventory.purchase-orders');
 
     // Goods Received Notes
+    Route::get('goods-received-notes/next-grn-no', [GoodsReceivedNoteController::class, 'nextGrnNo'])
+        ->name('inventory.grns.next-grn-no');
+    Route::get('goods-received-notes/supplier/{supplierId}/last', [GoodsReceivedNoteController::class, 'lastGrnForSupplier'])
+        ->name('inventory.grns.last-supplier');
     Route::get('goods-received-notes/po-items/{poId}', [GoodsReceivedNoteController::class, 'poOutstandingItems'])
         ->name('inventory.grns.po-items');
     Route::post('goods-received-notes/{goods_received_note}/confirm', [GoodsReceivedNoteController::class, 'confirm'])

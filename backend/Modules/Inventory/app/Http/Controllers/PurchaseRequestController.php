@@ -25,6 +25,11 @@ class PurchaseRequestController extends Controller
         $this->middleware('permission:approve_purchase_requests')->only(['approve', 'reject']);
     }
 
+    public function nextReferenceNo(): JsonResponse
+    {
+        return response()->json(['data' => $this->service->nextReferenceNo()]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $filters   = $request->only(['search', 'status', 'store_id', 'date_from', 'date_to']);

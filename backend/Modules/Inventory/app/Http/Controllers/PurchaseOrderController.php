@@ -78,6 +78,12 @@ class PurchaseOrderController extends Controller
         return response()->json(['data' => new PurchaseOrderResource($po)]);
     }
 
+    /** GET /purchase-orders/next-po-no — generate next unique PO number */
+    public function nextPoNo(): JsonResponse
+    {
+        return response()->json(['data' => $this->service->nextPoNo()]);
+    }
+
     /** GET /purchase-orders/from-pr/{pr} — load PR items to pre-fill PO form */
     public function loadFromPR(int $prId): JsonResponse
     {

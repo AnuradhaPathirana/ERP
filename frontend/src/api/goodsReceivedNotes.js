@@ -20,3 +20,9 @@ export const confirmGoodsReceivedNote = (id) =>
 
 export const getPoOutstandingItems = (poId) =>
   api.get(`/api/v1/goods-received-notes/po-items/${poId}`).then((r) => r.data)
+
+export const getNextGrnNo = () =>
+  api.get('/api/v1/goods-received-notes/next-grn-no').then((r) => r.data.data.grn_no)
+
+export const getLastGrnForSupplier = (supplierId) =>
+  api.get(`/api/v1/goods-received-notes/supplier/${supplierId}/last`).then((r) => r.data.data)

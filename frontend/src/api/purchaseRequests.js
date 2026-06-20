@@ -23,3 +23,6 @@ export const rejectPurchaseRequest = (id, reason) =>
 
 export const cancelPurchaseRequest = (id) =>
   api.post(`/api/v1/purchase-requests/${id}/cancel`).then((r) => r.data)
+
+export const getNextPurchaseRequestReferenceNo = () =>
+  api.get('/api/v1/purchase-requests/next-reference-no').then((r) => r.data.data)

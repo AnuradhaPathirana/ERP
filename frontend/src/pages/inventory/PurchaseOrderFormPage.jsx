@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import {
   createPurchaseOrder,
+  getNextPoNo,
   getPurchaseOrder,
   loadPOFromPR,
   updatePurchaseOrder,
@@ -140,6 +141,19 @@ export default function PurchaseOrderFormPage() {
     queryFn:  () => getPurchaseRequests(1, { status: 'approved' }),
   })
 
+  const { data: nextPoNo, isLoading: loadingPoNo } = useQuery({
+    queryKey: ['next-po-no'],
+    queryFn:  getNextPoNo,
+    enabled:  !isEdit,
+    staleTime: 0,
+  })
+
+  useEffect(() => {
+    if (!isEdit && nextPoNo) {
+      setForm((f) => ({ ...f, po_no: f.po_no || nextPoNo }))
+    }
+  }, [nextPoNo, isEdit])
+
   useEffect(() => {
     api.get('/api/v1/products', { params: { per_page: 1000 } })
       .then((r) => setProducts(r.data.data ?? []))
@@ -225,6 +239,37 @@ export default function PurchaseOrderFormPage() {
     setForm((f) => ({ ...f, pr_id: prId }))
     if (prId) loadPRMutation.mutate(prId)
     else setItems([emptyItem()])
+  }
+
+  const handleSupplierChange = (supplierId) => {
+    clearFieldError('supplier_id')
+    if (!supplierId) {
+      setForm((f) => ({ ...f, supplier_id: '' }))
+      return
+    }
+    const supplier = suppliers.find((s) => String(s.id) === String(supplierId))
+    if (!supplier) {
+      setForm((f) => ({ ...f, supplier_id: supplierId }))
+      return
+    }
+    const billingAddress = [
+      supplier.bil_address_line_1,
+      supplier.bil_address_line_2,
+      supplier.bil_address_line_3,
+      supplier.bil_city,
+      supplier.bil_postal_code,
+      supplier.bil_state_province,
+      supplier.bil_country,
+    ].filter(Boolean).join(', ')
+
+    setForm((f) => ({
+      ...f,
+      supplier_id:          supplierId,
+      contact_person_name:  supplier.contact_person_name   || f.contact_person_name,
+      contact_person_phone: supplier.contact_person_mobile || f.contact_person_phone,
+      billing_address:      billingAddress                 || f.billing_address,
+      shipping_address:     billingAddress                 || f.shipping_address,
+    }))
   }
 
   const handleLocationChange = (locationId) => {
@@ -392,7 +437,12 @@ export default function PurchaseOrderFormPage() {
             <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
               <div>
                 <label className={LABEL_CLS}>PO Number <span className="text-red-500 normal-case font-bold">*</span></label>
-                <input className={err('po_no') ? INPUT_ERR_CLS : INPUT_CLS} placeholder="e.g. PO-2026-0001" value={form.po_no} onChange={setField('po_no')} />
+                <input
+                  className={err('po_no') ? INPUT_ERR_CLS : INPUT_CLS}
+                  placeholder={!isEdit && loadingPoNo ? 'Generating…' : 'e.g. PO-2026-0001'}
+                  value={form.po_no}
+                  onChange={setField('po_no')}
+                />
                 {err('po_no') && <p className={ERR_CLS}>{err('po_no')}</p>}
               </div>
               <div>
@@ -480,9 +530,9 @@ export default function PurchaseOrderFormPage() {
             <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
               <div>
                 <label className={LABEL_CLS}>Supplier <span className="text-red-500 normal-case font-bold">*</span></label>
-                <select className={err('supplier_id') ? SELECT_ERR_CLS : SELECT_CLS} value={form.supplier_id} onChange={(e) => { setForm((f) => ({ ...f, supplier_id: e.target.value })); clearFieldError('supplier_id') }}>
+                <select className={err('supplier_id') ? SELECT_ERR_CLS : SELECT_CLS} value={form.supplier_id} onChange={(e) => handleSupplierChange(e.target.value)}>
                   <option value="">— Select supplier —</option>
-                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  {suppliers.map((s) => <option key={s.id} value={s.id}>{s.supplier_name ?? s.name}</option>)}
                 </select>
                 {err('supplier_id') && <p className={ERR_CLS}>{err('supplier_id')}</p>}
               </div>
@@ -519,15 +569,15 @@ export default function PurchaseOrderFormPage() {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200">
                   <th className="w-7 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">#</th>
-                  <th className="w-18 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Code</th>
+                  <th className="w-16 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Code</th>
                   <th className="px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Product</th>
-                  <th className="w-16 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty</th>
-                  <th className="w-18 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit</th>
-                  <th className="w-20 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
-                  <th className="w-22 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Gross</th>
-                  <th className="w-14 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-amber-500">Disc%</th>
-                  <th className="w-14 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-emerald-600">Tax%</th>
-                  <th className="w-22 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-700">Amount</th>
+                  <th className="w-24 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty</th>
+                  <th className="w-16 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit</th>
+                  <th className="w-28 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
+                  <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Gross</th>
+                  <th className="w-20 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-amber-500">Disc%</th>
+                  <th className="w-16 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-emerald-600">Tax%</th>
+                  <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-700">Amount</th>
                   <th className="w-8"></th>
                 </tr>
               </thead>
@@ -542,7 +592,7 @@ export default function PurchaseOrderFormPage() {
                       <td className="px-1.5 py-1">
                         <input readOnly value={row.product_code} placeholder="—" className="block w-full rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs font-mono text-slate-500 outline-none cursor-not-allowed" />
                       </td>
-                      <td className="px-1.5 py-1 min-w-36">
+                      <td className="px-1.5 py-1 min-w-28">
                         <select value={row.product_id} onChange={(e) => handleProductSelect(idx, e.target.value)} className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white cursor-pointer">
                           <option value="">— Select product —</option>
                           {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}

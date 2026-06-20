@@ -63,11 +63,23 @@ class SupplierMasterService
         $supplier->delete();
     }
 
-    /** Lightweight list for dropdowns — id + supplier_name only. */
+    /** List for dropdowns — includes contact & address fields for PO auto-fill. */
     public function all(): Collection
     {
         return SupplierMaster::orderBy('supplier_name')
-            ->get(['id', 'supplier_name']);
+            ->get([
+                'id',
+                'supplier_name',
+                'contact_person_name',
+                'contact_person_mobile',
+                'bil_address_line_1',
+                'bil_address_line_2',
+                'bil_address_line_3',
+                'bil_city',
+                'bil_postal_code',
+                'bil_state_province',
+                'bil_country',
+            ]);
     }
 
     private function toAttributes(SupplierMasterData $data): array

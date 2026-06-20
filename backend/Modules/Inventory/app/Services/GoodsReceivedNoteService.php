@@ -103,22 +103,54 @@ class GoodsReceivedNoteService
             ->all();
     }
 
+    public function nextGrnNo(): string
+    {
+        return $this->generateGrnNo();
+    }
+
+    /** @return array{grn_date: ?string, total_amount: float}|null */
+    public function lastGrnForSupplier(int $supplierId): ?array
+    {
+        $last = GoodsReceivedNote::where('supplier_id', $supplierId)
+            ->where('status', GrnStatus::Confirmed->value)
+            ->orderByDesc('grn_date')
+            ->orderByDesc('id')
+            ->first(['grn_date', 'total_amount']);
+
+        if (!$last) {
+            return null;
+        }
+
+        return [
+            'grn_date'     => $last->grn_date?->toDateString(),
+            'total_amount' => (float) $last->total_amount,
+        ];
+    }
+
     public function create(GoodsReceivedNoteData $data): GoodsReceivedNote
     {
         return DB::transaction(function () use ($data): GoodsReceivedNote {
-            $po = PurchaseOrder::findOrFail($data->poId);
+            $supplierId = $data->supplierId;
+            if ($data->poId) {
+                $po         = PurchaseOrder::findOrFail($data->poId);
+                $supplierId = $supplierId ?? $po->supplier_id;
+            }
 
             $grn = GoodsReceivedNote::create([
-                'grn_no'      => $this->generateGrnNo(),
-                'po_id'       => $data->poId,
-                'supplier_id' => $po->supplier_id,
-                'grn_date'    => $data->grnDate,
-                'store_id'    => $data->storeId,
-                'location_id' => $data->locationId,
-                'status'      => GrnStatus::Draft,
-                'remarks'     => $data->remarks,
-                'total_amount' => 0,
-                'received_by' => auth()->id(),
+                'grn_no'           => $this->generateGrnNo(),
+                'reference_no'     => $data->referenceNo,
+                'po_id'            => $data->poId,
+                'supplier_id'      => $supplierId,
+                'grn_date'         => $data->grnDate,
+                'transaction_date' => $data->transactionDate,
+                'store_id'         => $data->storeId,
+                'location_id'      => $data->locationId,
+                'status'           => GrnStatus::Draft,
+                'remarks'          => $data->remarks,
+                'payment_terms'    => $data->paymentTerms,
+                'attachments'      => $data->attachments,
+                'total_amount'     => 0,
+                'received_by'      => auth()->id(),
             ]);
 
             $this->syncItems($grn, $data->items);
@@ -136,10 +168,14 @@ class GoodsReceivedNoteService
 
         return DB::transaction(function () use ($grn, $data): GoodsReceivedNote {
             $grn->update([
-                'grn_date'    => $data->grnDate,
-                'store_id'    => $data->storeId,
-                'location_id' => $data->locationId,
-                'remarks'     => $data->remarks,
+                'grn_date'         => $data->grnDate,
+                'transaction_date' => $data->transactionDate,
+                'reference_no'     => $data->referenceNo,
+                'store_id'         => $data->storeId,
+                'location_id'      => $data->locationId,
+                'remarks'          => $data->remarks,
+                'payment_terms'    => $data->paymentTerms,
+                'attachments'      => $data->attachments,
             ]);
 
             $this->syncItems($grn, $data->items);

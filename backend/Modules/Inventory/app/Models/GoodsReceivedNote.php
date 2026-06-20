@@ -18,28 +18,34 @@ class GoodsReceivedNote extends Model
 
     protected $fillable = [
         'grn_no',
+        'reference_no',
         'po_id',
         'supplier_id',
         'grn_date',
+        'transaction_date',
         'store_id',
         'location_id',
         'status',
         'total_amount',
         'remarks',
+        'payment_terms',
+        'attachments',
         'received_by',
         'confirmed_at',
     ];
 
     protected $casts = [
-        'grn_date'     => 'date',
-        'confirmed_at' => 'datetime',
-        'total_amount' => 'decimal:4',
-        'po_id'        => 'integer',
-        'supplier_id'  => 'integer',
-        'store_id'     => 'integer',
-        'location_id'  => 'integer',
-        'received_by'  => 'integer',
-        'status'       => GrnStatus::class,
+        'grn_date'         => 'date',
+        'transaction_date' => 'date',
+        'confirmed_at'     => 'datetime',
+        'total_amount'     => 'decimal:4',
+        'po_id'            => 'integer',
+        'supplier_id'      => 'integer',
+        'store_id'         => 'integer',
+        'location_id'      => 'integer',
+        'received_by'      => 'integer',
+        'status'           => GrnStatus::class,
+        'attachments'      => 'array',
     ];
 
     public function items(): HasMany

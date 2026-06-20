@@ -17,11 +17,17 @@ class StoreGoodsReceivedNoteRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'po_id'       => ['required', 'integer', 'exists:inv_purchase_orders,id'],
-            'grn_date'    => ['required', 'date'],
-            'store_id'    => ['required', 'integer', 'exists:inv_stores,id'],
-            'location_id' => ['nullable', 'integer', 'exists:inv_locations,id'],
-            'remarks'     => ['nullable', 'string'],
+            'po_id'            => ['nullable', 'integer', 'exists:inv_purchase_orders,id'],
+            'supplier_id'      => ['nullable', 'integer', 'exists:inv_supplier_masters,id'],
+            'grn_date'         => ['required', 'date'],
+            'transaction_date' => ['nullable', 'date'],
+            'reference_no'     => ['nullable', 'string', 'max:100'],
+            'store_id'         => ['required', 'integer', 'exists:inv_stores,id'],
+            'location_id'      => ['required', 'integer', 'exists:inv_locations,id'],
+            'remarks'          => ['nullable', 'string'],
+            'payment_terms'    => ['nullable', 'string', 'max:100'],
+            'attachments'      => ['nullable', 'array'],
+            'attachments.*'    => ['nullable', 'string'],
 
             'items'                       => ['required', 'array', 'min:1'],
             'items.*.po_item_id'          => ['required', 'integer', 'exists:inv_purchase_order_items,id'],
@@ -39,8 +45,11 @@ class StoreGoodsReceivedNoteRequest extends FormRequest
     {
         return [
             'po_id'                     => 'purchase order',
+            'supplier_id'               => 'supplier',
             'grn_date'                  => 'GRN date',
-            'store_id'                  => 'store',
+            'transaction_date'          => 'transaction date',
+            'location_id'               => 'receiving location',
+            'store_id'                  => 'receiving store',
             'items.*.po_item_id'        => 'PO item',
             'items.*.product_id'        => 'product',
             'items.*.quantity_received' => 'quantity received',

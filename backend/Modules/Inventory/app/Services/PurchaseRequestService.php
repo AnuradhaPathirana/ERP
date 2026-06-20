@@ -72,7 +72,7 @@ class PurchaseRequestService
 
             $pr = PurchaseRequest::create([
                 'pr_no'              => $this->generatePrNo(),
-                'reference_no'       => $data->referenceNo,
+                'reference_no'       => $this->generateReferenceNo(),
                 'request_date'       => $data->requestDate,
                 'required_date'      => $data->requiredDate,
                 'purpose'            => $data->purpose,
@@ -105,7 +105,6 @@ class PurchaseRequestService
                 : PurchaseRequestStatus::Draft;
 
             $pr->update([
-                'reference_no'       => $data->referenceNo,
                 'request_date'       => $data->requestDate,
                 'required_date'      => $data->requiredDate,
                 'purpose'            => $data->purpose,
@@ -172,6 +171,41 @@ class PurchaseRequestService
         }
 
         $pr->delete();
+    }
+
+    /** Preview the next reference number (non-locking, for display only) */
+    public function nextReferenceNo(): string
+    {
+        $prefix = 'Ref-';
+
+        $last = PurchaseRequest::withTrashed()
+            ->where('reference_no', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->value('reference_no');
+
+        $next = $last
+            ? (int) substr($last, strlen($prefix)) + 1
+            : 1;
+
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    /** Atomically generate the next reference number (must be called inside a DB transaction) */
+    private function generateReferenceNo(): string
+    {
+        $prefix = 'Ref-';
+
+        $last = PurchaseRequest::withTrashed()
+            ->where('reference_no', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->value('reference_no');
+
+        $next = $last
+            ? (int) substr($last, strlen($prefix)) + 1
+            : 1;
+
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
     /** Generate next PR number in format PR-YYYY-NNNN */

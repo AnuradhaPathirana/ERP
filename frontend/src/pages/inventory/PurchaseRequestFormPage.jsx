@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import {
   createPurchaseRequest,
+  getNextPurchaseRequestReferenceNo,
   getPurchaseRequest,
   updatePurchaseRequest,
 } from '../../api/purchaseRequests'
@@ -83,6 +84,19 @@ export default function PurchaseRequestFormPage() {
 
   const { data: locations = [] } = useQuery({ queryKey: ['locations-all'], queryFn: getAllLocations })
   const { data: stores = [] }    = useQuery({ queryKey: ['stores-all'],    queryFn: getAllStores })
+
+  const { data: nextRefNo } = useQuery({
+    queryKey: ['purchase-requests-next-ref-no'],
+    queryFn:  getNextPurchaseRequestReferenceNo,
+    enabled:  !isEdit,
+    staleTime: 0,
+  })
+
+  useEffect(() => {
+    if (!isEdit && nextRefNo) {
+      setForm((f) => ({ ...f, reference_no: nextRefNo }))
+    }
+  }, [nextRefNo, isEdit])
 
   // Stores filtered by their location_id — resets child store when location changes
   const sourceStores = form.source_location_id
@@ -180,7 +194,6 @@ export default function PurchaseRequestFormPage() {
   const handleSubmit = (submitForApproval) => {
     const clientErrors = {}
 
-    if (!form.reference_no.trim())  clientErrors.reference_no        = ['Reference No is required.']
     if (!form.source_location_id)   clientErrors.source_location_id  = ['Location is required.']
     if (!form.source_store_id)      clientErrors.source_store_id     = ['Store is required.']
 
@@ -461,18 +474,15 @@ export default function PurchaseRequestFormPage() {
                 </div>
                 <div>
                   <label className={LABEL_CLS}>
-                    Reference No. <span className="text-red-500 normal-case font-bold">*</span>
+                    Reference No.
+                    <span className="ml-1 normal-case font-medium text-indigo-400 text-[10px]">auto</span>
                   </label>
                   <input
-                    className={err('reference_no') ? INPUT_ERR_CLS : INPUT_CLS}
-                    placeholder="e.g. REF-001"
+                    readOnly
+                    className="block w-full rounded-md border-2 border-slate-200 bg-slate-100 px-2 py-1 text-xs font-mono text-slate-600 outline-none cursor-not-allowed"
+                    placeholder={!isEdit ? 'Generating…' : ''}
                     value={form.reference_no}
-                    onChange={(e) => {
-                      setField('reference_no')(e)
-                      if (errors.reference_no) setErrors((prev) => ({ ...prev, reference_no: undefined }))
-                    }}
                   />
-                  {err('reference_no') && <p className={ERR_CLS}>{err('reference_no')}</p>}
                 </div>
               </div>
 

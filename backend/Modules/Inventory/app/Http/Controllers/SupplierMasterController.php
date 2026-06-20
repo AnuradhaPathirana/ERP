@@ -92,11 +92,24 @@ class SupplierMasterController extends Controller
         return response()->json(['available' => !$taken]);
     }
 
-    /** Flat list for <select> dropdowns — no pagination, id + name only. */
+    /** Flat list for <select> dropdowns — includes contact & address fields for PO auto-fill. */
     public function all(): JsonResponse
     {
         $items = $this->service->all()
-            ->map(fn (SupplierMaster $s) => ['id' => $s->id, 'name' => $s->supplier_name])
+            ->map(fn (SupplierMaster $s) => [
+                'id'                    => $s->id,
+                'name'                  => $s->supplier_name,
+                'supplier_name'         => $s->supplier_name,
+                'contact_person_name'   => $s->contact_person_name,
+                'contact_person_mobile' => $s->contact_person_mobile,
+                'bil_address_line_1'    => $s->bil_address_line_1,
+                'bil_address_line_2'    => $s->bil_address_line_2,
+                'bil_address_line_3'    => $s->bil_address_line_3,
+                'bil_city'              => $s->bil_city,
+                'bil_postal_code'       => $s->bil_postal_code,
+                'bil_state_province'    => $s->bil_state_province,
+                'bil_country'           => $s->bil_country,
+            ])
             ->values()
             ->all();
 

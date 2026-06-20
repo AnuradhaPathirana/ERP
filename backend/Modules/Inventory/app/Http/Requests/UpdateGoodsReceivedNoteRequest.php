@@ -17,10 +17,16 @@ class UpdateGoodsReceivedNoteRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'grn_date'    => ['required', 'date'],
-            'store_id'    => ['required', 'integer', 'exists:inv_stores,id'],
-            'location_id' => ['nullable', 'integer', 'exists:inv_locations,id'],
-            'remarks'     => ['nullable', 'string'],
+            'supplier_id'      => ['nullable', 'integer', 'exists:inv_supplier_masters,id'],
+            'grn_date'         => ['required', 'date'],
+            'transaction_date' => ['nullable', 'date'],
+            'reference_no'     => ['nullable', 'string', 'max:100'],
+            'store_id'         => ['required', 'integer', 'exists:inv_stores,id'],
+            'location_id'      => ['required', 'integer', 'exists:inv_locations,id'],
+            'remarks'          => ['nullable', 'string'],
+            'payment_terms'    => ['nullable', 'string', 'max:100'],
+            'attachments'      => ['nullable', 'array'],
+            'attachments.*'    => ['nullable', 'string'],
 
             'items'                       => ['required', 'array', 'min:1'],
             'items.*.po_item_id'          => ['required', 'integer', 'exists:inv_purchase_order_items,id'],

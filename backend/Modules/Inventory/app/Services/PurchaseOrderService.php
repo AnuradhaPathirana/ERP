@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Inventory\Services;
 
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Modules\Inventory\DTOs\PurchaseOrderData;
 use Modules\Inventory\Enums\PurchaseOrderStatus;
@@ -114,7 +115,7 @@ class PurchaseOrderService
                 'shipping_address'       => $data->shippingAddress,
                 'status'                 => PurchaseOrderStatus::Draft,
                 'remarks'                => $data->remarks,
-                'created_by'             => auth()->user()?->id,
+                'created_by'             => Auth::id(),
                 'subtotal'               => 0,
                 'grand_total'            => 0,
             ]);
@@ -192,6 +193,21 @@ class PurchaseOrderService
         $po->update(['status' => $newStatus]);
 
         return $po;
+    }
+
+    public function nextPoNo(): string
+    {
+        $year   = now()->year;
+        $prefix = "PO-{$year}-";
+
+        $last = PurchaseOrder::withTrashed()
+            ->where('po_no', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->value('po_no');
+
+        $next = $last ? (int) substr($last, strlen($prefix)) + 1 : 1;
+
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
     public function delete(PurchaseOrder $po): void

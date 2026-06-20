@@ -20,3 +20,6 @@ export const updatePurchaseOrderStatus = (id, status) =>
 
 export const loadPOFromPR = (prId) =>
   api.get(`/api/v1/purchase-orders/from-pr/${prId}`).then((r) => r.data)
+
+export const getNextPoNo = () =>
+  api.get('/api/v1/purchase-orders/next-po-no').then((r) => r.data.data)
