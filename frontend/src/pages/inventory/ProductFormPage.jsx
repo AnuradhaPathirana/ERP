@@ -1175,10 +1175,7 @@ export default function ProductFormPage() {
                     <SelectField name="stock_releasing_method" value={f.stock_releasing_method} onChange={handleChange} onBlur={handleBlur}
                       options={STOCK_METHODS} placeholder="— Select —" />
                   </Field>
-                  <Field label="Tracking Type">
-                    <SelectField name="tracking_type" value={f.tracking_type} onChange={handleChange} onBlur={handleBlur}
-                      options={TRACKING_TYPES} placeholder="— None —" />
-                  </Field>
+
                 </div>
               </div>
             </section>
