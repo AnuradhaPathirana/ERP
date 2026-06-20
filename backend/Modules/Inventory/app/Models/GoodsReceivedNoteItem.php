@@ -19,6 +19,8 @@ class GoodsReceivedNoteItem extends Model
         'quantity_ordered',
         'quantity_received',
         'unit_price',
+        'discount',
+        'tax',
         'line_total',
         'batch_no',
         'expiry_date',
@@ -32,6 +34,8 @@ class GoodsReceivedNoteItem extends Model
         'quantity_ordered'  => 'decimal:4',
         'quantity_received' => 'decimal:4',
         'unit_price'        => 'decimal:4',
+        'discount'          => 'decimal:4',
+        'tax'               => 'decimal:4',
         'line_total'        => 'decimal:4',
         'expiry_date'       => 'date',
     ];

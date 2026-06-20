@@ -93,6 +93,8 @@ class GoodsReceivedNoteService
                 'quantity_received' => (float) $item->quantity_received,
                 'remaining_qty'    => $item->remaining_qty,
                 'unit_price'       => (float) $item->unit_price,
+                'discount'         => (float) $item->discount,
+                'tax'              => (float) $item->tax,
                 'product'          => [
                     'id'           => $item->product->id,
                     'name'         => $item->product->name,
@@ -138,6 +140,8 @@ class GoodsReceivedNoteService
                     'quantity_received' => (float) $item->quantity_received,
                     'remaining_qty'    => $item->remaining_qty,
                     'unit_price'       => (float) $item->unit_price,
+                    'discount'         => (float) $item->discount,
+                    'tax'              => (float) $item->tax,
                     'product'          => [
                         'id'           => $item->product->id,
                         'name'         => $item->product->name,
@@ -360,7 +364,7 @@ class GoodsReceivedNoteService
     }
 
     /**
-     * @param array<array{po_item_id:int, product_id:int, unit_id:?int, quantity_received:float, unit_price:float, batch_no:?string, expiry_date:?string}> $items
+     * @param array<array{po_item_id:int, product_id:int, unit_id:?int, quantity_received:float, unit_price:float, discount:?float, tax:?float, batch_no:?string, expiry_date:?string}> $items
      */
     private function syncItems(GoodsReceivedNote $grn, array $items): void
     {
@@ -374,8 +378,16 @@ class GoodsReceivedNoteService
         $rows = collect($items)
             ->filter(fn (array $row) => !empty($row['po_item_id']) && ($row['quantity_received'] ?? 0) > 0)
             ->map(function (array $row) use ($grn, $poItem): array {
-                $ordered = (float) ($poItem[$row['po_item_id']]?->quantity_ordered ?? 0);
-                $qtyRcv  = (float) $row['quantity_received'];
+                $ordered    = (float) ($poItem[$row['po_item_id']]?->quantity_ordered ?? 0);
+                $qtyRcv     = (float) $row['quantity_received'];
+                $unitPrice  = (float) ($row['unit_price'] ?? 0);
+                $discountPct = (float) ($row['discount'] ?? 0);
+                $taxPct      = (float) ($row['tax'] ?? 0);
+
+                $gross      = $qtyRcv * $unitPrice;
+                $discAmt    = $gross * ($discountPct / 100);
+                $taxAmt     = $gross * ($taxPct / 100);
+                $lineTotal  = $gross - $discAmt + $taxAmt;
 
                 return [
                     'grn_id'            => $grn->id,
@@ -384,8 +396,10 @@ class GoodsReceivedNoteService
                     'unit_id'           => !empty($row['unit_id']) ? (int) $row['unit_id'] : null,
                     'quantity_ordered'  => $ordered,
                     'quantity_received' => $qtyRcv,
-                    'unit_price'        => (float) ($row['unit_price'] ?? 0),
-                    'line_total'        => $qtyRcv * (float) ($row['unit_price'] ?? 0),
+                    'unit_price'        => $unitPrice,
+                    'discount'          => $discountPct,
+                    'tax'               => $taxPct,
+                    'line_total'        => $lineTotal,
                     'batch_no'          => $row['batch_no'] ?? null,
                     'expiry_date'       => !empty($row['expiry_date']) ? $row['expiry_date'] : null,
                     'created_at'        => now(),
@@ -403,7 +417,7 @@ class GoodsReceivedNoteService
     private function recalculateTotal(GoodsReceivedNote $grn): void
     {
         $grn->refresh();
-        $total = $grn->items()->sum(DB::raw('quantity_received * unit_price'));
+        $total = $grn->items()->sum('line_total');
         $grn->update(['total_amount' => $total]);
     }
 }

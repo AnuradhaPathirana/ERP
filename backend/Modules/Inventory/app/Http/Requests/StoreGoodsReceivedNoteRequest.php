@@ -35,6 +35,8 @@ class StoreGoodsReceivedNoteRequest extends FormRequest
             'items.*.unit_id'             => ['nullable', 'integer', 'exists:inv_unit_types,id'],
             'items.*.quantity_received'   => ['required', 'numeric', 'min:0.0001'],
             'items.*.unit_price'          => ['required', 'numeric', 'min:0'],
+            'items.*.discount'            => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.tax'                 => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.batch_no'            => ['nullable', 'string', 'max:100'],
             'items.*.expiry_date'         => ['nullable', 'date'],
         ];

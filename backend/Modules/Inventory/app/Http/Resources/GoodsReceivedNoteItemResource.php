@@ -21,6 +21,8 @@ class GoodsReceivedNoteItemResource extends JsonResource
             'quantity_ordered'  => (float) $this->quantity_ordered,
             'quantity_received' => (float) $this->quantity_received,
             'unit_price'        => (float) $this->unit_price,
+            'discount'          => (float) $this->discount,
+            'tax'               => (float) $this->tax,
             'line_total'        => (float) $this->line_total,
             'batch_no'          => $this->batch_no,
             'expiry_date'       => $this->expiry_date?->toDateString(),
