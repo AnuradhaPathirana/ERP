@@ -18,21 +18,15 @@ const CRUMBS = [
   { label: 'Products' },
 ]
 
-const INITIAL_FILTERS = { search: '', product_type: '', category_id: '', tracking_type: '' }
+const INITIAL_FILTERS = { search: '', product_type: '', category_id: '' }
 
-const PRODUCT_TYPES  = ['Product', 'Service', 'Bundle', 'Raw Material']
-const TRACKING_TYPES = ['Batch', 'Serial']
+const PRODUCT_TYPES = ['Product', 'Service', 'Bundle', 'Raw Material']
 
 const TYPE_COLORS = {
   Product:        'bg-blue-50 text-blue-700',
   Service:        'bg-purple-50 text-purple-700',
   Bundle:         'bg-amber-50 text-amber-700',
   'Raw Material': 'bg-green-50 text-green-700',
-}
-
-const TRACKING_COLORS = {
-  Batch:  'bg-slate-100 text-slate-600',
-  Serial: 'bg-indigo-50 text-indigo-600',
 }
 
 export default function ProductsPage() {
@@ -134,18 +128,6 @@ export default function ProductsPage() {
           />
         </FilterField>
 
-        <FilterField label="Tracking Type">
-          <select
-            className={FILTER_SELECT_CLS}
-            value={draft.tracking_type}
-            onChange={(e) => setDraft((d) => ({ ...d, tracking_type: e.target.value }))}
-          >
-            <option value="">All tracking</option>
-            {TRACKING_TYPES.map((t) => (
-              <option key={t} value={t}>{t}</option>
-            ))}
-          </select>
-        </FilterField>
       </TableFilter>
 
       {/* ── Data Table ── */}
@@ -174,7 +156,6 @@ export default function ProductsPage() {
                     <th className="w-36 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Display Name</th>
                     <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Type</th>
                     <th className="w-32 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Category</th>
-                    <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Tracking</th>
                     <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Created</th>
                     <th className="w-20 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                   </tr>
@@ -241,16 +222,6 @@ export default function ProductsPage() {
                           {prod.category_name
                             ? <span title={prod.category_name} className="line-clamp-1 text-slate-600">{prod.category_name}</span>
                             : <span className="italic text-slate-300">—</span>}
-                        </td>
-
-                        <td className="px-3 py-2">
-                          {prod.tracking_type ? (
-                            <span className={`inline-flex rounded px-1.5 py-0.5 font-medium ${TRACKING_COLORS[prod.tracking_type] ?? 'bg-slate-100 text-slate-600'}`}>
-                              {prod.tracking_type}
-                            </span>
-                          ) : (
-                            <span className="italic text-slate-300">—</span>
-                          )}
                         </td>
 
                         <td className="whitespace-nowrap px-3 py-2 text-slate-400">
