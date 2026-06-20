@@ -623,7 +623,6 @@ export default function GoodsReceivedNoteFormPage() {
                 <thead>
                   <tr className="bg-slate-50 text-left border-b border-slate-200">
                     <th className="w-8 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">#</th>
-                    <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">PO No.</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Code</th>
                     <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Product</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">PO Qty</th>
@@ -633,7 +632,6 @@ export default function GoodsReceivedNoteFormPage() {
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-center">Disc %</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600 text-center">Tax %</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Batch</th>
-                    <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Expiry</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] text-right font-bold uppercase tracking-wider text-slate-500">Total</th>
                     <th className="w-8 px-2 py-1.5"></th>
                   </tr>
@@ -644,7 +642,6 @@ export default function GoodsReceivedNoteFormPage() {
                     return (
                       <tr key={row._key} className="hover:bg-slate-50/60 transition-colors">
                         <td className="px-3 py-1 text-slate-400">{idx + 1}</td>
-                        <td className="px-2 py-1 font-mono text-[10px] text-violet-600">{row.po_no || '—'}</td>
                         <td className="px-2 py-1 font-mono text-slate-500">{row.product_code || '—'}</td>
                         <td className="px-2 py-1 font-medium text-slate-700">{row.product_name || '—'}</td>
                         <td className="px-2 py-1 text-right text-slate-500">{Number(row.quantity_ordered).toLocaleString()}</td>
@@ -705,16 +702,6 @@ export default function GoodsReceivedNoteFormPage() {
                             />
                           ) : <span className="text-slate-300 italic px-2">—</span>}
                         </td>
-                        <td className="px-2 py-1">
-                          {row.is_batch ? (
-                            <input
-                              type="date"
-                              className={TABLE_INPUT + ' w-28'}
-                              value={row.expiry_date}
-                              onChange={(e) => setRowField(idx, 'expiry_date', e.target.value)}
-                            />
-                          ) : <span className="text-slate-300 italic px-2">—</span>}
-                        </td>
                         <td className="px-2 py-1 text-right font-bold text-slate-800 tabular-nums">
                           {amount > 0 ? amount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : <span className="text-slate-300 font-normal">—</span>}
                         </td>
@@ -733,21 +720,21 @@ export default function GoodsReceivedNoteFormPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-slate-200 bg-slate-50/50">
-                    <td colSpan={8} />
+                    <td colSpan={7} />
                     <td className="px-1.5 py-1.5 text-center text-xs font-bold text-amber-600 tabular-nums">
                       -{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td className="px-1.5 py-1.5 text-center text-xs font-bold text-emerald-600 tabular-nums">
                       +{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
-                    <td colSpan={2} />
+                    <td colSpan={1} />
                     <td className="px-2 py-1.5 text-right text-sm font-black text-slate-800 tabular-nums">
                       {totals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td />
                   </tr>
                   <tr className="bg-indigo-50 border-t border-indigo-100">
-                    <td colSpan={8} className="px-3 py-1.5">
+                    <td colSpan={7} className="px-3 py-1.5">
                       <div className="flex items-center gap-4 text-xs">
                         <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
                         <span className="text-slate-500">Gross: <span className="font-bold text-slate-700">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
@@ -755,7 +742,7 @@ export default function GoodsReceivedNoteFormPage() {
                         <span className="text-emerald-600">Tax: <span className="font-bold">+{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
                       </div>
                     </td>
-                    <td colSpan={5} className="px-3 py-1.5 text-right">
+                    <td colSpan={4} className="px-3 py-1.5 text-right">
                       <div className="flex flex-col items-end leading-tight">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Net Total</span>
                         <span className="text-base font-black text-indigo-700 tabular-nums">
