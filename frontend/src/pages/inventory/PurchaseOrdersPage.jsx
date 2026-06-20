@@ -1,17 +1,15 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, ChevronDown, RefreshCw } from 'lucide-react'
+import { Plus } from 'lucide-react'
 import {
   deletePurchaseOrder,
   getPurchaseOrders,
-  updatePurchaseOrderStatus,
 } from '../../api/purchaseOrders'
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
 import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
-import Swal from 'sweetalert2'
 import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
 import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 
@@ -41,35 +39,13 @@ const STATUS_OPTIONS = [
   { value: 'cancelled',          label: 'Cancelled' },
 ]
 
-const STATUS_TRANSITIONS = {
-  draft: [
-    { value: 'sent',      label: 'Send to Supplier', cls: 'text-blue-700 hover:bg-blue-50' },
-    { value: 'cancelled', label: 'Cancel PO',        cls: 'text-red-600 hover:bg-red-50' },
-  ],
-  sent: [
-    { value: 'confirmed', label: 'Mark Confirmed', cls: 'text-indigo-700 hover:bg-indigo-50' },
-    { value: 'cancelled', label: 'Cancel PO',      cls: 'text-red-600 hover:bg-red-50' },
-  ],
-  confirmed: [
-    { value: 'cancelled', label: 'Cancel PO', cls: 'text-red-600 hover:bg-red-50' },
-  ],
-}
-
 export default function PurchaseOrdersPage() {
-  const [page, setPage]             = useState(1)
-  const [openDropdown, setOpenDropdown] = useState(null)
-  const queryClient                 = useQueryClient()
-  const resetPage                   = () => setPage(1)
+  const [page, setPage] = useState(1)
+  const queryClient     = useQueryClient()
+  const resetPage       = () => setPage(1)
 
   const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
     useTableFilter(INITIAL_FILTERS)
-
-  // Close the status dropdown when clicking anywhere outside
-  useEffect(() => {
-    const handler = () => setOpenDropdown(null)
-    document.addEventListener('click', handler)
-    return () => document.removeEventListener('click', handler)
-  }, [])
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['purchase-orders', page, applied],
@@ -83,30 +59,8 @@ export default function PurchaseOrdersPage() {
     onError:    () => showError('Cannot delete — only draft POs can be removed.'),
   })
 
-  const statusMutation = useMutation({
-    mutationFn: ({ id, status }) => updatePurchaseOrderStatus(id, status),
-    onSuccess:  () => { queryClient.invalidateQueries({ queryKey: ['purchase-orders'] }); showSuccess('PO status updated.') },
-    onError:    (err) => showError(err?.response?.data?.message ?? 'Status update failed.'),
-  })
-
   const handleDelete = async (id, poNo) => {
     if (await confirmDelete(poNo)) deleteMutation.mutate(id)
-  }
-
-  const handleStatusChange = async (id, poNo, toStatus, toLabel) => {
-    setOpenDropdown(null)
-    const isCancelling = toStatus === 'cancelled'
-    const result = await Swal.fire({
-      title: isCancelling ? `Cancel PO ${poNo}?` : `Update Status of ${poNo}?`,
-      text:  `Status will be changed to "${toLabel}".`,
-      icon:  isCancelling ? 'warning' : 'question',
-      showCancelButton:    true,
-      confirmButtonColor:  isCancelling ? '#dc2626' : '#4f46e5',
-      confirmButtonText:   isCancelling ? 'Yes, Cancel PO' : `Yes, ${toLabel}`,
-      cancelButtonText:    'No, Go Back',
-      reverseButtons:      true,
-    })
-    if (result.isConfirmed) statusMutation.mutate({ id, status: toStatus })
   }
 
   const meta = data?.meta
@@ -198,35 +152,6 @@ export default function PurchaseOrdersPage() {
                             <ViewBtn to={`/inventory/purchase-orders/${po.id}`} />
                             {(po.status === 'draft' || po.status === 'sent') && (
                               <EditBtn to={`/inventory/purchase-orders/${po.id}/edit`} />
-                            )}
-                            {STATUS_TRANSITIONS[po.status] && (
-                              <div className="relative" onClick={(e) => e.stopPropagation()}>
-                                <button
-                                  type="button"
-                                  title="Change Status"
-                                  disabled={statusMutation.isPending}
-                                  onClick={() => setOpenDropdown(openDropdown === po.id ? null : po.id)}
-                                  className="inline-flex items-center gap-0.5 rounded-lg px-1.5 py-1.5 bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors disabled:opacity-40"
-                                >
-                                  <RefreshCw size={12} strokeWidth={2} />
-                                  <ChevronDown size={10} strokeWidth={2.5} />
-                                </button>
-                                {openDropdown === po.id && (
-                                  <div className="absolute right-0 top-full z-30 mt-1 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
-                                    <p className="px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">Change Status</p>
-                                    {STATUS_TRANSITIONS[po.status].map((t) => (
-                                      <button
-                                        key={t.value}
-                                        type="button"
-                                        onClick={() => handleStatusChange(po.id, po.po_no, t.value, t.label)}
-                                        className={`w-full px-3 py-1.5 text-left text-xs font-medium transition-colors ${t.cls}`}
-                                      >
-                                        {t.label}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
                             )}
                             {po.status === 'draft' && (
                               <DeleteBtn onClick={() => handleDelete(po.id, po.po_no)} disabled={deleteMutation.isPending} />
