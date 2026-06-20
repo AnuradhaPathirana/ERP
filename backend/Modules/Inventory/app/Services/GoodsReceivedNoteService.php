@@ -70,7 +70,7 @@ class GoodsReceivedNoteService
     }
 
     /**
-     * Return PO items that still have outstanding quantity (for GRN form population).
+     * Return outstanding items for a single PO.
      * @return array<array<string, mixed>>
      */
     public function getPoOutstandingItems(int $poId): array
@@ -84,6 +84,8 @@ class GoodsReceivedNoteService
         return $po->items
             ->filter(fn (PurchaseOrderItem $item) => $item->remaining_qty > 0)
             ->map(fn (PurchaseOrderItem $item) => [
+                'po_id'            => $po->id,
+                'po_no'            => $po->po_no,
                 'po_item_id'       => $item->id,
                 'product_id'       => $item->product_id,
                 'unit_id'          => $item->unit_id,
@@ -103,37 +105,91 @@ class GoodsReceivedNoteService
             ->all();
     }
 
+    /**
+     * Return outstanding items for multiple POs in one call.
+     * @param array<int> $poIds
+     * @return array<array<string, mixed>>
+     */
+    public function getPoOutstandingItemsForMultiple(array $poIds): array
+    {
+        if (empty($poIds)) {
+            return [];
+        }
+
+        $pos = PurchaseOrder::with(['items.product', 'items.unit'])
+            ->whereIn('id', $poIds)
+            ->get();
+
+        $results = [];
+
+        foreach ($pos as $po) {
+            if (!$po->status->canReceiveGoods()) {
+                continue;
+            }
+
+            foreach ($po->items->filter(fn (PurchaseOrderItem $i) => $i->remaining_qty > 0) as $item) {
+                $results[] = [
+                    'po_id'            => $po->id,
+                    'po_no'            => $po->po_no,
+                    'po_item_id'       => $item->id,
+                    'product_id'       => $item->product_id,
+                    'unit_id'          => $item->unit_id,
+                    'quantity_ordered'  => (float) $item->quantity_ordered,
+                    'quantity_received' => (float) $item->quantity_received,
+                    'remaining_qty'    => $item->remaining_qty,
+                    'unit_price'       => (float) $item->unit_price,
+                    'product'          => [
+                        'id'           => $item->product->id,
+                        'name'         => $item->product->name,
+                        'product_code' => $item->product->product_code,
+                        'is_batch'     => $item->product->is_batch,
+                        'is_serial'    => $item->product->is_serial,
+                    ],
+                ];
+            }
+        }
+
+        return $results;
+    }
+
     public function nextGrnNo(): string
     {
         return $this->generateGrnNo();
     }
 
     /** @return array{grn_date: ?string, total_amount: float}|null */
-    public function lastGrnForSupplier(int $supplierId): ?array
+    public function lastGrn(): ?array
     {
-        $last = GoodsReceivedNote::where('supplier_id', $supplierId)
+        $last = GoodsReceivedNote::with([
+                'items' => fn ($q) => $q->select('grn_id', 'quantity_received', 'unit_price'),
+            ])
             ->where('status', GrnStatus::Confirmed->value)
             ->orderByDesc('grn_date')
             ->orderByDesc('id')
-            ->first(['grn_date', 'total_amount']);
+            ->first(['id', 'grn_date']);
 
         if (!$last) {
             return null;
         }
 
+        $total = $last->items->sum(
+            fn (GoodsReceivedNoteItem $item) => (float) $item->quantity_received * (float) $item->unit_price
+        );
+
         return [
             'grn_date'     => $last->grn_date?->toDateString(),
-            'total_amount' => (float) $last->total_amount,
+            'total_amount' => $total,
         ];
     }
 
     public function create(GoodsReceivedNoteData $data): GoodsReceivedNote
     {
         return DB::transaction(function () use ($data): GoodsReceivedNote {
+            // Derive supplier from explicit field or from PO
             $supplierId = $data->supplierId;
-            if ($data->poId) {
+            if (!$supplierId && $data->poId) {
                 $po         = PurchaseOrder::findOrFail($data->poId);
-                $supplierId = $supplierId ?? $po->supplier_id;
+                $supplierId = $po->supplier_id;
             }
 
             $grn = GoodsReceivedNote::create([
@@ -171,6 +227,7 @@ class GoodsReceivedNoteService
                 'grn_date'         => $data->grnDate,
                 'transaction_date' => $data->transactionDate,
                 'reference_no'     => $data->referenceNo,
+                'supplier_id'      => $data->supplierId ?? $grn->supplier_id,
                 'store_id'         => $data->storeId,
                 'location_id'      => $data->locationId,
                 'remarks'          => $data->remarks,
@@ -187,7 +244,7 @@ class GoodsReceivedNoteService
 
     /**
      * Confirm GRN: post stock into inv_product_location_stores and inv_stock_transactions.
-     * This is the critical business operation — must be atomic.
+     * Stock posting is skipped when no store is assigned (items still update PO quantities).
      */
     public function confirm(GoodsReceivedNote $grn): GoodsReceivedNote
     {
@@ -198,8 +255,15 @@ class GoodsReceivedNoteService
         return DB::transaction(function () use ($grn): GoodsReceivedNote {
             $grn->load('items.product');
 
+            // Collect affected PO IDs from items (supports multi-PO GRNs)
+            $poItemIds     = $grn->items->pluck('po_item_id')->filter()->unique()->values();
+            $affectedPoIds = PurchaseOrderItem::whereIn('id', $poItemIds)
+                ->pluck('po_id')
+                ->unique()
+                ->values();
+
             foreach ($grn->items as $item) {
-                // 1. Post stock transaction ledger entry
+                // 1. Post stock transaction ledger entry (always, even without store)
                 StockTransaction::create([
                     'transaction_date' => now(),
                     'reference_type'   => 'grn',
@@ -216,17 +280,19 @@ class GoodsReceivedNoteService
                     'created_by'       => auth()->id(),
                 ]);
 
-                // 2. Update denormalized stock balance (upsert for this product/store/location)
-                $pivot = ProductLocationStore::firstOrCreate(
-                    [
-                        'product_id'  => $item->product_id,
-                        'store_id'    => $grn->store_id,
-                        'location_id' => $grn->location_id,
-                    ],
-                    ['current_stock' => 0]
-                );
+                // 2. Update denormalized stock balance only if store is assigned
+                if ($grn->store_id) {
+                    $pivot = ProductLocationStore::firstOrCreate(
+                        [
+                            'product_id'  => $item->product_id,
+                            'store_id'    => $grn->store_id,
+                            'location_id' => $grn->location_id,
+                        ],
+                        ['current_stock' => 0]
+                    );
 
-                $pivot->increment('current_stock', (float) $item->quantity_received);
+                    $pivot->increment('current_stock', (float) $item->quantity_received);
+                }
 
                 // 3. Update quantity_received on the linked PO item
                 PurchaseOrderItem::where('id', $item->po_item_id)
@@ -239,8 +305,10 @@ class GoodsReceivedNoteService
                 'confirmed_at' => now(),
             ]);
 
-            // 5. Recompute PO status based on remaining open items
-            $this->syncPoStatusAfterGrn($grn->po_id);
+            // 5. Recompute status for all affected POs
+            foreach ($affectedPoIds as $poId) {
+                $this->syncPoStatusAfterGrn($poId);
+            }
 
             return $grn->fresh(['items.product', 'items.unit', 'purchaseOrder', 'supplier', 'store', 'location']);
         });
@@ -275,12 +343,13 @@ class GoodsReceivedNoteService
 
     private function generateGrnNo(): string
     {
-        $year = now()->year;
+        $year   = now()->year;
         $prefix = "GRN-{$year}-";
 
         $last = GoodsReceivedNote::withTrashed()
             ->where('grn_no', 'like', $prefix . '%')
             ->orderByDesc('id')
+            ->lockForUpdate()
             ->value('grn_no');
 
         $next = $last

@@ -51,7 +51,7 @@ export default function GoodsReceivedNotesPage() {
   const confirmMutation = useMutation({
     mutationFn: confirmGoodsReceivedNote,
     onSuccess:  () => { queryClient.invalidateQueries({ queryKey: ['grns'] }); queryClient.invalidateQueries({ queryKey: ['purchase-orders'] }); showSuccess('GRN confirmed. Stock updated successfully.') },
-    onError:    () => showError('Confirmation failed.'),
+    onError:    (err) => showError(err.response?.data?.message ?? 'Confirmation failed.'),
   })
 
   const handleDelete = async (id, grnNo) => {

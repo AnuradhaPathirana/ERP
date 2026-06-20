@@ -16,7 +16,7 @@ final class GoodsReceivedNoteData
         public readonly string  $grnDate,
         public readonly ?string $transactionDate,
         public readonly ?string $referenceNo,
-        public readonly int     $storeId,
+        public readonly ?int    $storeId,
         public readonly ?int    $locationId,
         public readonly ?string $remarks,
         public readonly ?string $paymentTerms,
@@ -33,10 +33,8 @@ final class GoodsReceivedNoteData
             grnDate:         $request->validated('grn_date'),
             transactionDate: $request->validated('transaction_date'),
             referenceNo:     $request->validated('reference_no'),
-            storeId:         (int) $request->validated('store_id'),
-            locationId:      $request->validated('location_id') !== null
-                                 ? (int) $request->validated('location_id')
-                                 : null,
+            storeId:         $request->validated('store_id') !== null ? (int) $request->validated('store_id') : null,
+            locationId:      $request->validated('location_id') !== null ? (int) $request->validated('location_id') : null,
             remarks:         $request->validated('remarks'),
             paymentTerms:    $request->validated('payment_terms'),
             attachments:     $request->validated('attachments'),

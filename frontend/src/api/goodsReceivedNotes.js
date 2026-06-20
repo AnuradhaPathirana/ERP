@@ -21,8 +21,15 @@ export const confirmGoodsReceivedNote = (id) =>
 export const getPoOutstandingItems = (poId) =>
   api.get(`/api/v1/goods-received-notes/po-items/${poId}`).then((r) => r.data)
 
+/** Fetch outstanding items for multiple POs in one request */
+export const getPoOutstandingItemsMultiple = (poIds = []) =>
+  api.get('/api/v1/goods-received-notes/po-items-multi', {
+    params: { po_ids: poIds },
+    paramsSerializer: { indexes: null },
+  }).then((r) => r.data.data ?? [])
+
 export const getNextGrnNo = () =>
   api.get('/api/v1/goods-received-notes/next-grn-no').then((r) => r.data.data.grn_no)
 
-export const getLastGrnForSupplier = (supplierId) =>
-  api.get(`/api/v1/goods-received-notes/supplier/${supplierId}/last`).then((r) => r.data.data)
+export const getLastGrn = () =>
+  api.get('/api/v1/goods-received-notes/last').then((r) => r.data.data)

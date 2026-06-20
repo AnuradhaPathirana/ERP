@@ -18,7 +18,7 @@ class GoodsReceivedNoteController extends Controller
 {
     public function __construct(private readonly GoodsReceivedNoteService $service)
     {
-        $this->middleware('permission:view_grns')->only(['index', 'show', 'poOutstandingItems', 'nextGrnNo', 'lastGrnForSupplier']);
+        $this->middleware('permission:view_grns')->only(['index', 'show', 'poOutstandingItems', 'nextGrnNo', 'lastGrn']);
         $this->middleware('permission:create_grns')->only(['store']);
         $this->middleware('permission:edit_grns')->only(['update']);
         $this->middleware('permission:confirm_grns')->only(['confirm']);
@@ -94,17 +94,24 @@ class GoodsReceivedNoteController extends Controller
         return response()->json(['data' => $items]);
     }
 
+    /** GET /goods-received-notes/po-items-multi?po_ids[]=1&po_ids[]=2 */
+    public function poOutstandingItemsMultiple(Request $request): JsonResponse
+    {
+        $poIds = array_map('intval', (array) $request->input('po_ids', []));
+        $items = $this->service->getPoOutstandingItemsForMultiple($poIds);
+
+        return response()->json(['data' => $items]);
+    }
+
     /** GET /goods-received-notes/next-grn-no — lock-free preview of next GRN number */
     public function nextGrnNo(): JsonResponse
     {
         return response()->json(['data' => ['grn_no' => $this->service->nextGrnNo()]]);
     }
 
-    /** GET /goods-received-notes/supplier/{supplierId}/last — last confirmed GRN for supplier */
-    public function lastGrnForSupplier(int $supplierId): JsonResponse
+    /** GET /goods-received-notes/last — latest confirmed GRN system-wide */
+    public function lastGrn(): JsonResponse
     {
-        $data = $this->service->lastGrnForSupplier($supplierId);
-
-        return response()->json(['data' => $data]);
+        return response()->json(['data' => $this->service->lastGrn()]);
     }
 }
