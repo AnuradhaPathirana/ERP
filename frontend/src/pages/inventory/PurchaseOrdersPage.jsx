@@ -114,6 +114,8 @@ export default function PurchaseOrdersPage() {
                     <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">PO No</th>
                     <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">PR Ref</th>
                     <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Supplier</th>
+                    <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Store</th>
+                    <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Location</th>
                     <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Order Date</th>
                     <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Exp. Delivery</th>
                     <th className="w-24 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Total</th>
@@ -124,7 +126,7 @@ export default function PurchaseOrdersPage() {
                 <tbody className="divide-y divide-slate-100">
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">
+                      <td colSpan={11} className="px-4 py-12 text-center text-sm text-slate-400">
                         {activeCount > 0 ? 'No purchase orders match the current filters.' : (
                           <><Link to="/inventory/purchase-orders/create" className="font-medium text-indigo-600 hover:underline">Create the first PO.</Link></>
                         )}
@@ -139,6 +141,12 @@ export default function PurchaseOrdersPage() {
                         </td>
                         <td className="px-3 py-2 text-slate-500 font-mono">{po.purchase_request?.pr_no || <span className="italic text-slate-300">—</span>}</td>
                         <td className="px-3 py-2 font-medium text-slate-700">{po.supplier?.name || <span className="italic text-slate-300">—</span>}</td>
+                        <td className="px-3 py-2 text-slate-600">
+                          {po.store?.name || po.purchase_request?.source_store?.name || <span className="italic text-slate-300">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-slate-600">
+                          {po.location?.name || po.purchase_request?.source_location?.name || <span className="italic text-slate-300">—</span>}
+                        </td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{po.order_date}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{po.expected_delivery_date || <span className="italic text-slate-300">—</span>}</td>
                         <td className="px-3 py-2 text-right font-medium text-slate-700">{Number(po.grand_total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>

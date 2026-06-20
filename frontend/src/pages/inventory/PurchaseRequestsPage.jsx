@@ -218,8 +218,8 @@ export default function PurchaseRequestsPage() {
                         </td>
                         <td className="px-3 py-2 text-slate-500">{pr.reference_no || <span className="italic text-slate-300">—</span>}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{pr.request_date}</td>
-                        <td className="px-3 py-2 text-slate-700">{pr.target_location?.name || <span className="italic text-slate-300">—</span>}</td>
-                        <td className="px-3 py-2 text-slate-700">{pr.target_store?.name || <span className="italic text-slate-300">—</span>}</td>
+                        <td className="px-3 py-2 text-slate-700">{pr.target_location?.name || pr.source_location?.name || <span className="italic text-slate-300">—</span>}</td>
+                        <td className="px-3 py-2 text-slate-700">{pr.target_store?.name || pr.source_store?.name || <span className="italic text-slate-300">—</span>}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{pr.required_date || <span className="italic text-slate-300">—</span>}</td>
                         <td className="px-3 py-2 text-right font-medium text-slate-700">
                           {pr.total_quantity != null ? Number(pr.total_quantity).toLocaleString() : '—'}

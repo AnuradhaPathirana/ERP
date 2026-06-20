@@ -19,7 +19,13 @@ class PurchaseOrderService
     /** @param array<string, mixed> $filters */
     public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
     {
-        $query = PurchaseOrder::with(['supplier', 'store', 'purchaseRequest'])
+        $query = PurchaseOrder::with([
+                'supplier',
+                'store',
+                'location',
+                'purchaseRequest.sourceStore',
+                'purchaseRequest.sourceLocation',
+            ])
             ->orderByDesc('order_date')
             ->orderByDesc('id');
 

@@ -22,7 +22,6 @@ class PurchaseOrderResource extends JsonResource
             'order_date'             => $this->order_date?->toDateString(),
             'expected_delivery_date' => $this->expected_delivery_date?->toDateString(),
             'reference_no'           => $this->reference_no,
-            'location'               => $this->location,
             'payment_terms'          => $this->payment_terms,
             'contact_person_name'    => $this->contact_person_name,
             'contact_person_phone'   => $this->contact_person_phone,
@@ -50,6 +49,14 @@ class PurchaseOrderResource extends JsonResource
             'purchase_request' => $this->whenLoaded('purchaseRequest', fn () => [
                 'id'    => $this->purchaseRequest->id,
                 'pr_no' => $this->purchaseRequest->pr_no,
+                'source_store' => $this->purchaseRequest->sourceStore ? [
+                    'id'   => $this->purchaseRequest->sourceStore->id,
+                    'name' => $this->purchaseRequest->sourceStore->store_name,
+                ] : null,
+                'source_location' => $this->purchaseRequest->sourceLocation ? [
+                    'id'   => $this->purchaseRequest->sourceLocation->id,
+                    'name' => $this->purchaseRequest->sourceLocation->location_name ?? $this->purchaseRequest->sourceLocation->name ?? '',
+                ] : null,
             ]),
 
             'items' => $this->when(
