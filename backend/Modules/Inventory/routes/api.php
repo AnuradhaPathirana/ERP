@@ -26,6 +26,8 @@ use Modules\Inventory\Http\Controllers\PurchaseOrderController;
 use Modules\Inventory\Http\Controllers\BatchController;
 use Modules\Inventory\Http\Controllers\GoodsReceivedNoteController;
 use Modules\Inventory\Http\Controllers\StockController;
+use Modules\Inventory\Http\Controllers\CostingController;
+use Modules\Inventory\Http\Controllers\CostingExpenseTypeController;
 
 Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(function (): void {
     // Named routes before apiResource so static segments are not swallowed by {unit_category}
@@ -186,6 +188,24 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.batches.show');
     Route::get('batches', [BatchController::class, 'index'])
         ->name('inventory.batches.index');
+
+    // ── Costings ──────────────────────────────────────────────────────────────
+    Route::get('costings/next-document-no', [CostingController::class, 'nextDocumentNo'])
+        ->name('inventory.costings.next-document-no');
+    Route::get('costings/next-reference-no', [CostingController::class, 'nextReferenceNo'])
+        ->name('inventory.costings.next-reference-no');
+    Route::get('costings/supplier-grns/{supplierId}', [CostingController::class, 'supplierGrns'])
+        ->name('inventory.costings.supplier-grns');
+    Route::post('costings/calculate-preview', [CostingController::class, 'calculatePreview'])
+        ->name('inventory.costings.calculate-preview');
+    Route::post('costings/{costing}/confirm', [CostingController::class, 'confirm'])
+        ->name('inventory.costings.confirm');
+    Route::apiResource('costings', CostingController::class)
+        ->names('inventory.costings');
+
+    // Costing Expense Types
+    Route::apiResource('costing-expense-types', CostingExpenseTypeController::class)
+        ->names('inventory.costing-expense-types');
 
     // Goods Received Notes
     Route::get('goods-received-notes/next-grn-no', [GoodsReceivedNoteController::class, 'nextGrnNo'])

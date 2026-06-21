@@ -46,6 +46,8 @@ const PurchaseOrdersPage       = lazy(() => import('./pages/inventory/PurchaseOr
 const PurchaseOrderFormPage    = lazy(() => import('./pages/inventory/PurchaseOrderFormPage'))
 const GoodsReceivedNotesPage   = lazy(() => import('./pages/inventory/GoodsReceivedNotesPage'))
 const GoodsReceivedNoteFormPage = lazy(() => import('./pages/inventory/GoodsReceivedNoteFormPage'))
+const CostingsPage              = lazy(() => import('./pages/inventory/CostingsPage'))
+const CostingFormPage           = lazy(() => import('./pages/inventory/CostingFormPage'))
 const UserManagementPage    = lazy(() => import('./pages/admin/UserManagementPage'))
 const RolesPage             = lazy(() => import('./pages/admin/RolesPage'))
 const RoleFormPage          = lazy(() => import('./pages/admin/RoleFormPage'))
@@ -139,6 +141,10 @@ export default function App() {
         <Route path="/inventory/goods-received-notes/create"   element={<Lazy component={GoodsReceivedNoteFormPage} />} />
         <Route path="/inventory/goods-received-notes/:id"      element={<Lazy component={GoodsReceivedNoteFormPage} />} />
         <Route path="/inventory/goods-received-notes/:id/edit" element={<Lazy component={GoodsReceivedNoteFormPage} />} />
+        <Route path="/inventory/costings"                      element={<Lazy component={CostingsPage} />} />
+        <Route path="/inventory/costings/create"               element={<Lazy component={CostingFormPage} />} />
+        <Route path="/inventory/costings/:id"                  element={<Lazy component={CostingFormPage} />} />
+        <Route path="/inventory/costings/:id/edit"             element={<Lazy component={CostingFormPage} />} />
       </Route>
 
       {/* Fallback */}

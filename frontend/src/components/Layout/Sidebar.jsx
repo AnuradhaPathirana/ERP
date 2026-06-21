@@ -19,6 +19,7 @@ import {
   MapPin,
   Package,
   PackageCheck,
+  Receipt,
   Ruler,
   Settings2,
   Shield,
@@ -51,9 +52,10 @@ const NAV_ITEMS = [
     icon: Package,
     moduleKey: 'inventory',
     children: [
-      { label: 'Purchase Requests', to: '/inventory/purchase-requests', icon: ClipboardList, permissionGuard: 'view_purchase_requests' },
-      { label: 'Purchase Orders',   to: '/inventory/purchase-orders',   icon: ShoppingBag,   permissionGuard: 'view_purchase_orders' },
-      { label: 'GRN',               to: '/inventory/goods-received-notes', icon: PackageCheck, permissionGuard: 'view_grns' },
+      { label: 'Purchase Requests', to: '/inventory/purchase-requests',    icon: ClipboardList, permissionGuard: 'view_purchase_requests' },
+      { label: 'Purchase Orders',   to: '/inventory/purchase-orders',      icon: ShoppingBag,   permissionGuard: 'view_purchase_orders' },
+      { label: 'GRN',               to: '/inventory/goods-received-notes', icon: PackageCheck,  permissionGuard: 'view_grns' },
+      { label: 'Costings',          to: '/inventory/costings',             icon: Receipt,       permissionGuard: 'view_costings' },
       {
         label: 'Settings & Configurations',
         icon: Settings2,
