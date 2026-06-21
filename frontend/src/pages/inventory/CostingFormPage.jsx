@@ -115,17 +115,25 @@ export default function CostingFormPage() {
   const [expenseRows, setExpenseRows] = useState([]) // { expense_type_id, name, amount, note }
 
   /* ── Derived totals ───────────────────────────────────────── */
-  const selectedGrns     = supplierGrns.filter((g) => selectedGrnIds.has(g.id))
-  const rawMaterialCost  = selectedGrns.reduce((s, g) => s + (parseFloat(g.total_amount) || 0), 0)
-  const totalItemsCount  = selectedGrns.reduce((s, g) => s + (parseFloat(g.total_items) || 0), 0)
+  const selectedGrns  = supplierGrns.filter((g) => selectedGrnIds.has(g.id))
+  const grnTotal      = selectedGrns.reduce((s, g) => s + (parseFloat(g.total_amount) || 0), 0)
+  const totalItemsCount = selectedGrns.reduce((s, g) => s + (parseFloat(g.total_items) || 0), 0)
 
+  // Summary uses material_cost (editable field) as raw material cost — not the GRN sum.
+  // GRN selection auto-fills material_cost, but the user can override it.
   const summary = calcSummary({
-    rawMaterialCost,
-    expenses: expenseRows,
+    rawMaterialCost:  parseFloat(form.material_cost) || 0,
+    expenses:         expenseRows,
     valueAdditionPct: parseFloat(form.value_addition_pct) || 0,
     ssclPct:          parseFloat(form.sscl_pct) || 0,
     vatPct:           parseFloat(form.vat_pct) || 0,
   })
+
+  /* ── Auto-fill Material Cost from GRN selection (create mode only) ── */
+  useEffect(() => {
+    if (isEdit) return
+    setField('material_cost', grnTotal > 0 ? grnTotal : '')
+  }, [grnTotal])
 
   /* ── Fetch suppliers list ─────────────────────────────────── */
   const { data: suppliers = [] } = useQuery({
@@ -396,7 +404,7 @@ export default function CostingFormPage() {
               extra={
                 <div className="flex items-center gap-3 text-[10px] text-slate-500">
                   <span>Total Items: <span className="font-bold text-slate-700">{fmt(totalItemsCount)}</span></span>
-                  <span>Raw Material Cost: <span className="font-bold text-indigo-700">{fmt(rawMaterialCost)}</span></span>
+                  <span>GRN Total: <span className="font-bold text-indigo-700">{fmt(grnTotal)}</span></span>
                 </div>
               }
             />
@@ -551,7 +559,7 @@ export default function CostingFormPage() {
 
               {/* Summary rows */}
               <SummaryRow label="Total Additional Expenses" value={summary.totalAdditional} valueClass="text-slate-700" />
-              <SummaryRow label="Raw Material Cost" value={rawMaterialCost} valueClass="text-slate-700" />
+              <SummaryRow label="Raw Material Cost" value={parseFloat(form.material_cost) || 0} valueClass="text-slate-700" />
               <div className="border-t border-slate-200 my-1" />
               <SummaryRow label="Total Landed Cost" value={summary.totalLanded} valueClass="font-bold text-slate-800" />
 

@@ -32,6 +32,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'vehicle_masters',
         'purchase_requests',
         'purchase_orders',
+        'costings',
     ];
 
     /** Purchasing permissions that don't follow the standard CRUD pattern. */
@@ -42,6 +43,8 @@ class RolesAndPermissionsSeeder extends Seeder
         'edit_grns',
         'confirm_grns',
         'delete_grns',
+        'confirm_costings',
+        'manage_costing_expense_types',
     ];
 
     public function run(): void

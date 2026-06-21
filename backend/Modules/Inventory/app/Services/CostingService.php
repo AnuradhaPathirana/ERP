@@ -348,7 +348,9 @@ class CostingService
      */
     private function calculateSummaryFromData(CostingData $data, Collection $grns): array
     {
-        $rawMaterialCost    = (float) $grns->sum('total_amount');
+        // material_cost is the user-editable raw material cost (auto-filled from GRN totals
+        // but overridable). It drives raw_material_cost stored in the DB.
+        $rawMaterialCost    = $data->materialCost;
         $totalAdditionalExp = (float) collect($data->expenses)->sum('amount');
 
         return self::compute(
