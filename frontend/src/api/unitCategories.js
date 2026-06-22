@@ -26,6 +26,14 @@ export const updateUnitCategory = (id, payload) =>
 export const deleteUnitCategory = (id) =>
   api.delete(`${BASE}/${id}`)
 
+/** Mark a category as the system default (clears any previous default). */
+export const setDefaultUnitCategory = (id) =>
+  api.post(`${BASE}/${id}/set-default`).then((r) => r.data)
+
+/** Remove the default flag from a category. */
+export const clearDefaultUnitCategory = (id) =>
+  api.post(`${BASE}/${id}/clear-default`).then((r) => r.data)
+
 /** Flat list for <select> dropdowns — returns [{ id, name }] */
 export const getAllUnitCategories = () =>
   api.get(`${BASE}/all`).then((r) => r.data)

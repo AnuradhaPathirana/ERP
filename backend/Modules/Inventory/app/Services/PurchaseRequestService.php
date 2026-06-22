@@ -60,6 +60,7 @@ class PurchaseRequestService
             'sourceStore',
             'targetLocation',
             'targetStore',
+            'customer',
         ])->findOrFail($id);
     }
 
@@ -80,6 +81,7 @@ class PurchaseRequestService
                 'source_store_id'    => $data->sourceStoreId,
                 'target_location_id' => $data->targetLocationId,
                 'target_store_id'    => $data->targetStoreId,
+                'customer_id'        => $data->customerId,
                 'transport_mode'     => $data->transportMode,
                 'remarks'            => $data->remarks,
                 'status'             => $status,
@@ -88,7 +90,7 @@ class PurchaseRequestService
 
             $this->syncItems($pr, $data->items);
 
-            return $pr->load(['items.product', 'items.unit', 'sourceLocation', 'sourceStore', 'targetLocation', 'targetStore']);
+            return $pr->load(['items.product', 'items.unit', 'sourceLocation', 'sourceStore', 'targetLocation', 'targetStore', 'customer']);
         });
     }
 
@@ -112,6 +114,7 @@ class PurchaseRequestService
                 'source_store_id'    => $data->sourceStoreId,
                 'target_location_id' => $data->targetLocationId,
                 'target_store_id'    => $data->targetStoreId,
+                'customer_id'        => $data->customerId,
                 'transport_mode'     => $data->transportMode,
                 'remarks'            => $data->remarks,
                 'status'             => $status,
@@ -119,7 +122,7 @@ class PurchaseRequestService
 
             $this->syncItems($pr, $data->items);
 
-            return $pr->load(['items.product', 'items.unit', 'sourceLocation', 'sourceStore', 'targetLocation', 'targetStore']);
+            return $pr->load(['items.product', 'items.unit', 'sourceLocation', 'sourceStore', 'targetLocation', 'targetStore', 'customer']);
         });
     }
 

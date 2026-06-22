@@ -119,7 +119,9 @@ class PurchaseOrderService
                 'is_consignment'         => $data->isConsignment,
                 'billing_address'        => $data->billingAddress,
                 'shipping_address'       => $data->shippingAddress,
-                'status'                 => PurchaseOrderStatus::Draft,
+                'status'                 => $data->status
+                                               ? PurchaseOrderStatus::from($data->status)
+                                               : PurchaseOrderStatus::Draft,
                 'remarks'                => $data->remarks,
                 'created_by'             => Auth::id(),
                 'subtotal'               => 0,

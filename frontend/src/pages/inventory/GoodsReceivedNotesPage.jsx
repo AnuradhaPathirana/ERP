@@ -10,8 +10,7 @@ import {
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
 import { useTableFilter } from '../../hooks/useTableFilter'
-import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
-import Swal from 'sweetalert2'
+import { confirmDelete, confirmAction, showError, showSuccess } from '../../utils/alerts'
 import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
 import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 
@@ -59,18 +58,12 @@ export default function GoodsReceivedNotesPage() {
   }
 
   const handleConfirm = async (id, grnNo) => {
-    const result = await Swal.fire({
+    const ok = await confirmAction({
       title: `Confirm ${grnNo}?`,
-      html: '<p style="font-size:13px;color:#475569">This will <strong>post stock</strong> into the inventory for all received items.<br>This action cannot be undone.</p>',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#16a34a',
-      cancelButtonColor: '#64748b',
-      confirmButtonText: 'Yes, Confirm & Post Stock',
-      cancelButtonText: 'Cancel',
-      reverseButtons: true,
+      message: 'This will <strong>post stock</strong> into the inventory for all received items. This action cannot be undone.',
+      confirmText: 'Yes, Confirm & Post Stock',
     })
-    if (result.isConfirmed) confirmMutation.mutate(id)
+    if (ok) confirmMutation.mutate(id)
   }
 
   const meta = data?.meta

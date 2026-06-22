@@ -1,1 +1,64 @@
 @import "tailwindcss";
+
+/* ── SweetAlert2 compact overrides ──────────────────────────── */
+.swal2-toast-compact {
+  font-size: 13px !important;
+  padding: 8px 14px !important;
+  min-height: unset !important;
+}
+.swal2-toast-compact .swal2-title {
+  font-size: 13px !important;
+  margin: 0 !important;
+}
+.swal2-toast-compact .swal2-icon {
+  width: 24px !important;
+  height: 24px !important;
+  margin: 0 6px 0 0 !important;
+  border-width: 2px !important;
+}
+.swal2-toast-compact .swal2-icon .swal2-icon-content {
+  font-size: 15px !important;
+}
+.swal2-toast-compact .swal2-timer-progress-bar {
+  height: 3px !important;
+}
+
+.swal2-compact-popup {
+  padding: 16px !important;
+  border-radius: 8px !important;
+}
+.swal2-compact-title {
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  padding: 0 !important;
+  margin-bottom: 6px !important;
+}
+.swal2-compact-html {
+  margin: 0 0 12px !important;
+  padding: 0 !important;
+}
+.swal2-compact-btn {
+  font-size: 12px !important;
+  padding: 5px 14px !important;
+  border-radius: 5px !important;
+}
+.swal2-compact-popup .swal2-icon {
+  width: 42px !important;
+  height: 42px !important;
+  margin: 0 auto 8px !important;
+  border-width: 2px !important;
+}
+.swal2-compact-popup .swal2-icon .swal2-icon-content {
+  font-size: 22px !important;
+}
+.swal2-compact-popup .swal2-input,
+.swal2-compact-popup textarea.swal2-input {
+  font-size: 12px !important;
+  margin: 4px 0 8px !important;
+  padding: 5px 8px !important;
+}
+.swal2-compact-popup .swal2-validation-message {
+  font-size: 11px !important;
+  padding: 4px 8px !important;
+  margin: 0 !important;
+}

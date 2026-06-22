@@ -30,6 +30,7 @@ class PurchaseRequestResource extends JsonResource
             'source_store_id'    => $this->source_store_id,
             'target_location_id' => $this->target_location_id,
             'target_store_id'    => $this->target_store_id,
+            'customer_id'        => $this->customer_id,
 
             'source_location' => $this->whenLoaded('sourceLocation', fn () => [
                 'id'   => $this->sourceLocation->id,
@@ -47,6 +48,10 @@ class PurchaseRequestResource extends JsonResource
                 'id'   => $this->targetStore->id,
                 'name' => $this->targetStore->store_name,
             ]),
+            'customer' => $this->whenLoaded('customer', fn () => $this->customer ? [
+                'id'   => $this->customer->id,
+                'name' => $this->customer->customer_name,
+            ] : null),
 
             'items' => $this->whenLoaded('items', fn ($items) => PurchaseRequestItemResource::collection($items)),
 

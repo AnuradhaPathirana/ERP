@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Inventory\Services;
 
 use Illuminate\Support\Facades\DB;
+use Modules\Inventory\Models\UnitCategory;
 use Modules\Inventory\Models\UnitConversion;
 use Modules\Inventory\Models\UnitType;
 
@@ -12,6 +13,8 @@ class UnitConversionService
 {
     public function getByCategoryWithRates(int $categoryId): array
     {
+        $category = UnitCategory::find($categoryId, ['id', 'base_unit_type_id']);
+
         $unitTypes = UnitType::where('unit_category_id', $categoryId)
             ->orderBy('name')
             ->get(['id', 'name', 'symbol', 'created_at']);
@@ -20,24 +23,15 @@ class UnitConversionService
             return ['base_unit_id' => null, 'units' => []];
         }
 
-        $unitIds = $unitTypes->pluck('id')->toArray();
+        $baseUnitId = $category?->base_unit_type_id;
 
-        $conversions = UnitConversion::whereIn('from_unit_type_id', $unitIds)
-            ->whereIn('to_unit_type_id', $unitIds)
-            ->get();
-
-        // Base unit = the from_unit_type_id appearing most often (N-1 times for N units)
-        $baseUnitId = null;
-        if ($conversions->isNotEmpty()) {
-            $fromCounts = $conversions->groupBy('from_unit_type_id')->map->count();
-            $baseUnitId = (int) $fromCounts->sortDesc()->keys()->first();
-        }
-
-        // Map: to_unit_type_id => multiplier (stored as base→other)
+        // Map: to_unit_type_id => multiplier for base→other conversions
         $ratesFromBase = [];
         if ($baseUnitId) {
-            $conversions
-                ->where('from_unit_type_id', $baseUnitId)
+            $unitIds = $unitTypes->pluck('id')->toArray();
+            UnitConversion::where('from_unit_type_id', $baseUnitId)
+                ->whereIn('to_unit_type_id', $unitIds)
+                ->get(['to_unit_type_id', 'multiplier'])
                 ->each(fn ($c) => $ratesFromBase[$c->to_unit_type_id] = (float) $c->multiplier);
         }
 
@@ -66,7 +60,10 @@ class UnitConversionService
     {
         $unitIds = UnitType::where('unit_category_id', $categoryId)->pluck('id')->toArray();
 
-        DB::transaction(function () use ($unitIds, $baseUnitTypeId, $rates): void {
+        DB::transaction(function () use ($categoryId, $unitIds, $baseUnitTypeId, $rates): void {
+            UnitCategory::where('id', $categoryId)
+                ->update(['base_unit_type_id' => $baseUnitTypeId]);
+
             UnitConversion::whereIn('from_unit_type_id', $unitIds)
                 ->whereIn('to_unit_type_id', $unitIds)
                 ->delete();

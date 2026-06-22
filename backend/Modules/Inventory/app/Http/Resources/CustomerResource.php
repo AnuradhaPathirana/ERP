@@ -46,8 +46,8 @@ class CustomerResource extends JsonResource
             'sales_executive'              => $this->sales_executive,
             'sales_person'                 => $this->sales_person,
 
-            'attachments'                  => $this->when(
-                $this->relationLoaded('attachmentFiles'),
+            'attachments'                  => $this->whenLoaded(
+                'attachmentFiles',
                 fn () => $this->attachmentFiles->map(fn ($a) => [
                     'id'        => $a->id,
                     'file_name' => $a->file_name,
@@ -55,7 +55,8 @@ class CustomerResource extends JsonResource
                     'file_size' => $a->file_size,
                     'mime_type' => $a->mime_type,
                     'url'       => '/storage/' . $a->file_path,
-                ]),
+                ])->values()->all(),
+                []
             ),
 
             'created_at'                   => $this->created_at?->toISOString(),

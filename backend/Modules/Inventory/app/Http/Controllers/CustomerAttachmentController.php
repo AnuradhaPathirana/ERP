@@ -15,8 +15,18 @@ class CustomerAttachmentController extends Controller
 {
     public function __construct()
     {
+        $this->middleware('permission:view_customer_masters')->only(['index']);
         $this->middleware('permission:edit_customer_masters')->only(['store']);
         $this->middleware('permission:delete_customer_masters')->only(['destroy']);
+    }
+
+    public function index(CustomerMaster $customerMaster): JsonResponse
+    {
+        $attachments = $customerMaster->attachmentFiles()->orderBy('created_at', 'asc')->get();
+
+        return response()->json([
+            'data' => $attachments->map(fn (CustomerAttachment $a) => $this->toArray($a))->values(),
+        ]);
     }
 
     public function store(Request $request, CustomerMaster $customerMaster): JsonResponse
@@ -24,8 +34,10 @@ class CustomerAttachmentController extends Controller
         $request->validate([
             'files'   => ['required', 'array', 'max:20'],
             'files.*' => [
-                'required', 'file', 'max:10240',
-                'mimes:jpg,jpeg,png,gif,webp,pdf,doc,docx,xls,xlsx,csv,txt',
+                'required',
+                'file',
+                'max:10240',
+                'mimes:jpg,jpeg,png,gif,webp,bmp,svg,pdf',
             ],
         ]);
 
@@ -44,7 +56,7 @@ class CustomerAttachmentController extends Controller
         }
 
         return response()->json([
-            'data' => collect($created)->map(fn (CustomerAttachment $a) => $this->toArray($a)),
+            'data' => collect($created)->map(fn(CustomerAttachment $a) => $this->toArray($a)),
         ], 201);
     }
 

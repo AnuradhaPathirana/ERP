@@ -11,8 +11,7 @@ import {
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
 import { useTableFilter } from '../../hooks/useTableFilter'
-import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
-import Swal from 'sweetalert2'
+import { confirmDelete, confirmAction, confirmWithReason, showError, showSuccess } from '../../utils/alerts'
 import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
 import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 
@@ -79,39 +78,22 @@ export default function PurchaseRequestsPage() {
   }
 
   const handleApprove = async (id, prNo) => {
-    const result = await Swal.fire({
+    const ok = await confirmAction({
       title: `Approve ${prNo}?`,
-      text: 'This PR will be marked as Approved and a PO can be created from it.',
-      icon: 'question',
-      showCancelButton: true,
-      confirmButtonColor: '#16a34a',
-      cancelButtonColor: '#64748b',
-      confirmButtonText: 'Yes, Approve',
-      cancelButtonText: 'Cancel',
-      reverseButtons: true,
+      message: 'This PR will be marked as Approved and a PO can be created from it.',
+      confirmText: 'Yes, Approve',
     })
-    if (result.isConfirmed) approveMutation.mutate({ id })
+    if (ok) approveMutation.mutate({ id })
   }
 
   const handleReject = async (id, prNo) => {
-    const result = await Swal.fire({
+    const reason = await confirmWithReason({
       title: `Reject ${prNo}?`,
-      input: 'textarea',
       inputLabel: 'Reason for rejection',
       inputPlaceholder: 'Enter rejection reason…',
-      inputAttributes: { 'aria-label': 'Rejection reason' },
-      showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#64748b',
-      confirmButtonText: 'Reject',
-      cancelButtonText: 'Cancel',
-      reverseButtons: true,
-      preConfirm: (reason) => {
-        if (!reason?.trim()) { Swal.showValidationMessage('Reason is required.') }
-        return reason
-      },
+      confirmText: 'Reject',
     })
-    if (result.isConfirmed) rejectMutation.mutate({ id, reason: result.value })
+    if (reason !== null) rejectMutation.mutate({ id, reason })
   }
 
   const meta = data?.meta

@@ -1,8 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Save, Tag, X } from 'lucide-react'
+import { Edit2, Save, Star, Tag, X } from 'lucide-react'
 import {
-  createUnitCategories, deleteUnitCategory, getUnitCategories, getUnitCategory, updateUnitCategory,
+  clearDefaultUnitCategory, createUnitCategories, deleteUnitCategory,
+  getUnitCategories, getUnitCategory, setDefaultUnitCategory, updateUnitCategory,
 } from '../../api/unitCategories'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
@@ -265,6 +266,17 @@ export default function UnitCategoriesPage() {
     onError: () => showError('Failed to delete. The unit category may be in use.'),
   })
 
+  const defaultMutation = useMutation({
+    mutationFn: ({ id, isDefault }) =>
+      isDefault ? clearDefaultUnitCategory(id) : setDefaultUnitCategory(id),
+    onSuccess: (_, { isDefault }) => {
+      queryClient.invalidateQueries({ queryKey: ['unit-categories'] })
+      queryClient.invalidateQueries({ queryKey: ['unit-types-all'] })
+      showSuccess(isDefault ? 'Default category removed.' : 'Default category set.')
+    },
+    onError: () => showError('Failed to update default category.'),
+  })
+
   const handleDelete = async (id, name) => {
     const ok = await confirmDelete(name)
     if (ok) {
@@ -308,6 +320,7 @@ export default function UnitCategoriesPage() {
                       <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Name</th>
                       <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Description</th>
                       <th className="w-24 px-3 py-2 text-center font-semibold uppercase tracking-wider text-slate-500">Unit Types</th>
+                      <th className="w-20 px-3 py-2 text-center font-semibold uppercase tracking-wider text-slate-500">Default</th>
                       <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Created</th>
                       <th className="w-16 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                     </tr>
@@ -315,7 +328,7 @@ export default function UnitCategoriesPage() {
                   <tbody className="divide-y divide-slate-100">
                     {rows.length === 0 ? (
                       <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">
+                        <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-400">
                           No categories yet. Use the form to create the first one.
                         </td>
                       </tr>
@@ -323,12 +336,20 @@ export default function UnitCategoriesPage() {
                       rows.map((cat, i) => (
                         <tr
                           key={cat.id}
-                          className={`transition-colors hover:bg-slate-50 ${editId === cat.id ? 'bg-indigo-50/60' : ''}`}
+                          className={`transition-colors hover:bg-slate-50 ${cat.is_default ? 'bg-amber-50/40' : ''} ${editId === cat.id ? 'bg-indigo-50/60' : ''}`}
                         >
                           <td className="px-3 py-2 text-slate-400">
                             {(page - 1) * (meta?.per_page ?? 25) + i + 1}
                           </td>
-                          <td className="px-3 py-2 font-medium text-slate-800">{cat.name}</td>
+                          <td className="px-3 py-2 font-medium text-slate-800">
+                            <span>{cat.name}</span>
+                            {cat.is_default && (
+                              <span className="ml-1.5 inline-flex items-center gap-0.5 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 ring-1 ring-amber-200">
+                                <Star size={8} fill="currentColor" />
+                                Default
+                              </span>
+                            )}
+                          </td>
                           <td className="max-w-xs px-3 py-2 text-slate-500">
                             {cat.description
                               ? <span className="line-clamp-1" title={cat.description}>{cat.description}</span>
@@ -336,6 +357,27 @@ export default function UnitCategoriesPage() {
                           </td>
                           <td className="px-3 py-2 text-center text-slate-600">
                             {cat.unit_types_count ?? 0}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            {can('edit_unit_categories') ? (
+                              <button
+                                type="button"
+                                title={cat.is_default ? 'Remove default' : 'Set as default'}
+                                disabled={defaultMutation.isPending}
+                                onClick={() => defaultMutation.mutate({ id: cat.id, isDefault: cat.is_default })}
+                                className={`rounded p-1 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                                  cat.is_default
+                                    ? 'text-amber-500 hover:bg-amber-50 hover:text-amber-600'
+                                    : 'text-slate-300 hover:bg-slate-100 hover:text-slate-500'
+                                }`}
+                              >
+                                <Star size={14} fill={cat.is_default ? 'currentColor' : 'none'} />
+                              </button>
+                            ) : (
+                              cat.is_default
+                                ? <Star size={13} className="mx-auto text-amber-400" fill="currentColor" />
+                                : <span className="text-slate-200">—</span>
+                            )}
                           </td>
                           <td className="whitespace-nowrap px-3 py-2 text-slate-400">
                             {new Date(cat.created_at).toLocaleDateString()}

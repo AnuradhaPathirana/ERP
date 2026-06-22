@@ -12,6 +12,8 @@ import {
 } from '../../api/purchaseRequests'
 import { getAllLocations } from '../../api/locations'
 import { getAllStores } from '../../api/stores'
+import { getAllCustomers } from '../../api/customers'
+import { getAllUnitTypes } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
 import { showError, showSuccess } from '../../utils/alerts'
 import api from '../../api/axios'
@@ -46,6 +48,7 @@ function emptyRow() {
     product_id:    '',
     product_code:  '',
     product_name:  '',
+    unit_id:       '',
     quantity:      '',
     stock_in_hand: null,
   }
@@ -72,6 +75,7 @@ export default function PurchaseRequestFormPage() {
     source_store_id:     '',
     target_location_id:  '',
     target_store_id:     '',
+    customer_id:         '',
     required_date:       '',
     transport_mode:      '',
     remarks:             '',
@@ -82,8 +86,10 @@ export default function PurchaseRequestFormPage() {
   const [products, setProducts] = useState([])
   const stockCache = useRef({})
 
-  const { data: locations = [] } = useQuery({ queryKey: ['locations-all'], queryFn: getAllLocations })
-  const { data: stores = [] }    = useQuery({ queryKey: ['stores-all'],    queryFn: getAllStores })
+  const { data: locations  = [] } = useQuery({ queryKey: ['locations-all'],   queryFn: getAllLocations })
+  const { data: stores     = [] } = useQuery({ queryKey: ['stores-all'],      queryFn: getAllStores })
+  const { data: customers  = [] } = useQuery({ queryKey: ['customers-all'],   queryFn: getAllCustomers })
+  const { data: unitTypes  = [] } = useQuery({ queryKey: ['unit-types-all'],  queryFn: getAllUnitTypes })
 
   const { data: nextRefNo } = useQuery({
     queryKey: ['purchase-requests-next-ref-no'],
@@ -130,6 +136,7 @@ export default function PurchaseRequestFormPage() {
       source_store_id:     pr.source_store_id     ?? '',
       target_location_id:  pr.target_location_id  ?? '',
       target_store_id:     pr.target_store_id     ?? '',
+      customer_id:         pr.customer_id         ?? '',
       required_date:       pr.required_date       ?? '',
       transport_mode:      pr.transport_mode      ?? '',
       remarks:             pr.remarks             ?? '',
@@ -141,6 +148,7 @@ export default function PurchaseRequestFormPage() {
         product_id:    it.product_id,
         product_code:  it.product?.product_code ?? '',
         product_name:  it.product?.name         ?? '',
+        unit_id:       it.unit_id               ?? '',
         quantity:      it.quantity,
         stock_in_hand: null,
       })))
@@ -214,7 +222,12 @@ export default function PurchaseRequestFormPage() {
       source_store_id:     form.source_store_id    || null,
       target_location_id:  form.target_location_id || null,
       target_store_id:     form.target_store_id    || null,
-      items: validItems.map((r) => ({ product_id: parseInt(r.product_id), quantity: parseFloat(r.quantity) })),
+      customer_id:         form.customer_id        || null,
+      items: validItems.map((r) => ({
+        product_id: parseInt(r.product_id),
+        unit_id:    r.unit_id ? parseInt(r.unit_id) : null,
+        quantity:   parseFloat(r.quantity),
+      })),
     })
   }
 
@@ -223,6 +236,7 @@ export default function PurchaseRequestFormPage() {
       request_date: today, reference_no: '', purpose: '',
       source_location_id: '', source_store_id: '',
       target_location_id: '', target_store_id: '',
+      customer_id: '',
       required_date: '', transport_mode: '', remarks: '',
       submit_for_approval: false,
     })
@@ -273,7 +287,8 @@ export default function PurchaseRequestFormPage() {
                     <th className="w-9 px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">#</th>
                     <th className="w-28 px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Code</th>
                     <th className="px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Product Name</th>
-                    <th className="w-32 px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty</th>
+                    <th className="w-24 px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">UOM</th>
+                    <th className="w-28 px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty</th>
                     <th className="w-32 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">Stock in Hand</th>
                     <th className="w-10"></th>
                   </tr>
@@ -310,6 +325,18 @@ export default function PurchaseRequestFormPage() {
                           <option value="">— Select product —</option>
                           {availableProducts.map((p) => (
                             <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <select
+                          value={row.unit_id}
+                          onChange={(e) => setRowField(idx, 'unit_id', e.target.value)}
+                          className="block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer"
+                        >
+                          <option value="">—</option>
+                          {unitTypes.map((u) => (
+                            <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>
                           ))}
                         </select>
                       </td>
@@ -352,7 +379,7 @@ export default function PurchaseRequestFormPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50">
-                    <td colSpan={3} className="px-3 py-1.5">
+                    <td colSpan={4} className="px-3 py-1.5">
                       <div className="flex gap-2">
                         <button
                           type="button"
@@ -494,6 +521,20 @@ export default function PurchaseRequestFormPage() {
                   value={form.purpose}
                   onChange={setField('purpose')}
                 />
+              </div>
+
+              <div>
+                <label className={LABEL_CLS}>Customer</label>
+                <select
+                  className={SELECT_CLS}
+                  value={form.customer_id}
+                  onChange={setField('customer_id')}
+                >
+                  <option value="">— No customer (general purchase) —</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-2">

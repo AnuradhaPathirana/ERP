@@ -18,7 +18,17 @@ class UnitCategory extends Model
     protected $fillable = [
         'name',
         'description',
+        'base_unit_type_id',
+        'is_default',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'base_unit_type_id' => 'integer',
+            'is_default'        => 'boolean',
+        ];
+    }
 
     public function unitTypes(): HasMany
     {

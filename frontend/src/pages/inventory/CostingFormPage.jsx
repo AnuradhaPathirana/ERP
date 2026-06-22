@@ -23,8 +23,7 @@ import {
 } from '../../api/costings'
 import { getAllSuppliers } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
-import { showError, showSuccess } from '../../utils/alerts'
-import Swal from 'sweetalert2'
+import { confirmAction, showError, showSuccess } from '../../utils/alerts'
 
 /* ── Style tokens ───────────────────────────────────────────── */
 const INPUT_CLS  = 'block w-full rounded border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15'
@@ -318,18 +317,12 @@ export default function CostingFormPage() {
   }
 
   async function handleConfirm() {
-    const result = await Swal.fire({
+    const ok = await confirmAction({
       title: 'Confirm Costing?',
-      html: '<p style="font-size:13px;color:#475569">This will <strong>lock the costing</strong> and finalize all landed cost calculations.<br>This action cannot be undone.</p>',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#16a34a',
-      cancelButtonColor: '#64748b',
-      confirmButtonText: 'Yes, Confirm',
-      cancelButtonText: 'Cancel',
-      reverseButtons: true,
+      message: 'This will <strong>lock the costing</strong> and finalize all landed cost calculations. This action cannot be undone.',
+      confirmText: 'Yes, Confirm',
     })
-    if (result.isConfirmed) confirmMutation.mutate()
+    if (ok) confirmMutation.mutate()
   }
 
   const isConfirmed = existingData?.data?.status === 'confirmed'

@@ -25,6 +25,8 @@ use Modules\Inventory\Http\Controllers\PurchaseRequestController;
 use Modules\Inventory\Http\Controllers\PurchaseOrderController;
 use Modules\Inventory\Http\Controllers\BatchController;
 use Modules\Inventory\Http\Controllers\GoodsReceivedNoteController;
+use Modules\Inventory\Http\Controllers\GrnAttachmentController;
+use Modules\Inventory\Http\Controllers\GrnPdfController;
 use Modules\Inventory\Http\Controllers\StockController;
 use Modules\Inventory\Http\Controllers\CostingController;
 use Modules\Inventory\Http\Controllers\CostingExpenseTypeController;
@@ -35,6 +37,10 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.unit-categories.all');
     Route::post('unit-categories/bulk', [UnitCategoryController::class, 'bulkStore'])
         ->name('inventory.unit-categories.bulk-store');
+    Route::post('unit-categories/{unitCategory}/set-default', [UnitCategoryController::class, 'setDefault'])
+        ->name('inventory.unit-categories.set-default');
+    Route::post('unit-categories/{unitCategory}/clear-default', [UnitCategoryController::class, 'clearDefault'])
+        ->name('inventory.unit-categories.clear-default');
 
     Route::apiResource('unit-categories', UnitCategoryController::class)
         ->names('inventory.unit-categories');
@@ -118,6 +124,9 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
 
     Route::apiResource('customer-masters', CustomerController::class)
         ->names('inventory.customer-masters');
+
+    Route::get('customer-masters/{customer_master}/attachments', [CustomerAttachmentController::class, 'index'])
+        ->name('inventory.customer-masters.attachments.index');
 
     Route::post('customer-masters/{customer_master}/attachments', [CustomerAttachmentController::class, 'store'])
         ->name('inventory.customer-masters.attachments.store');
@@ -218,6 +227,16 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.grns.po-items');
     Route::post('goods-received-notes/{goods_received_note}/confirm', [GoodsReceivedNoteController::class, 'confirm'])
         ->name('inventory.grns.confirm');
+    Route::get('goods-received-notes/{goods_received_note}/pdf', [GrnPdfController::class, 'download'])
+        ->name('inventory.grns.pdf');
     Route::apiResource('goods-received-notes', GoodsReceivedNoteController::class)
         ->names('inventory.grns');
+
+    // GRN Attachments
+    Route::get('goods-received-notes/{goods_received_note}/attachments', [GrnAttachmentController::class, 'index'])
+        ->name('inventory.grns.attachments.index');
+    Route::post('goods-received-notes/{goods_received_note}/attachments', [GrnAttachmentController::class, 'store'])
+        ->name('inventory.grns.attachments.store');
+    Route::delete('goods-received-notes/{goods_received_note}/attachments/{attachment}', [GrnAttachmentController::class, 'destroy'])
+        ->name('inventory.grns.attachments.destroy');
 });

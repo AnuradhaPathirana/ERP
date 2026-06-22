@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Modules\Inventory\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
+use Modules\Inventory\Enums\PurchaseOrderStatus;
 
 class StorePurchaseOrderRequest extends FormRequest
 {
@@ -32,6 +34,7 @@ class StorePurchaseOrderRequest extends FormRequest
             'billing_address'        => ['required', 'string', 'max:500'],
             'shipping_address'       => ['nullable', 'string', 'max:500'],
             'remarks'                => ['nullable', 'string', 'max:1000'],
+            'status'                 => ['nullable', 'string', Rule::in(array_column(PurchaseOrderStatus::cases(), 'value'))],
 
             'items'                      => ['required', 'array', 'min:1'],
             'items.*.product_id'         => ['required', 'integer', 'exists:inv_products,id'],

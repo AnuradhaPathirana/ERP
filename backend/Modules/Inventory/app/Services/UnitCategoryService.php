@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Inventory\Services;
 
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Modules\Inventory\DTOs\UnitCategoryData;
 use Modules\Inventory\Models\UnitCategory;
 
@@ -63,5 +64,26 @@ class UnitCategoryService
     public function all(): \Illuminate\Database\Eloquent\Collection
     {
         return UnitCategory::orderBy('name')->get(['id', 'name']);
+    }
+
+    /** Set this category as the single system default; clears any previous default. */
+    public function setDefault(UnitCategory $category): UnitCategory
+    {
+        DB::transaction(function () use ($category): void {
+            UnitCategory::where('is_default', true)->update(['is_default' => false]);
+            $category->update(['is_default' => true]);
+        });
+
+        return $category->loadCount('unitTypes');
+    }
+
+    /** Clear the default from a category (if it is currently default). */
+    public function clearDefault(UnitCategory $category): UnitCategory
+    {
+        if ($category->is_default) {
+            $category->update(['is_default' => false]);
+        }
+
+        return $category->loadCount('unitTypes');
     }
 }

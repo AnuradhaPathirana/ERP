@@ -53,6 +53,11 @@ class GoodsReceivedNote extends Model
         return $this->hasMany(GoodsReceivedNoteItem::class, 'grn_id');
     }
 
+    public function attachmentFiles(): HasMany
+    {
+        return $this->hasMany(GrnAttachment::class, 'grn_id');
+    }
+
     public function purchaseOrder(): BelongsTo
     {
         return $this->belongsTo(PurchaseOrder::class, 'po_id');

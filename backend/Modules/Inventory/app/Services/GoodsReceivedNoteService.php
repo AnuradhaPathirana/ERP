@@ -344,9 +344,11 @@ class GoodsReceivedNoteService
                     }
                 }
 
-                // Update quantity_received on the linked PO item
-                PurchaseOrderItem::where('id', $item->po_item_id)
-                    ->increment('quantity_received', (float) $item->quantity_received);
+                // Update quantity_received on the linked PO item (skip for manual GRN items)
+                if ($item->po_item_id) {
+                    PurchaseOrderItem::where('id', $item->po_item_id)
+                        ->increment('quantity_received', (float) $item->quantity_received);
+                }
             }
 
             // Mark GRN as confirmed
@@ -427,11 +429,12 @@ class GoodsReceivedNoteService
         )->get()->keyBy('id');
 
         $validItems = collect($items)
-            ->filter(fn (array $row) => !empty($row['po_item_id']) && ($row['quantity_received'] ?? 0) > 0)
+            ->filter(fn (array $row) => !empty($row['product_id']) && ($row['quantity_received'] ?? 0) > 0)
             ->values();
 
         foreach ($validItems as $row) {
-            $ordered     = (float) ($poItem[$row['po_item_id']]?->quantity_ordered ?? 0);
+            $hasPoItem   = !empty($row['po_item_id']);
+            $ordered     = $hasPoItem ? (float) ($poItem[$row['po_item_id']]?->quantity_ordered ?? 0) : 0;
             $qtyRcv      = (float) $row['quantity_received'];
             $unitPrice   = (float) ($row['unit_price'] ?? 0);
             $discountPct = (float) ($row['discount'] ?? 0);
@@ -450,7 +453,7 @@ class GoodsReceivedNoteService
 
             $grnItem = GoodsReceivedNoteItem::create([
                 'grn_id'            => $grn->id,
-                'po_item_id'        => (int) $row['po_item_id'],
+                'po_item_id'        => $hasPoItem ? (int) $row['po_item_id'] : null,
                 'product_id'        => (int) $row['product_id'],
                 'unit_id'           => !empty($row['unit_id']) ? (int) $row['unit_id'] : null,
                 'quantity_ordered'  => $ordered,

@@ -6,8 +6,7 @@ import { confirmCosting, deleteCosting, getCostings } from '../../api/costings'
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
 import { useTableFilter } from '../../hooks/useTableFilter'
-import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
-import Swal from 'sweetalert2'
+import { confirmDelete, confirmAction, showError, showSuccess } from '../../utils/alerts'
 import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
 import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 
@@ -60,18 +59,12 @@ export default function CostingsPage() {
   }
 
   const handleConfirm = async (id, docNo) => {
-    const result = await Swal.fire({
+    const ok = await confirmAction({
       title: `Confirm ${docNo}?`,
-      html: '<p style="font-size:13px;color:#475569">This will <strong>lock the costing</strong> and finalize the landed cost calculation.<br>This action cannot be undone.</p>',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#16a34a',
-      cancelButtonColor: '#64748b',
-      confirmButtonText: 'Yes, Confirm Costing',
-      cancelButtonText: 'Cancel',
-      reverseButtons: true,
+      message: 'This will <strong>lock the costing</strong> and finalize the landed cost calculation. This action cannot be undone.',
+      confirmText: 'Yes, Confirm Costing',
     })
-    if (result.isConfirmed) confirmMutation.mutate(id)
+    if (ok) confirmMutation.mutate(id)
   }
 
   const meta = data?.meta

@@ -9,6 +9,7 @@ use Illuminate\Routing\Controller;
 use Modules\Inventory\DTOs\UnitTypeData;
 use Modules\Inventory\Http\Requests\UnitTypeRequest;
 use Modules\Inventory\Http\Resources\UnitTypeResource;
+use Modules\Inventory\Models\UnitCategory;
 use Modules\Inventory\Models\UnitType;
 use Modules\Inventory\Services\UnitTypeService;
 
@@ -75,11 +76,18 @@ class UnitTypeController extends Controller
         return response()->json(null, 204);
     }
 
-    /** Flat list for dropdowns — id + name + symbol. */
+    /** Flat list for dropdowns — filtered to the default category when one is set. */
     public function all(): JsonResponse
     {
-        $items = UnitType::orderBy('name')
-            ->get(['id', 'name', 'symbol'])
+        $defaultCategory = UnitCategory::where('is_default', true)->value('id');
+
+        $query = UnitType::orderBy('name')->select(['id', 'name', 'symbol', 'unit_category_id']);
+
+        if ($defaultCategory) {
+            $query->where('unit_category_id', $defaultCategory);
+        }
+
+        $items = $query->get()
             ->map(fn (UnitType $u) => [
                 'id'     => $u->id,
                 'name'   => $u->name,

@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ClipboardList, CreditCard, MapPin, Package, Phone, Save, Settings2 } from 'lucide-react'
+import { ArrowRight, ClipboardList, CreditCard, MapPin, Package, Phone, Save, Settings2 } from 'lucide-react'
 import { createLocation, getLocation, updateLocation } from '../../api/locations'
 import { getCompanies } from '../../api/companies'
 import { getAllIndustries } from '../../api/industries'
@@ -325,6 +325,22 @@ export default function LocationFormPage() {
     setForm(EMPTY_FORM)
     setErrors({})
     setTouched({})
+  }
+
+  const BASIC_DETAILS_FIELDS = [
+    'company_id', 'industry_id', 'location_code', 'location_name', 'country',
+    'loc_street_address', 'loc_city', 'loc_country', 'loc_state', 'loc_postal_zip_code',
+    'bill_city', 'bill_country', 'bill_postal_zip_code',
+  ]
+
+  const handleNext = () => {
+    const newErrors = Object.fromEntries(
+      BASIC_DETAILS_FIELDS.map((f) => [f, validate(f, form[f], form)])
+    )
+    setErrors((prev) => ({ ...prev, ...newErrors }))
+    setTouched((prev) => ({ ...prev, ...Object.fromEntries(BASIC_DETAILS_FIELDS.map((f) => [f, true])) }))
+    if (Object.values(newErrors).some(Boolean)) return
+    setActiveTab(1)
   }
 
   const crumbs = [
@@ -907,14 +923,25 @@ export default function LocationFormPage() {
             >
               Cancel
             </Link>
-            <button
-              type="submit"
-              disabled={mutation.isPending}
-              className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              <Save size={12} strokeWidth={2.5} />
-              {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create & Close'}
-            </button>
+            {!isEditing && activeTab === 0 ? (
+              <button
+                type="button"
+                onClick={handleNext}
+                className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700"
+              >
+                Next
+                <ArrowRight size={12} strokeWidth={2.5} />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                disabled={mutation.isPending}
+                className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <Save size={12} strokeWidth={2.5} />
+                {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create & Close'}
+              </button>
+            )}
           </div>
         </div>
 

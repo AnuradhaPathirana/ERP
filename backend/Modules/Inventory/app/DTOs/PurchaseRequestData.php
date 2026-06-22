@@ -18,6 +18,7 @@ final class PurchaseRequestData
         public readonly ?int    $sourceStoreId,
         public readonly ?int    $targetLocationId,
         public readonly ?int    $targetStoreId,
+        public readonly ?int    $customerId,
         public readonly ?string $requiredDate,
         public readonly ?string $transportMode,
         public readonly ?string $remarks,
@@ -43,6 +44,9 @@ final class PurchaseRequestData
                                    : null,
             targetStoreId:     $request->validated('target_store_id') !== null
                                    ? (int) $request->validated('target_store_id')
+                                   : null,
+            customerId:        $request->validated('customer_id') !== null
+                                   ? (int) $request->validated('customer_id')
                                    : null,
             requiredDate:      $request->validated('required_date'),
             transportMode:     $request->validated('transport_mode'),

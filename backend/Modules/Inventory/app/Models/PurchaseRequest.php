@@ -26,6 +26,7 @@ class PurchaseRequest extends Model
         'source_store_id',
         'target_location_id',
         'target_store_id',
+        'customer_id',
         'transport_mode',
         'remarks',
         'status',
@@ -43,6 +44,7 @@ class PurchaseRequest extends Model
         'source_store_id'    => 'integer',
         'target_location_id' => 'integer',
         'target_store_id'    => 'integer',
+        'customer_id'        => 'integer',
         'requested_by'       => 'integer',
         'approved_by'        => 'integer',
         'status'             => PurchaseRequestStatus::class,
@@ -56,6 +58,11 @@ class PurchaseRequest extends Model
     public function purchaseOrders(): HasMany
     {
         return $this->hasMany(PurchaseOrder::class, 'pr_id');
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(CustomerMaster::class, 'customer_id');
     }
 
     public function sourceLocation(): BelongsTo

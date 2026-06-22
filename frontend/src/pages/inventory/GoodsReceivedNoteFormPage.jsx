@@ -1,17 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { useMutation, useQuery } from '@tanstack/react-query'
-import { ClipboardList, Layers, PackageCheck, Plus, ShoppingCart, Trash2, X } from 'lucide-react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ClipboardList, Download, FileText, Layers, PackageCheck, Plus, ShoppingCart, Trash2, X } from 'lucide-react'
 import {
+  confirmGoodsReceivedNote,
   createGoodsReceivedNote,
+  downloadGrnPdf,
   getGoodsReceivedNote,
   getLastGrn,
   getNextGrnNo,
   getPoOutstandingItemsMultiple,
   updateGoodsReceivedNote,
 } from '../../api/goodsReceivedNotes'
+import { getGrnAttachments, uploadGrnAttachments, deleteGrnAttachment } from '../../api/grnAttachments'
 import { getPurchaseOrders } from '../../api/purchaseOrders'
 import { getAllSuppliers } from '../../api/suppliers'
+import { getProducts } from '../../api/products'
+import { getAllUnitTypes } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
 import BatchAssignModal from '../../components/inventory/BatchAssignModal'
 import { showError, showSuccess } from '../../utils/alerts'
@@ -23,6 +28,8 @@ const SELECT_CLS  = 'block w-full rounded border-2 border-slate-200 bg-slate-50 
 const TABLE_INPUT = 'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white'
 const LABEL_CLS   = 'text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap'
 const ERR_CLS     = 'mt-0.5 text-[10px] text-red-500'
+
+const ALLOWED_ATTACHMENT_TYPES = /^(image\/.+|application\/pdf)$/
 
 function SectionHeader({ icon: Icon, title, colorClass, extra }) {
   return (
@@ -36,7 +43,6 @@ function SectionHeader({ icon: Icon, title, colorClass, extra }) {
   )
 }
 
-/* Inline label+field row matching image layout */
 function FieldRow({ label, required, error, children }) {
   return (
     <div className="flex flex-col gap-0.5 min-w-0">
@@ -51,7 +57,7 @@ function FieldRow({ label, required, error, children }) {
   )
 }
 
-/* ── Line item calculator (mirrors PO logic) ──────────────────── */
+/* ── Line item calculator ─────────────────────────────────────── */
 function calcItem(row) {
   const qty      = parseFloat(row.quantity_received) || 0
   const price    = parseFloat(row.unit_price)        || 0
@@ -78,11 +84,103 @@ function StatusBadge({ label, value }) {
   )
 }
 
+function formatFileSize(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+/* ── Product search cell (for manual rows) ────────────────────── */
+function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClear, onClose }) {
+  const [highlightIdx, setHighlightIdx] = useState(0)
+
+  const results  = productSearch.key === row._key ? (productSearch.results ?? []) : []
+  const isOpen   = productSearch.key === row._key && productSearch.open && results.length > 0
+  const isSelected = Boolean(row.product_id)
+
+  // Reset keyboard highlight whenever a new result list arrives
+  useEffect(() => { setHighlightIdx(0) }, [results.length])
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      if (!isOpen) return
+      e.preventDefault()
+      setHighlightIdx((i) => Math.min(i + 1, results.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      if (!isOpen) return
+      e.preventDefault()
+      setHighlightIdx((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (isOpen && results[highlightIdx]) onSelect(row._key, results[highlightIdx])
+    } else if (e.key === 'Escape') {
+      onClose?.()
+    }
+  }
+
+  if (isSelected) {
+    return (
+      <div className="flex items-center gap-1 min-w-0">
+        <span className="truncate text-xs font-medium text-slate-700">{row.product_name}</span>
+        <button
+          type="button"
+          title="Clear product"
+          onClick={() => onClear(row._key)}
+          className="shrink-0 text-slate-300 hover:text-red-500 transition-colors"
+        >
+          <X size={10} />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        placeholder="Search product…"
+        className={TABLE_INPUT + ' w-full'}
+        value={productSearch.key === row._key ? productSearch.query : ''}
+        onChange={(e) => onQueryChange(row._key, e.target.value)}
+        onKeyDown={handleKeyDown}
+        onFocus={() => {
+          // Always trigger — reloads all when empty, re-runs search when there's a query
+          const currentQuery = productSearch.key === row._key ? productSearch.query : ''
+          onQueryChange(row._key, currentQuery)
+        }}
+        autoComplete="off"
+      />
+      {isOpen && (
+        <div className="absolute top-full left-0 z-50 mt-0.5 w-72 rounded border border-slate-200 bg-white shadow-lg max-h-44 overflow-y-auto">
+          {results.map((p, i) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition-colors ${
+                i === highlightIdx
+                  ? 'bg-indigo-100 text-indigo-900'
+                  : 'hover:bg-slate-50 text-slate-700'
+              }`}
+              onMouseDown={(e) => { e.preventDefault(); onSelect(row._key, p) }}
+              onMouseEnter={() => setHighlightIdx(i)}
+            >
+              <span className="font-mono text-[10px] text-indigo-400 shrink-0 w-20 truncate">{p.product_code}</span>
+              <span className="truncate font-medium">{p.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ══════════════════════════════════════════════════════════════ */
 export default function GoodsReceivedNoteFormPage() {
   const { id }      = useParams()
   const isEdit      = Boolean(id)
   const navigate    = useNavigate()
+  const queryClient = useQueryClient()
   const [search]    = useSearchParams()
   const poIdFromUrl = search.get('po_id')
   const fileRef     = useRef(null)
@@ -103,11 +201,18 @@ export default function GoodsReceivedNoteFormPage() {
     reference_no:     '',
     remarks:          '',
     payment_terms:    '',
-    attachments:      [],
   })
   const [grnNoPreview,  setGrnNoPreview]  = useState('')
   const [lastGrnDate,   setLastGrnDate]   = useState('')
   const [lastGrnAmount, setLastGrnAmount] = useState('')
+
+  /* ── Save status & PDF ────────────────────────────────────── */
+  const [saveStatus,    setSaveStatus]    = useState('confirmed')  // 'draft' | 'confirmed'
+  const [isDownloading, setIsDownloading] = useState(false)
+
+  /* ── Attachment state ─────────────────────────────────────── */
+  const [newFiles,    setNewFiles]    = useState([])
+  const [isUploading, setIsUploading] = useState(false)
 
   /* ── PO selection state ───────────────────────────────────── */
   const [selectedPoIds, setSelectedPoIds] = useState(new Set())
@@ -117,6 +222,10 @@ export default function GoodsReceivedNoteFormPage() {
   const [items,         setItems]         = useState([])
   const [errors,        setErrors]        = useState({})
   const [batchModalIdx, setBatchModalIdx] = useState(null)
+
+  /* ── Product search state (manual rows) ───────────────────── */
+  const [productSearch, setProductSearch] = useState({ key: null, query: '', results: [], open: false })
+  const searchTimerRef = useRef(null)
 
   /* ── Next GRN number preview ─────────────────────────────── */
   useEffect(() => {
@@ -131,8 +240,11 @@ export default function GoodsReceivedNoteFormPage() {
     queryKey: ['suppliers-all'],
     queryFn:  getAllSuppliers,
   })
+  const { data: unitTypes = [] } = useQuery({
+    queryKey: ['unit-types-all'],
+    queryFn:  getAllUnitTypes,
+  })
 
-  // Load POs for the selected supplier only (fires when supplier is chosen)
   const { data: supplierConfirmedPOs, isLoading: loadingConfirmed } = useQuery({
     queryKey: ['pos-supplier-confirmed', form.supplier_id],
     queryFn:  () => getPurchaseOrders(1, { supplier_id: form.supplier_id, status: 'confirmed', per_page: 200 }),
@@ -149,6 +261,19 @@ export default function GoodsReceivedNoteFormPage() {
     ...(supplierPartialPOs?.data  ?? []),
   ]
   const loadingPOs = loadingConfirmed || loadingPartial
+
+  /* ── Attachments query (edit/view mode) ───────────────────── */
+  const {
+    data: attachmentsData,
+    isLoading: isAttachmentsLoading,
+    refetch: refetchAttachments,
+  } = useQuery({
+    queryKey: ['grn-attachments', id],
+    queryFn:  () => getGrnAttachments(id),
+    enabled:  isEdit,
+    staleTime: 0,
+  })
+  const existingFiles = attachmentsData ?? []
 
   /* ── Load existing GRN for edit ───────────────────────────── */
   const { data: existingGRN, isLoading: loadingGRN } = useQuery({
@@ -168,17 +293,17 @@ export default function GoodsReceivedNoteFormPage() {
       reference_no:     grn.reference_no     ?? '',
       remarks:          grn.remarks          ?? '',
       payment_terms:    grn.payment_terms    ?? '',
-      attachments:      grn.attachments      ?? [],
     })
     if (grn.items?.length) {
       setItems(grn.items.map((it) => ({
         _key:               it.id,
         po_id:              grn.po_id ?? null,
         po_no:              grn.purchase_order?.po_no ?? '',
-        po_item_id:         it.po_item_id,
+        po_item_id:         it.po_item_id ?? null,
         product_id:         it.product_id,
         product_code:       it.product?.product_code ?? '',
         product_name:       it.product?.name ?? '',
+        unit_id:            it.unit_id ?? '',
         quantity_ordered:   it.quantity_ordered,
         already_received:   null,
         remaining_qty:      null,
@@ -203,7 +328,7 @@ export default function GoodsReceivedNoteFormPage() {
     }
   }, [existingGRN])
 
-  /* ── Last GRN (system-wide, loaded once on mount) ────────── */
+  /* ── Last GRN ─────────────────────────────────────────────── */
   const { data: lastGrnData } = useQuery({
     queryKey: ['grn-last'],
     queryFn:  getLastGrn,
@@ -220,14 +345,14 @@ export default function GoodsReceivedNoteFormPage() {
     )
   }, [lastGrnData])
 
-  /* ── Supplier change — clear all PO selections ───────────── */
+  /* ── Supplier change ──────────────────────────────────────── */
   const handleSupplierChange = (supplierId) => {
     setForm((f) => ({ ...f, supplier_id: supplierId }))
     setSelectedPoIds(new Set())
-    setItems([])
+    setItems((prev) => prev.filter((it) => !it.po_item_id)) // keep manual rows
   }
 
-  /* ── PO item mapper (pure, no state captured) ────────────── */
+  /* ── PO item mapper ───────────────────────────────────────── */
   const mapPoItem = (it) => ({
     _key:              `${it.po_item_id}-${Date.now() + Math.random()}`,
     po_id:             it.po_id,
@@ -236,6 +361,7 @@ export default function GoodsReceivedNoteFormPage() {
     product_id:        it.product_id,
     product_code:      it.product?.product_code ?? '',
     product_name:      it.product?.name ?? '',
+    unit_id:           it.unit_id ?? '',
     quantity_ordered:  it.quantity_ordered,
     already_received:  it.quantity_received,
     remaining_qty:     it.remaining_qty,
@@ -249,13 +375,18 @@ export default function GoodsReceivedNoteFormPage() {
     batches:           [],
   })
 
-  /* Select All — fetches all selected POs at once, replaces items */
   const loadItemsForPOs = useCallback(async (poIdSet) => {
-    if (!poIdSet.size) { setItems([]); return }
+    if (!poIdSet.size) {
+      setItems((prev) => prev.filter((it) => !it.po_item_id))
+      return
+    }
     setLoadingItems(true)
     try {
       const data = await getPoOutstandingItemsMultiple(Array.from(poIdSet))
-      setItems(data.map(mapPoItem))
+      setItems((prev) => [
+        ...prev.filter((it) => !it.po_item_id), // preserve manual rows
+        ...data.map(mapPoItem),
+      ])
     } catch {
       showError('Failed to load PO items.')
     } finally {
@@ -263,7 +394,6 @@ export default function GoodsReceivedNoteFormPage() {
     }
   }, [])
 
-  /* Individual add — fetches only the newly added PO and appends */
   const loadItemsForSinglePO = useCallback(async (poId) => {
     setLoadingItems(true)
     try {
@@ -289,12 +419,90 @@ export default function GoodsReceivedNoteFormPage() {
   const toggleAllPOs = () => {
     if (selectedPoIds.size === displayedPOs.length && displayedPOs.length > 0) {
       setSelectedPoIds(new Set())
-      setItems([])
+      setItems((prev) => prev.filter((it) => !it.po_item_id))
     } else {
       const allIds = new Set(displayedPOs.map((po) => po.id))
       setSelectedPoIds(allIds)
       loadItemsForPOs(allIds)
     }
+  }
+
+  /* ── Add manual row ───────────────────────────────────────── */
+  const addManualRow = () => {
+    const key = `manual-${Date.now()}-${Math.random()}`
+    setItems((prev) => [...prev, {
+      _key:              key,
+      po_id:             null,
+      po_no:             '',
+      po_item_id:        null,
+      product_id:        null,
+      product_code:      '',
+      product_name:      '',
+      unit_id:           '',
+      quantity_ordered:  0,
+      already_received:  null,
+      remaining_qty:     null,
+      quantity_received: '',
+      unit_price:        '',
+      discount:          '',
+      tax:               '',
+      is_batch:          false,
+      batch_no:          '',
+      expiry_date:       '',
+      batch_assignments: [],
+      batches:           [],
+    }])
+  }
+
+  /* ── Product search for manual rows ──────────────────────── */
+  const handleProductQueryChange = (rowKey, query) => {
+    setProductSearch({ key: rowKey, query, results: [], open: false })
+    clearTimeout(searchTimerRef.current)
+
+    const doFetch = async (search) => {
+      try {
+        const params = search ? { search, per_page: 30 } : { per_page: 100 }
+        const res = await getProducts(1, params)
+        setProductSearch((prev) =>
+          prev.key === rowKey
+            ? { ...prev, results: res.data ?? [], open: true }
+            : prev
+        )
+      } catch { /* silent */ }
+    }
+
+    if (query === '') {
+      doFetch('')              // immediate — show all on focus
+    } else {
+      searchTimerRef.current = setTimeout(() => doFetch(query), 300)
+    }
+  }
+
+  const selectProduct = (rowKey, product) => {
+    setItems((prev) => prev.map((row) =>
+      row._key === rowKey
+        ? {
+            ...row,
+            product_id:   product.id,
+            product_code: product.product_code ?? '',
+            product_name: product.name ?? '',
+            is_batch:     product.is_batch ?? false,
+            batches:      [],
+            batch_no:     '',
+            expiry_date:  '',
+          }
+        : row
+    ))
+    setProductSearch({ key: null, query: '', results: [], open: false })
+  }
+
+  const clearProductSelection = (rowKey) => {
+    setItems((prev) => prev.map((row) =>
+      row._key === rowKey
+        ? { ...row, product_id: null, product_code: '', product_name: '', is_batch: false, batches: [] }
+        : row
+    ))
+    setProductSearch({ key: rowKey, query: '', results: [], open: false })
   }
 
   /* ── Item row editing ─────────────────────────────────────── */
@@ -303,16 +511,45 @@ export default function GoodsReceivedNoteFormPage() {
 
   const removeRow = (idx) => setItems((prev) => prev.filter((_, i) => i !== idx))
 
-  /* ── Attachments ──────────────────────────────────────────── */
-  const handleAddAttachment = (e) => {
-    const names = Array.from(e.target.files ?? []).map((f) => f.name)
-    if (!names.length) return
-    setForm((prev) => ({ ...prev, attachments: [...(prev.attachments ?? []), ...names] }))
+  /* ── Attachment handlers ──────────────────────────────────── */
+  const handleAddFiles = async (e) => {
+    const incoming = Array.from(e.target.files ?? [])
     if (fileRef.current) fileRef.current.value = ''
+    if (!incoming.length) return
+
+    const rejected = incoming.filter((f) => !ALLOWED_ATTACHMENT_TYPES.test(f.type))
+    if (rejected.length) {
+      showError(`Only PDF and image files are allowed. Rejected: ${rejected.map((f) => f.name).join(', ')}`)
+    }
+    const valid = incoming.filter((f) => ALLOWED_ATTACHMENT_TYPES.test(f.type))
+    if (!valid.length) return
+
+    if (isEdit) {
+      setIsUploading(true)
+      try {
+        await uploadGrnAttachments(id, valid)
+        await refetchAttachments()
+      } catch {
+        showError('Failed to upload attachments.')
+      } finally {
+        setIsUploading(false)
+      }
+    } else {
+      setNewFiles((prev) => {
+        const existingNames = new Set(prev.map((f) => f.name))
+        return [...prev, ...valid.filter((f) => !existingNames.has(f.name))]
+      })
+    }
   }
 
-  const removeAttachment = (idx) =>
-    setForm((prev) => ({ ...prev, attachments: prev.attachments.filter((_, i) => i !== idx) }))
+  const handleDeleteExisting = async (attachmentId) => {
+    try {
+      await deleteGrnAttachment(id, attachmentId)
+      await refetchAttachments()
+    } catch {
+      showError('Failed to delete attachment.')
+    }
+  }
 
   /* ── Totals ───────────────────────────────────────────────── */
   const totals = items.reduce(
@@ -328,8 +565,38 @@ export default function GoodsReceivedNoteFormPage() {
     mutationFn: (payload) => isEdit
       ? updateGoodsReceivedNote(id, payload)
       : createGoodsReceivedNote(payload),
-    onSuccess: () => {
-      showSuccess(isEdit ? 'GRN updated.' : 'GRN created.')
+    onSuccess: async (responseData) => {
+      const grnId = responseData?.data?.id ?? (isEdit ? parseInt(id) : null)
+
+      // Upload queued attachments on create
+      if (!isEdit && newFiles.length > 0 && grnId) {
+        try {
+          await uploadGrnAttachments(grnId, newFiles)
+        } catch {
+          showError('GRN saved, but failed to upload some attachments.')
+        }
+      }
+      if (isEdit) {
+        queryClient.invalidateQueries({ queryKey: ['grn-attachments', id] })
+      }
+
+      // Auto-confirm if user chose "Confirmed" status
+      if (saveStatus === 'confirmed' && grnId) {
+        try {
+          await confirmGoodsReceivedNote(grnId)
+        } catch (confirmErr) {
+          const msg = confirmErr?.response?.data?.message ?? 'GRN saved but could not be confirmed.'
+          showError(msg)
+          navigate('/inventory/goods-received-notes')
+          return
+        }
+      }
+
+      showSuccess(
+        saveStatus === 'confirmed'
+          ? (isEdit ? 'GRN updated and confirmed.' : 'GRN created and confirmed.')
+          : (isEdit ? 'GRN updated.' : 'GRN created as draft.')
+      )
       navigate('/inventory/goods-received-notes')
     },
     onError: (err) => {
@@ -339,14 +606,34 @@ export default function GoodsReceivedNoteFormPage() {
     },
   })
 
+  /* ── PDF download ─────────────────────────────────────────── */
+  const handleDownloadPdf = async () => {
+    const grnId = isEdit ? id : null
+    if (!grnId) { showError('Save the GRN first before downloading the PDF.'); return }
+    setIsDownloading(true)
+    try {
+      const blob = await downloadGrnPdf(grnId)
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `GRN_${grnNoPreview || grnId}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      showError('Failed to download PDF.')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
   const handleSubmit = () => {
     if (!form.supplier_id) {
       showError('Supplier is required. Please select a supplier.')
       return
     }
-    const validItems = items.filter((r) => r.po_item_id && parseFloat(r.quantity_received) > 0)
+    const validItems = items.filter((r) => r.product_id && parseFloat(r.quantity_received) > 0)
     if (!validItems.length) {
-      showError('Please select at least one Purchase Order with items to receive.')
+      showError('Please add at least one item with a product and quantity received.')
       return
     }
 
@@ -357,10 +644,10 @@ export default function GoodsReceivedNoteFormPage() {
       reference_no:     form.reference_no     || null,
       remarks:          form.remarks          || null,
       payment_terms:    form.payment_terms    || null,
-      attachments:      (form.attachments ?? []).length ? form.attachments : null,
       items: validItems.map((r) => ({
-        po_item_id:        parseInt(r.po_item_id),
+        po_item_id:        r.po_item_id ? parseInt(r.po_item_id) : null,
         product_id:        parseInt(r.product_id),
+        unit_id:           r.unit_id ? parseInt(r.unit_id) : null,
         quantity_received: parseFloat(r.quantity_received),
         unit_price:        parseFloat(r.unit_price) || 0,
         discount:          parseFloat(r.discount)   || 0,
@@ -388,7 +675,6 @@ export default function GoodsReceivedNoteFormPage() {
 
   const allSelected = displayedPOs.length > 0 && selectedPoIds.size === displayedPOs.length
 
-  /* ── Loading state ────────────────────────────────────────── */
   if (isEdit && loadingGRN) {
     return <div className="flex items-center justify-center py-20 text-sm text-slate-400">Loading…</div>
   }
@@ -416,7 +702,6 @@ export default function GoodsReceivedNoteFormPage() {
           />
           <div className="grid grid-cols-1 gap-x-3 gap-y-1.5 p-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
 
-            {/* Row 1 */}
             <FieldRow label="GRN Date" required>
               <input
                 type="date"
@@ -434,7 +719,6 @@ export default function GoodsReceivedNoteFormPage() {
               />
             </FieldRow>
 
-            {/* Row 2 */}
             <FieldRow label="GRN Number" required>
               <input
                 type="text"
@@ -454,7 +738,6 @@ export default function GoodsReceivedNoteFormPage() {
               />
             </FieldRow>
 
-            {/* Row 3 */}
             <FieldRow label="Last GRN Date">
               <input type="text" className={INPUT_RO} value={lastGrnDate || '—'} readOnly tabIndex={-1} />
             </FieldRow>
@@ -462,7 +745,6 @@ export default function GoodsReceivedNoteFormPage() {
               <input type="text" className={INPUT_RO} value={lastGrnAmount || '—'} readOnly tabIndex={-1} />
             </FieldRow>
 
-            {/* Row 4 */}
             <FieldRow label="Supplier Code/Name" required error={err('supplier_id')}>
               <select
                 className={SELECT_CLS}
@@ -501,43 +783,112 @@ export default function GoodsReceivedNoteFormPage() {
                 onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))}
               />
             </FieldRow>
-            <FieldRow label="Attachments">
-              <div className="flex flex-wrap items-center gap-1 min-h-6.5">
+
+            {/* ── Attachments — spans remaining 3 cols on xl ─────── */}
+            <div className="xl:col-span-3 flex flex-col gap-0.5 min-w-0">
+              <span className={LABEL_CLS}>Attachments</span>
+              <div className="flex flex-wrap items-center gap-1 min-h-[26px]">
+
                 <button
                   type="button"
                   onClick={() => fileRef.current?.click()}
-                  className="flex h-5 w-5 items-center justify-center rounded-full border-2 border-dashed border-slate-300 text-slate-400 hover:border-indigo-400 hover:text-indigo-500 transition-colors shrink-0"
-                  title="Add attachment"
+                  disabled={isUploading}
+                  className="flex shrink-0 items-center gap-1 rounded border border-dashed border-slate-300 bg-slate-50 px-1.5 py-0.5 text-[10px] text-slate-500 hover:border-indigo-400 hover:text-indigo-600 transition-colors disabled:opacity-50"
                 >
-                  <Plus size={11} />
+                  <Plus size={9} />
+                  {isUploading ? 'Uploading…' : 'Add'}
                 </button>
-                <input ref={fileRef} type="file" multiple className="hidden" onChange={handleAddAttachment} />
-                {(form.attachments ?? []).map((name, idx) => (
-                  <span
-                    key={idx}
-                    className="inline-flex items-center gap-0.5 rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600"
-                  >
-                    {name}
-                    <button type="button" onClick={() => removeAttachment(idx)} className="ml-0.5 text-slate-400 hover:text-red-500">
-                      <X size={9} />
-                    </button>
-                  </span>
-                ))}
-                {!(form.attachments ?? []).length && (
-                  <span className="text-[10px] text-slate-400">No attachments</span>
+                <input ref={fileRef} type="file" multiple accept="image/*,.pdf" className="hidden" onChange={handleAddFiles} />
+
+                {isEdit && isAttachmentsLoading ? (
+                  <span className="text-[10px] italic text-slate-400 animate-pulse">Loading…</span>
+                ) : (
+                  <>
+                    {existingFiles.map((att) => {
+                      const isImg = att.mime_type?.startsWith('image/')
+                      return (
+                        <div key={att.id} className="relative group/chip">
+                          <div className="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 transition hover:border-indigo-200 hover:bg-indigo-50 cursor-default">
+                            {isImg ? (
+                              <img src={att.url} alt={att.file_name} className="h-5 w-5 shrink-0 rounded object-cover" />
+                            ) : (
+                              <FileText size={11} className="shrink-0 text-red-400" />
+                            )}
+                            <span className="max-w-20 truncate text-[10px] text-slate-700 group-hover/chip:text-indigo-700">{att.file_name}</span>
+                            <a href={att.url} target="_blank" rel="noreferrer" title="Download" className="shrink-0 text-slate-300 hover:text-indigo-500 transition-colors">
+                              <Download size={9} strokeWidth={2} />
+                            </a>
+                            <button type="button" onClick={() => handleDeleteExisting(att.id)} title="Remove" className="shrink-0 text-slate-300 hover:text-red-500 transition-colors">
+                              <X size={9} />
+                            </button>
+                          </div>
+                          <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 group-hover/chip:block">
+                            <div className="rounded-xl border border-slate-200 bg-white p-2 shadow-2xl ring-1 ring-slate-100">
+                              {isImg ? (
+                                <div className="flex min-h-40 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+                                  <img src={att.url} alt={att.file_name} className="max-h-56 max-w-full object-contain" />
+                                </div>
+                              ) : (
+                                <div className="flex h-28 items-center justify-center rounded-lg bg-slate-50 border border-slate-100">
+                                  <FileText size={40} className="text-red-400" />
+                                </div>
+                              )}
+                              <p className="mt-2 truncate text-[11px] font-semibold text-slate-800">{att.file_name}</p>
+                              {att.file_size ? <p className="text-[10px] text-slate-400">{formatFileSize(att.file_size)}</p> : null}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {newFiles.map((file, idx) => {
+                      const isImg = file.type.startsWith('image/')
+                      const objUrl = isImg ? URL.createObjectURL(file) : null
+                      return (
+                        <div key={`new-${idx}`} className="relative group/newchip">
+                          <div className="flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-1.5 py-0.5 transition cursor-default">
+                            {isImg ? (
+                              <img src={objUrl} alt={file.name} className="h-5 w-5 shrink-0 rounded object-cover" />
+                            ) : (
+                              <FileText size={11} className="shrink-0 text-red-400" />
+                            )}
+                            <span className="max-w-20 truncate text-[10px] text-indigo-700">{file.name}</span>
+                            <button type="button" onClick={() => setNewFiles((p) => p.filter((_, i) => i !== idx))} title="Remove" className="shrink-0 text-indigo-300 hover:text-red-500 transition-colors">
+                              <X size={9} />
+                            </button>
+                          </div>
+                          {isImg && (
+                            <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 hidden w-64 -translate-x-1/2 group-hover/newchip:block">
+                              <div className="rounded-xl border border-slate-200 bg-white p-2 shadow-2xl ring-1 ring-slate-100">
+                                <div className="flex min-h-40 items-center justify-center overflow-hidden rounded-lg bg-slate-100">
+                                  <img src={objUrl} alt={file.name} className="max-h-56 max-w-full object-contain" />
+                                </div>
+                                <p className="mt-2 truncate text-[11px] font-semibold text-slate-800">{file.name}</p>
+                                <p className="text-[10px] text-slate-400">{formatFileSize(file.size)}</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+
+                    {existingFiles.length === 0 && newFiles.length === 0 && (
+                      <span className="text-[10px] italic text-slate-400">No files yet</span>
+                    )}
+                  </>
                 )}
               </div>
-            </FieldRow>
+            </div>
 
           </div>
         </div>
 
-        {/* ══ 2. Purchase Order Selection Table ══════════════════ */}
+        {/* ══ 2. Purchase Order Selection Table (Optional) ═══════ */}
         {!isEdit && (
           <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
             <SectionHeader
               icon={ShoppingCart}
-              title="Select Purchase Orders to Receive"
+              title="Select Purchase Orders (Optional)"
               colorClass="text-violet-700 bg-violet-50 border-violet-100"
               extra={
                 selectedPoIds.size > 0 && (
@@ -549,14 +900,14 @@ export default function GoodsReceivedNoteFormPage() {
             />
 
             {!form.supplier_id ? (
-              <div className="py-6 text-center text-sm text-slate-400">
-                Select a supplier above to load available Purchase Orders.
+              <div className="py-5 text-center text-xs text-slate-400">
+                Select a supplier above to see available POs, or skip this section and add items manually below.
               </div>
             ) : loadingPOs ? (
-              <div className="py-6 text-center text-sm text-slate-400">Loading Purchase Orders…</div>
+              <div className="py-5 text-center text-xs text-slate-400">Loading Purchase Orders…</div>
             ) : displayedPOs.length === 0 ? (
-              <div className="py-6 text-center text-sm text-slate-400">
-                No confirmed or partially-received Purchase Orders found for this supplier.
+              <div className="py-5 text-center text-xs text-slate-400">
+                No confirmed or partially-received POs found for this supplier — add items manually below.
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -627,11 +978,21 @@ export default function GoodsReceivedNoteFormPage() {
             title="Received Items"
             colorClass="text-blue-700 bg-blue-50 border-blue-100"
             extra={
-              loadingItems
-                ? <span className="text-[10px] text-blue-400 italic">Loading items…</span>
-                : items.length > 0
-                  ? <span className="text-[10px] text-slate-500">{items.length} line{items.length !== 1 ? 's' : ''}</span>
-                  : null
+              <div className="flex items-center gap-2">
+                {loadingItems
+                  ? <span className="text-[10px] text-blue-400 italic">Loading items…</span>
+                  : items.length > 0
+                    ? <span className="text-[10px] text-slate-500">{items.length} line{items.length !== 1 ? 's' : ''}</span>
+                    : null}
+                <button
+                  type="button"
+                  onClick={addManualRow}
+                  className="flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
+                >
+                  <Plus size={10} />
+                  Add Item
+                </button>
+              </div>
             }
           />
 
@@ -639,7 +1000,7 @@ export default function GoodsReceivedNoteFormPage() {
             <div className="py-8 text-center text-sm text-slate-400">
               {isEdit
                 ? 'No items found.'
-                : 'Select one or more Purchase Orders above to load items.'}
+                : 'Select a PO above to load items, or click "+ Add Item" to add items manually.'}
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -651,6 +1012,7 @@ export default function GoodsReceivedNoteFormPage() {
                     <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Product</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">PO Qty</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-right">Available</th>
+                    <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">UOM</th>
                     <th className="w-28 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty Received</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-center">Disc %</th>
@@ -663,14 +1025,44 @@ export default function GoodsReceivedNoteFormPage() {
                 <tbody className="divide-y divide-slate-100">
                   {items.map((row, idx) => {
                     const { amount } = calcItem(row)
+                    const isManual = !row.po_item_id
                     return (
-                      <tr key={row._key} className="hover:bg-slate-50/60 transition-colors">
+                      <tr key={row._key} className={`hover:bg-slate-50/60 transition-colors ${isManual ? 'bg-green-50/20' : ''}`}>
+
+                        {/* # */}
                         <td className="px-3 py-1 text-slate-400">{idx + 1}</td>
-                        <td className="px-2 py-1 font-mono text-slate-500">{row.product_code || '—'}</td>
-                        <td className="px-2 py-1 font-medium text-slate-700">{row.product_name || '—'}</td>
-                        <td className="px-2 py-1 text-right text-slate-500">{Number(row.quantity_ordered).toLocaleString()}</td>
+
+                        {/* Code — read-only for both PO and manual (populated after product select) */}
+                        <td className="px-2 py-1 font-mono text-slate-500 text-[10px]">
+                          {row.product_code || <span className="text-slate-300">—</span>}
+                        </td>
+
+                        {/* Product — searchable for manual rows, display for PO rows */}
+                        <td className="px-2 py-1 min-w-[180px]">
+                          {isManual ? (
+                            <ProductSearchCell
+                              row={row}
+                              productSearch={productSearch}
+                              onQueryChange={handleProductQueryChange}
+                              onSelect={selectProduct}
+                              onClear={clearProductSelection}
+                              onClose={() => setProductSearch((prev) => ({ ...prev, open: false }))}
+                            />
+                          ) : (
+                            <span className="font-medium text-slate-700">{row.product_name || '—'}</span>
+                          )}
+                        </td>
+
+                        {/* PO Qty */}
+                        <td className="px-2 py-1 text-right text-slate-500">
+                          {isManual ? <span className="text-slate-300">—</span> : Number(row.quantity_ordered).toLocaleString()}
+                        </td>
+
+                        {/* Available */}
                         <td className="px-2 py-1 text-right">
-                          {row.remaining_qty != null ? (
+                          {isManual ? (
+                            <span className="text-slate-300">—</span>
+                          ) : row.remaining_qty != null ? (
                             <span className={`font-semibold text-xs ${row.already_received > 0 ? 'text-amber-600' : 'text-slate-500'}`}>
                               {Number(row.remaining_qty).toLocaleString()}
                               {row.already_received > 0 && (
@@ -683,15 +1075,33 @@ export default function GoodsReceivedNoteFormPage() {
                             <span className="text-slate-300">—</span>
                           )}
                         </td>
+
+                        {/* UOM */}
+                        <td className="px-2 py-1">
+                          <select
+                            value={row.unit_id ?? ''}
+                            onChange={(e) => setRowField(idx, 'unit_id', e.target.value)}
+                            className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white cursor-pointer"
+                          >
+                            <option value="">—</option>
+                            {unitTypes.map((u) => (
+                              <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>
+                            ))}
+                          </select>
+                        </td>
+
+                        {/* Qty Received */}
                         <td className="px-2 py-1">
                           <input
                             type="number" min="0" step="0.0001"
-                            max={row.remaining_qty ?? undefined}
+                            max={!isManual && row.remaining_qty != null ? row.remaining_qty : undefined}
                             className={TABLE_INPUT + ' w-24'}
                             value={row.quantity_received}
                             onChange={(e) => setRowField(idx, 'quantity_received', e.target.value)}
                           />
                         </td>
+
+                        {/* Unit Price */}
                         <td className="px-2 py-1">
                           <input
                             type="number" min="0" step="0.01"
@@ -700,6 +1110,8 @@ export default function GoodsReceivedNoteFormPage() {
                             onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
                           />
                         </td>
+
+                        {/* Disc% */}
                         <td className="px-2 py-1">
                           <input
                             type="number" min="0" max="100" step="0.01" placeholder="0"
@@ -708,6 +1120,8 @@ export default function GoodsReceivedNoteFormPage() {
                             onChange={(e) => setRowField(idx, 'discount', e.target.value)}
                           />
                         </td>
+
+                        {/* Tax% */}
                         <td className="px-2 py-1">
                           <input
                             type="number" min="0" max="100" step="0.01" placeholder="0"
@@ -716,6 +1130,8 @@ export default function GoodsReceivedNoteFormPage() {
                             onChange={(e) => setRowField(idx, 'tax', e.target.value)}
                           />
                         </td>
+
+                        {/* Batch */}
                         <td className="px-2 py-1">
                           {row.is_batch ? (
                             <button
@@ -734,9 +1150,13 @@ export default function GoodsReceivedNoteFormPage() {
                             </button>
                           ) : <span className="text-slate-300 italic px-2">—</span>}
                         </td>
+
+                        {/* Total */}
                         <td className="px-2 py-1 text-right font-bold text-slate-800 tabular-nums">
                           {amount > 0 ? amount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : <span className="text-slate-300 font-normal">—</span>}
                         </td>
+
+                        {/* Delete */}
                         <td className="px-2 py-1 text-center">
                           <button
                             type="button"
@@ -752,7 +1172,7 @@ export default function GoodsReceivedNoteFormPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-slate-200 bg-slate-50/50">
-                    <td colSpan={7} />
+                    <td colSpan={8} />
                     <td className="px-1.5 py-1.5 text-center text-xs font-bold text-amber-600 tabular-nums">
                       -{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
@@ -766,7 +1186,7 @@ export default function GoodsReceivedNoteFormPage() {
                     <td />
                   </tr>
                   <tr className="bg-indigo-50 border-t border-indigo-100">
-                    <td colSpan={7} className="px-3 py-1.5">
+                    <td colSpan={8} className="px-3 py-1.5">
                       <div className="flex items-center gap-4 text-xs">
                         <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
                         <span className="text-slate-500">Gross: <span className="font-bold text-slate-700">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
@@ -790,22 +1210,63 @@ export default function GoodsReceivedNoteFormPage() {
           )}
 
           {/* Action buttons */}
-          <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-3 py-2">
-            <button
-              type="button"
-              onClick={() => navigate('/inventory/goods-received-notes')}
-              className="rounded border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              disabled={saveMutation.isPending || items.length === 0}
-              onClick={handleSubmit}
-              className="rounded bg-indigo-600 px-4 py-1 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 transition-colors"
-            >
-              {saveMutation.isPending ? 'Saving…' : isEdit ? 'Update GRN' : 'Create GRN (Draft)'}
-            </button>
+          <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-3 py-2">
+
+            {/* Left: PDF download (edit mode only) */}
+            <div>
+              {isEdit && (
+                <button
+                  type="button"
+                  onClick={handleDownloadPdf}
+                  disabled={isDownloading}
+                  className="flex items-center gap-1.5 rounded border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors disabled:opacity-60"
+                >
+                  <Download size={12} />
+                  {isDownloading ? 'Generating…' : 'Download PDF'}
+                </button>
+              )}
+            </div>
+
+            {/* Right: Change Status + divider + Cancel + Save */}
+            <div className="flex items-center gap-3">
+
+              {/* Change Status labelled dropdown */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap">
+                  Change Status
+                </span>
+                <select
+                  value={saveStatus}
+                  onChange={(e) => setSaveStatus(e.target.value)}
+                  className="rounded border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs font-semibold text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white cursor-pointer"
+                >
+                  <option value="draft">Draft</option>
+                  <option value="confirmed">Confirmed</option>
+                </select>
+              </div>
+
+              <div className="h-5 w-px bg-slate-200" />
+
+              <button
+                type="button"
+                onClick={() => navigate('/inventory/goods-received-notes')}
+                className="rounded border border-slate-200 px-3 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={saveMutation.isPending || items.length === 0}
+                onClick={handleSubmit}
+                className="rounded bg-indigo-600 px-4 py-1 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 transition-colors"
+              >
+                {saveMutation.isPending
+                  ? 'Saving…'
+                  : isEdit
+                    ? (saveStatus === 'confirmed' ? 'Update & Confirm' : 'Update GRN')
+                    : (saveStatus === 'confirmed' ? 'Create & Confirm' : 'Save as Draft')}
+              </button>
+            </div>
           </div>
         </div>
 

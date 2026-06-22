@@ -105,7 +105,7 @@ const EMPTY_FORM = {
   billing_address:        '',
   shipping_address:       '',
   remarks:                '',
-  status:                 '',
+  status:                 'draft',
 }
 
 export default function PurchaseOrderFormPage() {
@@ -677,36 +677,28 @@ export default function PurchaseOrderFormPage() {
             </div>
           )}
 
-          <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-white px-3 py-2">
+          <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-white px-3 py-2">
 
-            {/* ── Status (left, edit mode only) ── */}
-            {isEdit ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Status</span>
-                <select
-                  value={form.status}
-                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                  style={STATUS_SELECT_STYLES[form.status] ?? {}}
-                  className="block rounded border px-2 py-1 text-xs font-semibold outline-none cursor-pointer transition-all"
-                >
-                  {ALL_STATUSES.map((s) => (
-                    <option key={s.value} value={s.value}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div />
-            )}
+            {/* ── Status (always visible, before Clear) ── */}
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Status</span>
+            <select
+              value={form.status}
+              onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+              style={STATUS_SELECT_STYLES[form.status] ?? {}}
+              className="block rounded border px-2 py-1 text-xs font-semibold outline-none cursor-pointer transition-all"
+            >
+              {ALL_STATUSES.filter((s) => s.value !== 'completed').map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </select>
+            <div className="h-5 w-px bg-slate-200" />
 
-            {/* ── Form Actions (right) ── */}
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={handleClear} className="flex items-center gap-1 rounded border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-500 transition-all hover:bg-red-50 active:scale-95">
-                <RefreshCw size={11} /> Clear
-              </button>
-              <button type="button" disabled={saveMutation.isPending} onClick={handleSubmit} className="flex items-center gap-1 rounded bg-indigo-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60 transition-all active:scale-95">
-                {saveMutation.isPending ? <><RefreshCw size={11} className="animate-spin" /> Saving…</> : isEdit ? <><Save size={11} /> Update PO</> : <><Save size={11} /> Create PO</>}
-              </button>
-            </div>
+            <button type="button" onClick={handleClear} className="flex items-center gap-1 rounded border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-500 transition-all hover:bg-red-50 active:scale-95">
+              <RefreshCw size={11} /> Clear
+            </button>
+            <button type="button" disabled={saveMutation.isPending} onClick={handleSubmit} className="flex items-center gap-1 rounded bg-indigo-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60 transition-all active:scale-95">
+              {saveMutation.isPending ? <><RefreshCw size={11} className="animate-spin" /> Saving…</> : isEdit ? <><Save size={11} /> Update PO</> : <><Save size={11} /> Create PO</>}
+            </button>
 
           </div>
 

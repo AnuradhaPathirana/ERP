@@ -1,6 +1,6 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Trash2, FileText, Image, Download } from 'lucide-react'
+import { Edit2, Trash2, FileText, Download } from 'lucide-react'
 import { deleteCustomer, getCustomer } from '../../api/customers'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
@@ -31,10 +31,6 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function fileIcon(mimeType) {
-  if (mimeType?.startsWith('image/')) return <Image size={13} className="shrink-0 text-blue-400" />
-  return <FileText size={13} className="shrink-0 text-slate-400" />
-}
 
 function SectionCard({ title, children }) {
   return (
@@ -200,22 +196,35 @@ export default function CustomerViewPage() {
             <div className="px-3 py-2">
               {Array.isArray(c?.attachments) && c.attachments.length > 0 ? (
                 <div className="space-y-1">
-                  {c.attachments.map((att) => (
-                    <div key={att.id} className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1">
-                      {fileIcon(att.mime_type)}
-                      <span className="min-w-0 flex-1 truncate text-[11px] text-slate-700">{att.file_name}</span>
-                      <span className="shrink-0 text-[10px] text-slate-400">{formatFileSize(att.file_size)}</span>
+                  {c.attachments.map((att) => {
+                    const isImg = att.mime_type?.startsWith('image/')
+                    return (
                       <a
+                        key={att.id}
                         href={att.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="shrink-0 rounded p-0.5 text-slate-400 transition hover:text-indigo-600"
-                        title="Download"
+                        className="group flex items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1.5 transition hover:border-indigo-200 hover:bg-indigo-50"
                       >
-                        <Download size={11} strokeWidth={2.5} />
+                        {isImg ? (
+                          <img
+                            src={att.url}
+                            alt={att.file_name}
+                            className="h-9 w-9 shrink-0 rounded object-cover border border-slate-200 group-hover:border-indigo-200"
+                          />
+                        ) : (
+                          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded border border-slate-200 bg-white">
+                            <FileText size={16} className="text-red-400" />
+                          </div>
+                        )}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[11px] font-medium text-slate-700 group-hover:text-indigo-700">{att.file_name}</p>
+                          <p className="text-[10px] text-slate-400">{formatFileSize(att.file_size)}</p>
+                        </div>
+                        <Download size={12} strokeWidth={2} className="shrink-0 text-slate-300 group-hover:text-indigo-500" />
                       </a>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               ) : (
                 <p className="py-2 text-center text-[11px] text-slate-300">No attachments.</p>

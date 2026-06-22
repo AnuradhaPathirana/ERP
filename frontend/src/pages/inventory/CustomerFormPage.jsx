@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Download, FileText, Image, MapPin, Paperclip, Phone, RefreshCw, Save, Truck, User, Users, X } from 'lucide-react'
+import { Download, FileText, MapPin, Paperclip, Phone, RefreshCw, Save, Trash2, Truck, User, Users, X } from 'lucide-react'
 import { checkCustomerCode, createCustomer, getCustomer, updateCustomer } from '../../api/customers'
-import { deleteCustomerAttachment, uploadCustomerAttachments } from '../../api/customerAttachments'
+import { deleteCustomerAttachment, getCustomerAttachments, uploadCustomerAttachments } from '../../api/customerAttachments'
 import Breadcrumb from '../../components/Breadcrumb'
 import { showError, showSuccess } from '../../utils/alerts'
 
@@ -14,6 +14,7 @@ function generateCustomerCode() {
 
 const TITLES         = ['Mr.', 'Mrs.', 'Ms.', 'Dr.', 'Prof.', 'Rev.']
 const CUSTOMER_TYPES = ['Trade', 'Retail', 'Wholesale', 'Corporate']
+const ALLOWED_ATTACHMENT_TYPES = /^(image\/.+|application\/pdf)$/
 
 const EMPTY_FORM = {
   customer_code:                '',
@@ -123,11 +124,6 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function fileIcon(mimeType) {
-  if (!mimeType) return <FileText size={14} className="text-slate-400" />
-  if (mimeType.startsWith('image/')) return <Image size={14} className="text-blue-400" />
-  return <FileText size={14} className="text-slate-400" />
-}
 
 export default function CustomerFormPage() {
   const { id }      = useParams()
@@ -147,9 +143,9 @@ export default function CustomerFormPage() {
   const [codeStatus,       setCodeStatus]       = useState('idle')
   // File upload state
   const [newFiles,         setNewFiles]         = useState([])
-  const [existingFiles,    setExistingFiles]    = useState([])
   const [deletingIds,      setDeletingIds]      = useState(new Set())
   const [isDragOver,       setIsDragOver]       = useState(false)
+  const [isUploading,      setIsUploading]      = useState(false)
 
   const BILLING_TO_SHIPPING = {
     billing_address_line1:  'shipping_address_line1',
@@ -183,6 +179,19 @@ export default function CustomerFormPage() {
     enabled:  isEditing,
   })
 
+  // Dedicated query for attachments — independent of the customer resource
+  const {
+    data: attachmentsData,
+    isLoading: isAttachmentsLoading,
+    refetch: refetchAttachments,
+  } = useQuery({
+    queryKey: ['customer-attachments', id],
+    queryFn:  () => getCustomerAttachments(id),
+    enabled:  isEditing,
+    staleTime: 0,
+  })
+  const existingFiles = attachmentsData ?? []
+
   const initialized = useRef(false)
   useLayoutEffect(() => {
     if (fetchedData?.data && !initialized.current) {
@@ -192,7 +201,6 @@ export default function CustomerFormPage() {
           Object.keys(EMPTY_FORM).map((k) => [k, c[k] != null ? String(c[k]) : ''])
         )
       )
-      setExistingFiles(Array.isArray(c.attachments) ? c.attachments : [])
       initialized.current = true
     }
   }, [fetchedData])
@@ -234,12 +242,33 @@ export default function CustomerFormPage() {
   }
 
   // File handling
-  const addFiles = (fileList) => {
+  const addFiles = async (fileList) => {
     const incoming = Array.from(fileList)
-    setNewFiles((prev) => {
-      const existingNames = new Set(prev.map((f) => f.name))
-      return [...prev, ...incoming.filter((f) => !existingNames.has(f.name))]
-    })
+    const rejected = incoming.filter((f) => !ALLOWED_ATTACHMENT_TYPES.test(f.type))
+    if (rejected.length) {
+      showError(`Only PDF and image files are allowed. Rejected: ${rejected.map((f) => f.name).join(', ')}`)
+    }
+    const valid = incoming.filter((f) => ALLOWED_ATTACHMENT_TYPES.test(f.type))
+    if (!valid.length) return
+
+    if (isEditing) {
+      // Upload immediately on edit — no queue needed (customer ID already exists)
+      setIsUploading(true)
+      try {
+        await uploadCustomerAttachments(id, valid)
+        await refetchAttachments()
+      } catch {
+        showError('Failed to upload attachments.')
+      } finally {
+        setIsUploading(false)
+      }
+    } else {
+      // Queue for create — upload after customer is saved (no ID yet)
+      setNewFiles((prev) => {
+        const existingNames = new Set(prev.map((f) => f.name))
+        return [...prev, ...valid.filter((f) => !existingNames.has(f.name))]
+      })
+    }
   }
 
   const handleFileInput = (e) => {
@@ -261,7 +290,7 @@ export default function CustomerFormPage() {
     setDeletingIds((prev) => new Set(prev).add(attachment.id))
     try {
       await deleteCustomerAttachment(id, attachment.id)
-      setExistingFiles((prev) => prev.filter((a) => a.id !== attachment.id))
+      await refetchAttachments()
     } catch {
       showError('Failed to delete attachment.')
     } finally {
@@ -284,7 +313,8 @@ export default function CustomerFormPage() {
       }
       queryClient.invalidateQueries({ queryKey: ['customers'] })
       queryClient.invalidateQueries({ queryKey: ['customers-all'] })
-      if (isEditing) queryClient.invalidateQueries({ queryKey: ['customer', id] })
+      queryClient.invalidateQueries({ queryKey: ['customer', isEditing ? id : String(customerId)] })
+      queryClient.invalidateQueries({ queryKey: ['customer-attachments', isEditing ? id : String(customerId)] })
       showSuccess(isEditing ? 'Customer updated successfully.' : 'Customer created successfully.')
       navigate('/inventory/customers')
     },
@@ -633,21 +663,29 @@ export default function CustomerFormPage() {
               <div className="flex items-center justify-between border-b border-blue-100 bg-blue-50 px-3 py-2">
                 <div className="flex items-center gap-1.5 text-blue-700">
                   <Paperclip size={13} />
-                  <h2 className="text-xs font-bold">Attachments</h2>
+                  <h2 className="text-xs font-bold">
+                    Attachments
+                    {(existingFiles.length > 0 || newFiles.length > 0) && (
+                      <span className="ml-1 font-normal text-blue-500">
+                        ({existingFiles.length + newFiles.length})
+                      </span>
+                    )}
+                  </h2>
                 </div>
                 <button
                   type="button"
+                  disabled={isUploading}
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-600 transition hover:border-blue-400 hover:bg-blue-50"
+                  className="flex items-center gap-1 rounded border border-blue-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-blue-600 transition hover:border-blue-400 hover:bg-blue-50 disabled:opacity-50"
                 >
                   <Paperclip size={10} strokeWidth={2.5} />
-                  Add Files
+                  {isUploading ? 'Uploading…' : 'Add Files'}
                 </button>
                 <input
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept=".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt"
+                  accept="image/*,.pdf"
                   onChange={handleFileInput}
                   className="hidden"
                 />
@@ -659,78 +697,98 @@ export default function CustomerFormPage() {
                   onDragOver={(e) => { e.preventDefault(); setIsDragOver(true) }}
                   onDragLeave={() => setIsDragOver(false)}
                   onDrop={handleDrop}
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => !isUploading && fileInputRef.current?.click()}
                   className={[
                     'flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed py-4 text-center transition-colors',
-                    isDragOver
-                      ? 'border-indigo-400 bg-indigo-50'
-                      : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50',
+                    isUploading
+                      ? 'cursor-wait border-blue-200 bg-blue-50'
+                      : isDragOver
+                        ? 'border-indigo-400 bg-indigo-50'
+                        : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50',
                   ].join(' ')}
                 >
-                  <Paperclip size={18} className={isDragOver ? 'text-indigo-400' : 'text-slate-300'} />
+                  <Paperclip size={18} className={isDragOver ? 'text-indigo-400' : isUploading ? 'text-blue-300 animate-pulse' : 'text-slate-300'} />
                   <p className="text-[10px] text-slate-400">
-                    Drag & drop files here, or <span className="text-indigo-500">click to browse</span>
+                    {isUploading
+                      ? 'Uploading files…'
+                      : <>Drag & drop files here, or <span className="text-indigo-500">click to browse</span></>
+                    }
                   </p>
-                  <p className="text-[10px] text-slate-300">Images, PDF, Word, Excel — max 10 MB each</p>
+                  <p className="text-[10px] text-slate-300">PDF and image files only — max 10 MB each</p>
                 </div>
 
-                {/* Queued new files */}
+                {/* Queued new files (create mode only) */}
                 {newFiles.length > 0 && (
                   <div className="space-y-1">
                     <p className="text-[10px] font-semibold text-slate-500">
                       Queued ({newFiles.length}) — will upload on save
                     </p>
-                    {newFiles.map((file, i) => (
-                      <div key={i} className="flex items-center gap-2 rounded border border-indigo-100 bg-indigo-50 px-2 py-1">
-                        <Image size={13} className="shrink-0 text-indigo-400" />
-                        <span className="min-w-0 flex-1 truncate text-[11px] text-indigo-700">{file.name}</span>
-                        <span className="shrink-0 text-[10px] text-indigo-400">{formatFileSize(file.size)}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeNewFile(i)}
-                          className="shrink-0 rounded p-0.5 text-indigo-400 transition hover:bg-indigo-100 hover:text-indigo-600"
-                        >
-                          <X size={11} strokeWidth={2.5} />
-                        </button>
-                      </div>
-                    ))}
+                    {newFiles.map((file, i) => {
+                      const isImg = file.type.startsWith('image/')
+                      const preview = isImg ? URL.createObjectURL(file) : null
+                      return (
+                        <div key={i} className="flex items-center gap-2 rounded border border-indigo-100 bg-indigo-50 px-2 py-1">
+                          {isImg
+                            ? <img src={preview} alt="" className="h-8 w-8 shrink-0 rounded object-cover border border-indigo-200" />
+                            : <FileText size={14} className="shrink-0 text-red-400" />
+                          }
+                          <span className="min-w-0 flex-1 truncate text-[11px] text-indigo-700">{file.name}</span>
+                          <span className="shrink-0 text-[10px] text-indigo-400">{formatFileSize(file.size)}</span>
+                          <button
+                            type="button"
+                            onClick={() => removeNewFile(i)}
+                            className="shrink-0 rounded p-0.5 text-indigo-400 transition hover:bg-indigo-100 hover:text-red-500"
+                          >
+                            <X size={11} strokeWidth={2.5} />
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
 
-                {/* Existing saved attachments */}
+                {/* Saved attachments (from server) */}
                 {existingFiles.length > 0 && (
                   <div className="space-y-1">
                     {newFiles.length > 0 && <div className="border-t border-slate-100" />}
-                    <p className="text-[10px] font-semibold text-slate-500">Saved ({existingFiles.length})</p>
-                    {existingFiles.map((att) => (
-                      <div key={att.id} className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1">
-                        {fileIcon(att.mime_type)}
-                        <span className="min-w-0 flex-1 truncate text-[11px] text-slate-700">{att.file_name}</span>
-                        <span className="shrink-0 text-[10px] text-slate-400">{formatFileSize(att.file_size)}</span>
-                        <a
-                          href={att.url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="shrink-0 rounded p-0.5 text-slate-400 transition hover:text-indigo-600"
-                          title="Download"
-                        >
-                          <Download size={11} strokeWidth={2.5} />
-                        </a>
-                        <button
-                          type="button"
-                          disabled={deletingIds.has(att.id)}
-                          onClick={() => handleDeleteExisting(att)}
-                          className="shrink-0 rounded p-0.5 text-slate-400 transition hover:text-red-500 disabled:opacity-40"
-                          title="Delete"
-                        >
-                          <Trash2 size={11} strokeWidth={2.5} />
-                        </button>
-                      </div>
-                    ))}
+                    {existingFiles.map((att) => {
+                      const isImg = att.mime_type?.startsWith('image/')
+                      return (
+                        <div key={att.id} className="flex items-center gap-2 rounded border border-slate-100 bg-slate-50 px-2 py-1.5">
+                          {isImg
+                            ? <img src={att.url} alt={att.file_name} className="h-8 w-8 shrink-0 rounded object-cover border border-slate-200" />
+                            : <FileText size={14} className="shrink-0 text-red-400" />
+                          }
+                          <span className="min-w-0 flex-1 truncate text-[11px] text-slate-700">{att.file_name}</span>
+                          <span className="shrink-0 text-[10px] text-slate-400">{formatFileSize(att.file_size)}</span>
+                          <a
+                            href={att.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="shrink-0 rounded p-0.5 text-slate-400 transition hover:text-indigo-600"
+                            title="View / Download"
+                          >
+                            <Download size={11} strokeWidth={2.5} />
+                          </a>
+                          <button
+                            type="button"
+                            disabled={deletingIds.has(att.id)}
+                            onClick={() => handleDeleteExisting(att)}
+                            className="shrink-0 rounded p-0.5 text-slate-400 transition hover:text-red-500 disabled:opacity-40"
+                            title="Delete"
+                          >
+                            <Trash2 size={11} strokeWidth={2.5} />
+                          </button>
+                        </div>
+                      )
+                    })}
                   </div>
                 )}
 
-                {newFiles.length === 0 && existingFiles.length === 0 && (
+                {isAttachmentsLoading && (
+                  <p className="text-center text-[11px] text-slate-400 animate-pulse">Loading attachments…</p>
+                )}
+                {!isAttachmentsLoading && newFiles.length === 0 && existingFiles.length === 0 && !isUploading && (
                   <p className="text-center text-[11px] text-slate-300">No attachments yet.</p>
                 )}
               </div>

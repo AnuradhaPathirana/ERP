@@ -24,6 +24,7 @@ class UpdatePurchaseRequestRequest extends FormRequest
             'source_store_id'     => ['nullable', 'integer', 'exists:inv_stores,id'],
             'target_location_id'  => ['nullable', 'integer', 'exists:inv_locations,id'],
             'target_store_id'     => ['nullable', 'integer', 'exists:inv_stores,id'],
+            'customer_id'         => ['nullable', 'integer', 'exists:inv_customer_masters,id'],
             'required_date'       => ['nullable', 'date', 'after_or_equal:request_date'],
             'transport_mode'      => ['nullable', 'string', 'max:100'],
             'remarks'             => ['nullable', 'string'],

@@ -33,3 +33,7 @@ export const getNextGrnNo = () =>
 
 export const getLastGrn = () =>
   api.get('/api/v1/goods-received-notes/last').then((r) => r.data.data)
+
+/** Download GRN as PDF — returns a Blob */
+export const downloadGrnPdf = (id) =>
+  api.get(`/api/v1/goods-received-notes/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data)

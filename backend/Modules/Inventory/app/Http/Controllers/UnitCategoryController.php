@@ -19,7 +19,7 @@ class UnitCategoryController extends Controller
     {
         $this->middleware('permission:view_unit_categories')->only(['index', 'show', 'all']);
         $this->middleware('permission:create_unit_categories')->only(['store', 'bulkStore']);
-        $this->middleware('permission:edit_unit_categories')->only(['update']);
+        $this->middleware('permission:edit_unit_categories')->only(['update', 'setDefault', 'clearDefault']);
         $this->middleware('permission:delete_unit_categories')->only(['destroy']);
     }
 
@@ -87,6 +87,22 @@ class UnitCategoryController extends Controller
                 $categories,
             ),
         ], 201);
+    }
+
+    /** Mark this category as the default; clears any previous default. */
+    public function setDefault(UnitCategory $unitCategory): JsonResponse
+    {
+        $category = $this->service->setDefault($unitCategory);
+
+        return response()->json(['data' => (new UnitCategoryResource($category))->toArray(request())]);
+    }
+
+    /** Remove the default flag from this category. */
+    public function clearDefault(UnitCategory $unitCategory): JsonResponse
+    {
+        $category = $this->service->clearDefault($unitCategory);
+
+        return response()->json(['data' => (new UnitCategoryResource($category))->toArray(request())]);
     }
 
     /** Flat list for <select> dropdowns — no pagination, id+name only. */
