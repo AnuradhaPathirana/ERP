@@ -3,13 +3,13 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Save, ShoppingBag, Trash2, X } from 'lucide-react'
 import {
-import Pagination from '../../components/ui/Pagination'
   createSalesChannel,
   deleteSalesChannel,
   getSalesChannel,
   getSalesChannels,
   updateSalesChannel,
 } from '../../api/salesChannels'
+import Pagination from '../../components/ui/Pagination'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'

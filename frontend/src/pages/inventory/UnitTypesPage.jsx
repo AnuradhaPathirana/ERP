@@ -4,9 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Ruler, Save, X } from 'lucide-react'
 import { getAllUnitCategories } from '../../api/unitCategories'
 import {
-import Pagination from '../../components/ui/Pagination'
   createUnitType, deleteUnitType, getUnitType, getUnitTypes, updateUnitType,
 } from '../../api/unitTypes'
+import Pagination from '../../components/ui/Pagination'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'

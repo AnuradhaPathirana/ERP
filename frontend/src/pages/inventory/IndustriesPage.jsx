@@ -3,9 +3,9 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Building2, Edit2, Save, X } from 'lucide-react'
 import {
-import Pagination from '../../components/ui/Pagination'
   createIndustry, deleteIndustry, getIndustries, getIndustry, updateIndustry,
 } from '../../api/industries'
+import Pagination from '../../components/ui/Pagination'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
