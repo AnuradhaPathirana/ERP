@@ -221,6 +221,8 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.grns.next-grn-no');
     Route::get('goods-received-notes/last', [GoodsReceivedNoteController::class, 'lastGrn'])
         ->name('inventory.grns.last');
+    Route::get('goods-received-notes/last-product-prices', [GoodsReceivedNoteController::class, 'lastProductPrices'])
+        ->name('inventory.grns.last-product-prices');
     Route::get('goods-received-notes/po-items-multi', [GoodsReceivedNoteController::class, 'poOutstandingItemsMultiple'])
         ->name('inventory.grns.po-items-multi');
     Route::get('goods-received-notes/po-items/{poId}', [GoodsReceivedNoteController::class, 'poOutstandingItems'])

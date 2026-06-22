@@ -37,3 +37,10 @@ export const getLastGrn = () =>
 /** Download GRN as PDF — returns a Blob */
 export const downloadGrnPdf = (id) =>
   api.get(`/api/v1/goods-received-notes/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data)
+
+/** Fetch last recorded unit_price per product from GRN history { product_id: "price" } */
+export const getLastGrnProductPrices = (productIds = []) =>
+  api.get('/api/v1/goods-received-notes/last-product-prices', {
+    params: { product_ids: productIds },
+    paramsSerializer: { indexes: null },
+  }).then((r) => r.data.data ?? {})

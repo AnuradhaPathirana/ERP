@@ -165,6 +165,32 @@ class GoodsReceivedNoteService
         return $this->generateGrnNo();
     }
 
+    /**
+     * Return the most-recent unit_price recorded in any GRN for each requested product.
+     *
+     * @param  int[]  $productIds
+     * @return array<int, string>  keyed by product_id
+     */
+    public function lastProductPrices(array $productIds): array
+    {
+        if (empty($productIds)) {
+            return [];
+        }
+
+        return GoodsReceivedNoteItem::query()
+            ->join('inv_goods_received_notes as g', 'g.id', '=', 'inv_goods_received_note_items.grn_id')
+            ->whereIn('inv_goods_received_note_items.product_id', $productIds)
+            ->where('inv_goods_received_note_items.unit_price', '>', 0)
+            ->orderByDesc('g.grn_date')
+            ->orderByDesc('g.id')
+            ->select('inv_goods_received_note_items.product_id', 'inv_goods_received_note_items.unit_price')
+            ->get()
+            ->unique('product_id')
+            ->pluck('unit_price', 'product_id')
+            ->map(fn ($v) => (string) $v)
+            ->all();
+    }
+
     /** @return array{grn_date: ?string, total_amount: float}|null */
     public function lastGrn(): ?array
     {

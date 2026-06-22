@@ -9,6 +9,7 @@ import {
   downloadGrnPdf,
   getGoodsReceivedNote,
   getLastGrn,
+  getLastGrnProductPrices,
   getNextGrnNo,
   getPoOutstandingItemsMultiple,
   updateGoodsReceivedNote,
@@ -57,6 +58,10 @@ function FieldRow({ label, required, error, children }) {
     </div>
   )
 }
+
+/* ── Helpers ──────────────────────────────────────────────────── */
+const toPrice = (v) =>
+  v != null && v !== '' && !isNaN(parseFloat(v)) ? parseFloat(v).toFixed(2) : ''
 
 /* ── Line item calculator ─────────────────────────────────────── */
 function calcItem(row) {
@@ -327,7 +332,7 @@ export default function GoodsReceivedNoteFormPage() {
         already_received:   null,
         remaining_qty:      null,
         quantity_received:  it.quantity_received,
-        unit_price:         it.unit_price,
+        unit_price:         toPrice(it.unit_price),
         discount:           it.discount ?? '',
         tax:                it.tax      ?? '',
         is_batch:           it.product?.is_batch ?? false,
@@ -385,7 +390,7 @@ export default function GoodsReceivedNoteFormPage() {
     already_received:  it.quantity_received,
     remaining_qty:     it.remaining_qty,
     quantity_received: it.remaining_qty,
-    unit_price:        it.unit_price,
+    unit_price:        toPrice(it.unit_price),
     discount:          it.discount ?? '',
     tax:               it.tax      ?? '',
     is_batch:          it.product?.is_batch ?? false,
@@ -401,11 +406,32 @@ export default function GoodsReceivedNoteFormPage() {
     }
     setLoadingItems(true)
     try {
-      const data = await getPoOutstandingItemsMultiple(Array.from(poIdSet))
+      const data     = await getPoOutstandingItemsMultiple(Array.from(poIdSet))
+      const newItems = data.map(mapPoItem)
       setItems((prev) => [
         ...prev.filter((it) => !it.po_item_id), // preserve manual rows
-        ...data.map(mapPoItem),
+        ...newItems,
       ])
+
+      // Back-fill unit_price from last GRN for items where the PO has no price
+      const missingIds = [...new Set(
+        newItems
+          .filter((it) => !it.unit_price || parseFloat(it.unit_price) === 0)
+          .map((it) => it.product_id)
+      )].filter(Boolean)
+
+      if (missingIds.length) {
+        const prices = await getLastGrnProductPrices(missingIds)
+        if (Object.keys(prices).length) {
+          setItems((prev) => prev.map((row) => {
+            if (!row.po_item_id) return row
+            const last = prices[row.product_id]
+            return last && (!row.unit_price || parseFloat(row.unit_price) === 0)
+              ? { ...row, unit_price: toPrice(last) }
+              : row
+          }))
+        }
+      }
     } catch {
       showError('Failed to load PO items.')
     } finally {
@@ -416,8 +442,29 @@ export default function GoodsReceivedNoteFormPage() {
   const loadItemsForSinglePO = useCallback(async (poId) => {
     setLoadingItems(true)
     try {
-      const data = await getPoOutstandingItemsMultiple([poId])
-      setItems((prev) => [...prev, ...data.map(mapPoItem)])
+      const data     = await getPoOutstandingItemsMultiple([poId])
+      const newItems = data.map(mapPoItem)
+      setItems((prev) => [...prev, ...newItems])
+
+      // Back-fill unit_price from last GRN for items where the PO has no price
+      const missingIds = [...new Set(
+        newItems
+          .filter((it) => !it.unit_price || parseFloat(it.unit_price) === 0)
+          .map((it) => it.product_id)
+      )].filter(Boolean)
+
+      if (missingIds.length) {
+        const prices = await getLastGrnProductPrices(missingIds)
+        if (Object.keys(prices).length) {
+          setItems((prev) => prev.map((row) => {
+            if (!row.po_item_id) return row
+            const last = prices[row.product_id]
+            return last && (!row.unit_price || parseFloat(row.unit_price) === 0)
+              ? { ...row, unit_price: toPrice(last) }
+              : row
+          }))
+        }
+      }
     } catch {
       showError('Failed to load PO items.')
     } finally {
@@ -497,7 +544,7 @@ export default function GoodsReceivedNoteFormPage() {
     }
   }
 
-  const selectProduct = (rowKey, product) => {
+  const selectProduct = async (rowKey, product) => {
     setItems((prev) => prev.map((row) =>
       row._key === rowKey
         ? {
@@ -513,6 +560,17 @@ export default function GoodsReceivedNoteFormPage() {
         : row
     ))
     setProductSearch({ key: null, query: '', results: [], open: false })
+
+    // Pre-fill unit_price from the last GRN that received this product
+    try {
+      const prices = await getLastGrnProductPrices([product.id])
+      const last   = prices[product.id]
+      if (last) {
+        setItems((prev) => prev.map((row) =>
+          row._key === rowKey ? { ...row, unit_price: toPrice(last) } : row
+        ))
+      }
+    } catch { /* silent — price field stays empty */ }
   }
 
   const clearProductSelection = (rowKey) => {

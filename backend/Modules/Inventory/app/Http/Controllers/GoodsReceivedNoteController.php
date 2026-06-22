@@ -18,7 +18,7 @@ class GoodsReceivedNoteController extends Controller
 {
     public function __construct(private readonly GoodsReceivedNoteService $service)
     {
-        $this->middleware('permission:view_grns')->only(['index', 'show', 'poOutstandingItems', 'nextGrnNo', 'lastGrn']);
+        $this->middleware('permission:view_grns')->only(['index', 'show', 'poOutstandingItems', 'poOutstandingItemsMultiple', 'nextGrnNo', 'lastGrn', 'lastProductPrices']);
         $this->middleware('permission:create_grns')->only(['store']);
         $this->middleware('permission:edit_grns')->only(['update']);
         $this->middleware('permission:confirm_grns')->only(['confirm']);
@@ -113,5 +113,14 @@ class GoodsReceivedNoteController extends Controller
     public function lastGrn(): JsonResponse
     {
         return response()->json(['data' => $this->service->lastGrn()]);
+    }
+
+    /** GET /goods-received-notes/last-product-prices?product_ids[]=1&product_ids[]=2 */
+    public function lastProductPrices(Request $request): JsonResponse
+    {
+        $productIds = array_map('intval', (array) $request->input('product_ids', []));
+        $prices     = $this->service->lastProductPrices($productIds);
+
+        return response()->json(['data' => $prices]);
     }
 }
