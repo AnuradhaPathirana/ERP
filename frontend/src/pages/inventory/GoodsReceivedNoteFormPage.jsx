@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ClipboardList, Download, FileText, Layers, PackageCheck, Plus, ShoppingCart, Trash2, X } from 'lucide-react'
@@ -94,13 +95,27 @@ function formatFileSize(bytes) {
 /* ── Product search cell (for manual rows) ────────────────────── */
 function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClear, onClose }) {
   const [highlightIdx, setHighlightIdx] = useState(0)
+  const [dropPos, setDropPos]           = useState({ top: 0, left: 0, width: 280 })
+  const inputRef = useRef(null)
 
-  const results  = productSearch.key === row._key ? (productSearch.results ?? []) : []
-  const isOpen   = productSearch.key === row._key && productSearch.open && results.length > 0
+  const results    = productSearch.key === row._key ? (productSearch.results ?? []) : []
+  const isOpen     = productSearch.key === row._key && productSearch.open && results.length > 0
   const isSelected = Boolean(row.product_id)
 
-  // Reset keyboard highlight whenever a new result list arrives
+  // Reset highlight when a new result list arrives
   useEffect(() => { setHighlightIdx(0) }, [results.length])
+
+  // Recalculate dropdown position whenever it opens
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect()
+      setDropPos({
+        top:   rect.bottom + 2,
+        left:  rect.left,
+        width: Math.max(rect.width, 280),
+      })
+    }
+  }, [isOpen])
 
   const handleKeyDown = (e) => {
     if (e.key === 'ArrowDown') {
@@ -138,6 +153,7 @@ function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClea
   return (
     <div className="relative">
       <input
+        ref={inputRef}
         type="text"
         placeholder="Search product…"
         className={TABLE_INPUT + ' w-full'}
@@ -145,14 +161,16 @@ function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClea
         onChange={(e) => onQueryChange(row._key, e.target.value)}
         onKeyDown={handleKeyDown}
         onFocus={() => {
-          // Always trigger — reloads all when empty, re-runs search when there's a query
           const currentQuery = productSearch.key === row._key ? productSearch.query : ''
           onQueryChange(row._key, currentQuery)
         }}
         autoComplete="off"
       />
-      {isOpen && (
-        <div className="absolute top-full left-0 z-50 mt-0.5 w-72 rounded border border-slate-200 bg-white shadow-lg max-h-44 overflow-y-auto">
+      {isOpen && createPortal(
+        <div
+          style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
+          className="rounded border border-slate-200 bg-white shadow-xl max-h-52 overflow-y-auto"
+        >
           {results.map((p, i) => (
             <button
               key={p.id}
@@ -169,7 +187,8 @@ function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClea
               <span className="truncate font-medium">{p.name}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )
