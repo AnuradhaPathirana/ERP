@@ -29,10 +29,11 @@ class UnitConversionService
         $ratesFromBase = [];
         if ($baseUnitId) {
             $unitIds = $unitTypes->pluck('id')->toArray();
-            UnitConversion::where('from_unit_type_id', $baseUnitId)
+            $ratesFromBase = UnitConversion::where('from_unit_type_id', $baseUnitId)
                 ->whereIn('to_unit_type_id', $unitIds)
                 ->get(['to_unit_type_id', 'multiplier'])
-                ->each(fn ($c) => $ratesFromBase[$c->to_unit_type_id] = (float) $c->multiplier);
+                ->mapWithKeys(fn ($c) => [$c->to_unit_type_id => (float) $c->multiplier])
+                ->all();
         }
 
         $units = $unitTypes->map(fn ($unit) => [
