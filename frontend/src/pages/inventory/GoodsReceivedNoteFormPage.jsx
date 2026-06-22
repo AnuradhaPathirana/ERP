@@ -98,7 +98,7 @@ function formatFileSize(bytes) {
 }
 
 /* ── Product search cell (for manual rows) ────────────────────── */
-function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClear, onClose }) {
+function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClear, onClose, onInputRef }) {
   const [highlightIdx, setHighlightIdx] = useState(0)
   const [dropPos, setDropPos]           = useState({ top: 0, left: 0, width: 280 })
   const inputRef = useRef(null)
@@ -158,7 +158,7 @@ function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClea
   return (
     <div className="relative">
       <input
-        ref={inputRef}
+        ref={(el) => { inputRef.current = el; onInputRef?.(el) }}
         type="text"
         placeholder="Search product…"
         className={TABLE_INPUT + ' w-full'}
@@ -250,6 +250,18 @@ export default function GoodsReceivedNoteFormPage() {
   /* ── Product search state (manual rows) ───────────────────── */
   const [productSearch, setProductSearch] = useState({ key: null, query: '', results: [], open: false })
   const searchTimerRef = useRef(null)
+
+  /* ── Cell refs for Enter-key row navigation ───────────────── */
+  const cellRefs = useRef({}) // { [rowKey]: { uom, qty, price, disc, tax, batch } }
+
+  const setCellRef = (rowKey, field) => (el) => {
+    if (!cellRefs.current[rowKey]) cellRefs.current[rowKey] = {}
+    cellRefs.current[rowKey][field] = el
+  }
+
+  const focusCell = (rowKey, field) => {
+    cellRefs.current[rowKey]?.[field]?.focus()
+  }
 
   /* ── Next GRN number preview ─────────────────────────────── */
   useEffect(() => {
@@ -494,7 +506,7 @@ export default function GoodsReceivedNoteFormPage() {
   }
 
   /* ── Add manual row ───────────────────────────────────────── */
-  const addManualRow = () => {
+  const addManualRow = useCallback(() => {
     const key = `manual-${Date.now()}-${Math.random()}`
     setItems((prev) => [...prev, {
       _key:              key,
@@ -518,7 +530,21 @@ export default function GoodsReceivedNoteFormPage() {
       batch_assignments: [],
       batches:           [],
     }])
-  }
+    // Auto-focus the product search input on the new row
+    setTimeout(() => cellRefs.current[key]?.product?.focus(), 50)
+  }, [])
+
+  /* ── Alt+N shortcut to add a new item row ─────────────────── */
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.altKey && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault()
+        addManualRow()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [addManualRow])
 
   /* ── Product search for manual rows ──────────────────────── */
   const handleProductQueryChange = (rowKey, query) => {
@@ -560,6 +586,8 @@ export default function GoodsReceivedNoteFormPage() {
         : row
     ))
     setProductSearch({ key: null, query: '', results: [], open: false })
+    // Auto-focus UOM after product selection
+    setTimeout(() => focusCell(rowKey, 'uom'), 50)
 
     // Pre-fill unit_price from the last GRN that received this product
     try {
@@ -1064,10 +1092,12 @@ export default function GoodsReceivedNoteFormPage() {
                 <button
                   type="button"
                   onClick={addManualRow}
+                  title="Add new item (Alt+N)"
                   className="flex items-center gap-1 rounded border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-semibold text-blue-700 hover:bg-blue-100 transition-colors"
                 >
                   <Plus size={10} />
                   Add Item
+                  <span className="ml-0.5 rounded bg-blue-100 px-1 py-px text-[9px] font-mono text-blue-500">Alt+N</span>
                 </button>
               </div>
             }
@@ -1124,6 +1154,7 @@ export default function GoodsReceivedNoteFormPage() {
                               onSelect={selectProduct}
                               onClear={clearProductSelection}
                               onClose={() => setProductSearch((prev) => ({ ...prev, open: false }))}
+                              onInputRef={setCellRef(row._key, 'product')}
                             />
                           ) : (
                             <span className="font-medium text-slate-700">{row.product_name || '—'}</span>
@@ -1156,8 +1187,12 @@ export default function GoodsReceivedNoteFormPage() {
                         {/* UOM */}
                         <td className="px-2 py-1">
                           <select
+                            ref={setCellRef(row._key, 'uom')}
                             value={row.unit_id ?? ''}
                             onChange={(e) => setRowField(idx, 'unit_id', e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'qty') }
+                            }}
                             className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white cursor-pointer"
                           >
                             <option value="">—</option>
@@ -1170,41 +1205,60 @@ export default function GoodsReceivedNoteFormPage() {
                         {/* Qty Received */}
                         <td className="px-2 py-1">
                           <input
+                            ref={setCellRef(row._key, 'qty')}
                             type="number" min="0" step="0.0001"
                             max={!isManual && row.remaining_qty != null ? row.remaining_qty : undefined}
                             className={TABLE_INPUT + ' w-24'}
                             value={row.quantity_received}
                             onChange={(e) => setRowField(idx, 'quantity_received', e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
+                            }}
                           />
                         </td>
 
                         {/* Unit Price */}
                         <td className="px-2 py-1">
                           <input
+                            ref={setCellRef(row._key, 'price')}
                             type="number" min="0" step="0.01"
                             className={TABLE_INPUT + ' w-20'}
                             value={row.unit_price}
                             onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'disc') }
+                            }}
                           />
                         </td>
 
                         {/* Disc% */}
                         <td className="px-2 py-1">
                           <input
+                            ref={setCellRef(row._key, 'disc')}
                             type="number" min="0" max="100" step="0.01" placeholder="0"
                             className="block w-full rounded border border-amber-200 bg-amber-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-amber-400 focus:bg-white"
                             value={row.discount}
                             onChange={(e) => setRowField(idx, 'discount', e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'tax') }
+                            }}
                           />
                         </td>
 
                         {/* Tax% */}
                         <td className="px-2 py-1">
                           <input
+                            ref={setCellRef(row._key, 'tax')}
                             type="number" min="0" max="100" step="0.01" placeholder="0"
                             className="block w-full rounded border border-emerald-200 bg-emerald-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-emerald-400 focus:bg-white"
                             value={row.tax}
                             onChange={(e) => setRowField(idx, 'tax', e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault()
+                                if (row.is_batch) focusCell(row._key, 'batch')
+                              }
+                            }}
                           />
                         </td>
 
@@ -1212,6 +1266,7 @@ export default function GoodsReceivedNoteFormPage() {
                         <td className="px-2 py-1">
                           {row.is_batch ? (
                             <button
+                              ref={setCellRef(row._key, 'batch')}
                               type="button"
                               onClick={() => setBatchModalIdx(idx)}
                               className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
@@ -1347,6 +1402,30 @@ export default function GoodsReceivedNoteFormPage() {
           </div>
         </div>
 
+      </div>
+
+      {/* Keyboard Shortcuts Reference */}
+      <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Keyboard Shortcuts</p>
+        <div className="flex flex-wrap gap-x-5 gap-y-1">
+          {[
+            { keys: ['Alt', 'N'],   desc: 'Add new item row' },
+            { keys: ['Enter'],      desc: 'Move to next field in row (UOM → Qty → Price → Disc → Tax → Batch)' },
+            { keys: ['↑', '↓'],    desc: 'Navigate product search results' },
+            { keys: ['Esc'],        desc: 'Close product search dropdown' },
+          ].map(({ keys, desc }) => (
+            <div key={desc} className="flex items-center gap-1.5">
+              <div className="flex items-center gap-0.5">
+                {keys.map((k, i) => (
+                  <span key={i} className="inline-flex items-center justify-center rounded border border-slate-300 bg-white px-1 py-px text-[10px] font-mono font-semibold text-slate-600 shadow-sm">
+                    {k}
+                  </span>
+                ))}
+              </div>
+              <span className="text-[10px] text-slate-500">{desc}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Batch Assignment Modal */}
