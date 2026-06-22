@@ -69,19 +69,31 @@ class StoreProductRequest extends FormRequest
             'product_attributes.*.attribute_type_id'      => ['required', 'integer', 'exists:inv_attribute_types,id'],
             'product_attributes.*.attribute_id'           => ['required', 'integer', 'exists:inv_attributes,id'],
 
-            // Cost details per sales channel
-            'cost_details'                                  => ['nullable', 'array'],
+            // Cost details per sales channel — at least one channel required
+            'cost_details'                                  => ['required', 'array', 'min:1'],
             'cost_details.*.sales_channel_id'               => ['required', 'integer', 'exists:inv_sales_channels,id'],
-            'cost_details.*.num_of_units'                   => ['nullable', 'numeric', 'min:0'],
-            'cost_details.*.cost_price'                     => ['nullable', 'numeric', 'min:0'],
+            'cost_details.*.num_of_units'                   => ['required', 'numeric', 'min:0'],
+            'cost_details.*.cost_price'                     => ['required', 'numeric', 'min:0'],
             'cost_details.*.margin'                         => ['nullable', 'numeric'],
             'cost_details.*.margin_type'                    => ['nullable', 'string', Rule::in(['percentage', 'amount'])],
-            'cost_details.*.selling_price'                  => ['nullable', 'numeric', 'min:0'],
+            'cost_details.*.selling_price'                  => ['required', 'numeric', 'min:0'],
             'cost_details.*.max_price'                      => ['nullable', 'numeric', 'min:0'],
             'cost_details.*.min_price'                      => ['nullable', 'numeric', 'min:0'],
             'cost_details.*.wholesale_price'                => ['nullable', 'numeric', 'min:0'],
             'cost_details.*.sale_privileges_discount'       => ['nullable', 'numeric', 'min:0', 'max:100'],
             'cost_details.*.purchasing_privileges_discount' => ['nullable', 'numeric', 'min:0', 'max:100'],
+        ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return [
+            'cost_details.required' => 'At least one sales channel is required.',
+            'cost_details.min'      => 'At least one sales channel is required.',
+            'cost_details.*.num_of_units.required'  => 'Number of units is required for each channel.',
+            'cost_details.*.cost_price.required'    => 'Cost price is required for each channel.',
+            'cost_details.*.selling_price.required' => 'Selling price is required for each channel.',
         ];
     }
 

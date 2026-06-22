@@ -188,13 +188,23 @@ function SelectField({ name, value, onChange, onBlur, error, touched, placeholde
   )
 }
 
+function validateCostRow(row) {
+  return {
+    sales_channel_id: row.sales_channel_id ? '' : 'Required.',
+    num_of_units:     (row.num_of_units !== '' && row.num_of_units != null) ? '' : 'Required.',
+    cost_price:       (row.cost_price    !== '' && row.cost_price    != null) ? '' : 'Required.',
+    selling_price:    (row.selling_price !== '' && row.selling_price  != null) ? '' : 'Required.',
+  }
+}
+
 // Inline input for cost detail rows — no Field wrapper, smaller
-function CostInput({ value, onChange, disabled, placeholder, type = 'number', ...props }) {
+function CostInput({ value, onChange, onBlur, disabled, placeholder, type = 'number', error, touched, ...props }) {
   return (
     <input
       type={type}
       value={value}
       onChange={onChange}
+      onBlur={onBlur}
       disabled={disabled}
       placeholder={placeholder}
       autoComplete="off"
@@ -202,19 +212,27 @@ function CostInput({ value, onChange, disabled, placeholder, type = 'number', ..
         'block w-full rounded-md border-2 px-2 py-1 text-xs outline-none transition-all',
         disabled
           ? 'border-slate-100 bg-slate-100 text-slate-400 cursor-not-allowed'
-          : 'border-slate-200 bg-slate-50 text-slate-800 focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15',
+          : error && touched
+            ? 'border-red-300 bg-red-50/40 text-slate-800 focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
+            : 'border-slate-200 bg-slate-50 text-slate-800 focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15',
       ].join(' ')}
       {...props}
     />
   )
 }
 
-function CostSelect({ value, onChange, children, placeholder }) {
+function CostSelect({ value, onChange, onBlur, children, placeholder, error, touched }) {
   return (
     <select
       value={value}
       onChange={onChange}
-      className="block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer"
+      onBlur={onBlur}
+      className={[
+        'block w-full rounded-md border-2 px-2 py-1 text-xs text-slate-800 outline-none transition-all cursor-pointer',
+        error && touched
+          ? 'border-red-300 bg-red-50/40 focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
+          : 'border-slate-200 bg-slate-50 focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15',
+      ].join(' ')}
     >
       <option value="">{placeholder ?? '— Select —'}</option>
       {children}
@@ -430,8 +448,10 @@ function MarginField({ row, handle, toggleMarginType }) {
   )
 }
 
-function CostDetailCard({ row, idx, salesChannels, unitTypes, usedChannelIds, onChange, onRemove, isSingle }) {
+function CostDetailCard({ row, idx, salesChannels, unitTypes, usedChannelIds, onChange, onRemove, isSingle, rowErrors, rowTouched, onFieldBlur }) {
   const avgPrice = computeAverage(row.cost_price, row.selling_price)
+  const re = rowErrors  ?? {}
+  const rt = rowTouched ?? {}
 
   const handle = (field) => (e) => {
     const value = e.target.value
@@ -456,8 +476,15 @@ function CostDetailCard({ row, idx, salesChannels, unitTypes, usedChannelIds, on
   }
 
   const channelSelect = (
-    <Field label="Price List / Sale Channel" required>
-      <CostSelect value={row.sales_channel_id} onChange={handle('sales_channel_id')} placeholder="Channel...">
+    <Field label="Price List / Sale Channel" required error={re.sales_channel_id} touched={rt.sales_channel_id}>
+      <CostSelect
+        value={row.sales_channel_id}
+        onChange={handle('sales_channel_id')}
+        onBlur={() => onFieldBlur?.('sales_channel_id')}
+        placeholder="Channel..."
+        error={re.sales_channel_id}
+        touched={rt.sales_channel_id}
+      >
         {salesChannels.map((c) => (
           <option
             key={c.id}
@@ -472,20 +499,38 @@ function CostDetailCard({ row, idx, salesChannels, unitTypes, usedChannelIds, on
   )
 
   const numUnitsField = (
-    <Field label="Number Of Units" required>
-      <CostInput value={row.num_of_units} onChange={handle('num_of_units')} min="0" step="0.0001" placeholder="0" />
+    <Field label="Number Of Units" required error={re.num_of_units} touched={rt.num_of_units}>
+      <CostInput
+        value={row.num_of_units}
+        onChange={handle('num_of_units')}
+        onBlur={() => onFieldBlur?.('num_of_units')}
+        min="0" step="0.0001" placeholder="0"
+        error={re.num_of_units} touched={rt.num_of_units}
+      />
     </Field>
   )
 
   const costPriceField = (
-    <Field label="Cost Price" required>
-      <CostInput value={row.cost_price} onChange={handle('cost_price')} min="0" step="0.0001" placeholder="0.00" />
+    <Field label="Cost Price" required error={re.cost_price} touched={rt.cost_price}>
+      <CostInput
+        value={row.cost_price}
+        onChange={handle('cost_price')}
+        onBlur={() => onFieldBlur?.('cost_price')}
+        min="0" step="0.0001" placeholder="0.00"
+        error={re.cost_price} touched={rt.cost_price}
+      />
     </Field>
   )
 
   const sellingPriceField = (
-    <Field label="Selling Price" required>
-      <CostInput value={row.selling_price} onChange={handle('selling_price')} min="0" step="0.0001" placeholder="0.00" />
+    <Field label="Selling Price" required error={re.selling_price} touched={rt.selling_price}>
+      <CostInput
+        value={row.selling_price}
+        onChange={handle('selling_price')}
+        onBlur={() => onFieldBlur?.('selling_price')}
+        min="0" step="0.0001" placeholder="0.00"
+        error={re.selling_price} touched={rt.selling_price}
+      />
     </Field>
   )
 
@@ -598,9 +643,12 @@ export default function ProductFormPage() {
   const [form,       setForm]       = useState(() => ({
     ...EMPTY_FORM,
     product_code: isEditing ? '' : generateProductCode(),
+    cost_details: isEditing ? [] : [{ ...EMPTY_COST_ROW }],
   }))
-  const [errors,     setErrors]     = useState({})
-  const [touched,    setTouched]    = useState({})
+  const [errors,          setErrors]          = useState({})
+  const [touched,         setTouched]         = useState({})
+  const [channelErrors,   setChannelErrors]   = useState(() => isEditing ? [] : [{}])
+  const [channelTouched,  setChannelTouched]  = useState(() => isEditing ? [] : [{}])
   const [codeStatus, setCodeStatus] = useState('idle') // 'idle' | 'checking' | 'available' | 'taken'
 
   const runCodeCheck = (code, excludeId) => {
@@ -716,20 +764,29 @@ export default function ProductFormPage() {
           purchasing_privileges_discount: c.purchasing_privileges_discount != null ? String(c.purchasing_privileges_discount) : '',
         })),
       })
+      setChannelErrors((p.cost_details ?? []).map(() => ({})))
+      setChannelTouched((p.cost_details ?? []).map(() => ({})))
       initialized.current = true
     }
   }, [fetchedData])
 
   const handleChange = (e) => {
     const { name, value } = e.target
-    setForm((prev) => ({
-      ...prev,
-      [name]: value,
-      ...(name === 'category_id' ? { product_attributes: [] } : {}),
-    }))
+    setForm((prev) => {
+      const updates = { [name]: value }
+      // Mirror product name → display name while they are still in sync
+      if (name === 'name' && (prev.display_name === '' || prev.display_name === prev.name)) {
+        updates.display_name = value
+      }
+      return { ...prev, ...updates, ...(name === 'category_id' ? { product_attributes: [] } : {}) }
+    })
     if (name === 'product_code') setCodeStatus('idle')
     if (touched[name]) {
       setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }))
+    }
+    // Keep display_name error in sync when it was auto-filled
+    if (name === 'name' && touched.display_name) {
+      setErrors((prev) => ({ ...prev, display_name: validateField('display_name', value) }))
     }
   }
 
@@ -746,21 +803,49 @@ export default function ProductFormPage() {
 
   const addCostRow = () => {
     setForm((prev) => ({ ...prev, cost_details: [...prev.cost_details, { ...EMPTY_COST_ROW }] }))
+    setChannelErrors((prev)  => [...prev, {}])
+    setChannelTouched((prev) => [...prev, {}])
   }
 
   const removeCostRow = (idx) => {
-    setForm((prev) => ({ ...prev, cost_details: prev.cost_details.filter((_, i) => i !== idx) }))
+    setForm((prev)          => ({ ...prev, cost_details: prev.cost_details.filter((_, i) => i !== idx) }))
+    setChannelErrors((prev)  => prev.filter((_, i) => i !== idx))
+    setChannelTouched((prev) => prev.filter((_, i) => i !== idx))
   }
 
   const handleCostChange = (idx, fieldOrUpdates, value) => {
-    setForm((prev) => ({
-      ...prev,
-      cost_details: prev.cost_details.map((row, i) => {
+    setForm((prev) => {
+      const newDetails = prev.cost_details.map((row, i) => {
         if (i !== idx) return row
-        if (typeof fieldOrUpdates === 'object') return { ...row, ...fieldOrUpdates }
-        return { ...row, [fieldOrUpdates]: value }
-      }),
-    }))
+        return typeof fieldOrUpdates === 'object'
+          ? { ...row, ...fieldOrUpdates }
+          : { ...row, [fieldOrUpdates]: value }
+      })
+      // Re-validate row inline if any field has been touched already
+      const anyTouched = channelTouched[idx] && Object.values(channelTouched[idx]).some(Boolean)
+      if (anyTouched) {
+        setChannelErrors((errs) => {
+          const next = [...errs]
+          next[idx] = validateCostRow(newDetails[idx])
+          return next
+        })
+      }
+      return { ...prev, cost_details: newDetails }
+    })
+  }
+
+  const handleCostFieldBlur = (idx, field) => {
+    const row = form.cost_details[idx]
+    setChannelTouched((prev) => {
+      const next = [...prev]
+      next[idx] = { ...(next[idx] ?? {}), [field]: true }
+      return next
+    })
+    setChannelErrors((prev) => {
+      const next = [...prev]
+      next[idx] = validateCostRow(row)
+      return next
+    })
   }
 
   const addLocationStoreRow = () => {
@@ -829,9 +914,24 @@ export default function ProductFormPage() {
       fieldErrors[f] = validateField(f, form[f])
       allTouched[f]  = true
     })
+
+    // Channel validation
+    if (form.cost_details.length === 0) {
+      fieldErrors.cost_details = 'At least one sales channel is required.'
+      allTouched.cost_details  = true
+    }
+    const newChannelErrors  = form.cost_details.map(validateCostRow)
+    const newChannelTouched = form.cost_details.map(() => ({
+      sales_channel_id: true, num_of_units: true, cost_price: true, selling_price: true,
+    }))
+    const hasChannelErrors = newChannelErrors.some((ce) => Object.values(ce).some(Boolean))
+
     setErrors(fieldErrors)
     setTouched(allTouched)
-    if (Object.values(fieldErrors).some(Boolean)) return
+    setChannelErrors(newChannelErrors)
+    setChannelTouched(newChannelTouched)
+
+    if (Object.values(fieldErrors).some(Boolean) || hasChannelErrors) return
 
     const toNum = (v) => v !== '' ? Number(v) : null
     const payload = {
@@ -1184,11 +1284,13 @@ export default function ProductFormPage() {
         </div>
 
         {/* ── Channels — full width ── */}
-        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+        <section className={`overflow-hidden rounded-lg border bg-white ${e.cost_details && t.cost_details ? 'border-red-300' : 'border-slate-200'}`}>
           <div className="flex items-center justify-between border-b border-amber-100 bg-amber-50 px-3 py-2 text-amber-700">
             <div className="flex items-center gap-1.5">
               <ShoppingCart size={13} />
-              <h2 className="text-xs font-bold">Channels</h2>
+              <h2 className="text-xs font-bold">
+                Channels <span className="text-red-500">*</span>
+              </h2>
             </div>
             <button
               type="button"
@@ -1201,6 +1303,9 @@ export default function ProductFormPage() {
             </button>
           </div>
           <div className="p-3">
+            {e.cost_details && t.cost_details && (
+              <p className="mb-2 text-xs font-medium text-red-600">{e.cost_details}</p>
+            )}
             {f.cost_details.length === 0 ? (
               <p className="text-xs italic text-slate-400">
                 No channels added. Click <strong>+</strong> to configure pricing per sales channel.
@@ -1218,6 +1323,9 @@ export default function ProductFormPage() {
                     onChange={handleCostChange}
                     onRemove={removeCostRow}
                     isSingle={f.cost_details.length === 1}
+                    rowErrors={channelErrors[idx]  ?? {}}
+                    rowTouched={channelTouched[idx] ?? {}}
+                    onFieldBlur={(field) => handleCostFieldBlur(idx, field)}
                   />
                 ))}
               </div>
