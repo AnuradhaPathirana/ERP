@@ -10,7 +10,7 @@ use Modules\Inventory\Models\SalesChannel;
 
 class SalesChannelService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    public function paginate(int $perPage = 50): LengthAwarePaginator
     {
         return SalesChannel::orderBy('sales_channel_name')->paginate($perPage);
     }

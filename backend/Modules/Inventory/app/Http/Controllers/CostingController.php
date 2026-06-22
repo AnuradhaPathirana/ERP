@@ -28,7 +28,7 @@ class CostingController extends Controller
     public function index(Request $request): JsonResponse
     {
         $filters   = $request->only(['search', 'supplier_id', 'costing_type', 'status', 'date_from', 'date_to']);
-        $paginator = $this->service->paginate(25, $filters);
+        $paginator = $this->service->paginate(50, $filters);
 
         return response()->json([
             'data' => CostingResource::collection($paginator->items()),

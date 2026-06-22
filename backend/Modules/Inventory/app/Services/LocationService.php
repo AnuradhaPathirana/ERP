@@ -11,7 +11,7 @@ use Modules\Inventory\Models\Location;
 class LocationService
 {
     /** @param array<string, mixed> $filters */
-    public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
+    public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
         $query = Location::with(['company', 'industry', 'parentLocation'])
             ->orderBy('location_name');

@@ -1,0 +1,119 @@
+import { useEffect, useRef, useState } from 'react'
+import { ChevronDown, Search, X } from 'lucide-react'
+
+/**
+ * Compact searchable dropdown for filter panels.
+ * options: [{ value, label }]
+ */
+export default function FilterSearchSelect({
+  value,
+  onChange,
+  options = [],
+  placeholder = 'All',
+}) {
+  const [open, setOpen]   = useState(false)
+  const [query, setQuery] = useState('')
+  const containerRef      = useRef(null)
+  const searchRef         = useRef(null)
+
+  const selected = options.find((o) => String(o.value) === String(value))
+
+  const filtered = query.trim()
+    ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
+    : options
+
+  useEffect(() => {
+    if (!open) { setQuery(''); return }
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    setTimeout(() => searchRef.current?.focus(), 40)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const select = (val) => { onChange(val); setOpen(false) }
+
+  const clear = (e) => { e.stopPropagation(); onChange('') }
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-1 rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-left text-xs outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15"
+      >
+        <span className={`truncate ${selected ? 'text-slate-800' : 'text-slate-400'}`}>
+          {selected?.label ?? placeholder}
+        </span>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {value && (
+            <span onClick={clear} className="cursor-pointer text-slate-400 hover:text-slate-600">
+              <X size={10} />
+            </span>
+          )}
+          <ChevronDown
+            size={11}
+            className={`text-slate-400 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+          />
+        </div>
+      </button>
+
+      {open && (
+        <div className="absolute left-0 z-50 mt-1 w-full min-w-52 rounded-lg border border-slate-200 bg-white shadow-lg">
+          {/* search input */}
+          <div className="border-b border-slate-100 p-1.5">
+            <div className="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5">
+              <Search size={11} className="shrink-0 text-slate-400" />
+              <input
+                ref={searchRef}
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search…"
+                className="w-full bg-transparent text-xs text-slate-700 outline-none placeholder-slate-400"
+              />
+              {query && (
+                <button type="button" onClick={() => setQuery('')} className="text-slate-400 hover:text-slate-600">
+                  <X size={10} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* option list */}
+          <div className="max-h-48 overflow-y-auto py-1">
+            <button
+              type="button"
+              onClick={() => select('')}
+              className={`w-full px-3 py-1.5 text-left text-xs transition-colors ${
+                !value ? 'bg-indigo-50 font-semibold text-indigo-700' : 'text-slate-500 hover:bg-slate-50'
+              }`}
+            >
+              {placeholder}
+            </button>
+
+            {filtered.length === 0 ? (
+              <p className="px-3 py-2 text-xs italic text-slate-400">No results found</p>
+            ) : (
+              filtered.map((o) => (
+                <button
+                  key={o.value}
+                  type="button"
+                  onClick={() => select(o.value)}
+                  className={`w-full truncate px-3 py-1.5 text-left text-xs transition-colors ${
+                    String(value) === String(o.value)
+                      ? 'bg-indigo-50 font-semibold text-indigo-700'
+                      : 'text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

@@ -12,7 +12,7 @@ use Modules\Inventory\Models\CustomerMaster;
 class CustomerService
 {
     /** @param array<string, mixed> $filters */
-    public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
+    public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
         $query = CustomerMaster::orderBy('customer_name');
 

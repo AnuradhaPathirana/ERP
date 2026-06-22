@@ -10,7 +10,7 @@ use Modules\Inventory\Models\Industry;
 
 class IndustryService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    public function paginate(int $perPage = 50): LengthAwarePaginator
     {
         return Industry::orderBy('name')->paginate($perPage);
     }

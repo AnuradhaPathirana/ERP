@@ -13,7 +13,7 @@ use Modules\Inventory\Models\ProductLocationStore;
 class ProductService
 {
     /** @param array<string, mixed> $filters */
-    public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
+    public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
         $query = Product::with(['suppliers', 'salesChannels', 'category'])
             ->orderBy('name');

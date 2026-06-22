@@ -12,7 +12,7 @@ use Modules\Inventory\Models\Batch;
 class BatchService
 {
     /** @param array<string, mixed> $filters */
-    public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
+    public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
         $query = Batch::with(['product', 'supplier'])
             ->orderByDesc('received_date')

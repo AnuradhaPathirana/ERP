@@ -28,7 +28,7 @@ class GoodsReceivedNoteController extends Controller
     public function index(Request $request): JsonResponse
     {
         $filters   = $request->only(['search', 'status', 'store_id', 'supplier_id', 'date_from', 'date_to']);
-        $paginator = $this->service->paginate(25, $filters);
+        $paginator = $this->service->paginate(50, $filters);
 
         return response()->json([
             'data' => GoodsReceivedNoteResource::collection($paginator->items()),

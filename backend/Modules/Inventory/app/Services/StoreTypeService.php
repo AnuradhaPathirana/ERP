@@ -11,7 +11,7 @@ use Modules\Inventory\Models\StoreType;
 
 class StoreTypeService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    public function paginate(int $perPage = 50): LengthAwarePaginator
     {
         return StoreType::orderBy('store_type_name')->paginate($perPage);
     }

@@ -27,7 +27,7 @@ class PurchaseOrderController extends Controller
     public function index(Request $request): JsonResponse
     {
         $filters   = $request->only(['search', 'status', 'supplier_id', 'store_id', 'date_from', 'date_to']);
-        $paginator = $this->service->paginate(25, $filters);
+        $paginator = $this->service->paginate(50, $filters);
 
         return response()->json([
             'data' => PurchaseOrderResource::collection($paginator->items()),

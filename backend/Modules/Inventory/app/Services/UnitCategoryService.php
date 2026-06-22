@@ -11,7 +11,7 @@ use Modules\Inventory\Models\UnitCategory;
 
 class UnitCategoryService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    public function paginate(int $perPage = 50): LengthAwarePaginator
     {
         return UnitCategory::withCount('unitTypes')
             ->orderBy('name')

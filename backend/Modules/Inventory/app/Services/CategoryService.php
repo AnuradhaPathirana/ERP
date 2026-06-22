@@ -12,7 +12,7 @@ use Modules\Inventory\Models\Category;
 
 class CategoryService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    public function paginate(int $perPage = 50): LengthAwarePaginator
     {
         return Category::with('parent')
             ->orderBy('category_name')

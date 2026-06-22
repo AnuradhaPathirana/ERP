@@ -10,7 +10,7 @@ use Modules\Inventory\Models\Company;
 
 class CompanyService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    public function paginate(int $perPage = 50): LengthAwarePaginator
     {
         return Company::with('industry')
             ->orderBy('company_name')

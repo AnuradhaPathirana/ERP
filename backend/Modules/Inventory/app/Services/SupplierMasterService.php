@@ -12,7 +12,7 @@ use Modules\Inventory\Models\SupplierMaster;
 class SupplierMasterService
 {
     /** @param array<string, mixed> $filters */
-    public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
+    public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
         $query = SupplierMaster::withCount('products')
             ->orderBy('supplier_name');

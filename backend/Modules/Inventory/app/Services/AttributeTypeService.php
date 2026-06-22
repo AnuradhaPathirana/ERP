@@ -11,7 +11,7 @@ use Modules\Inventory\Models\AttributeType;
 
 class AttributeTypeService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    public function paginate(int $perPage = 50): LengthAwarePaginator
     {
         return AttributeType::with('category')
             ->withCount('attributes')

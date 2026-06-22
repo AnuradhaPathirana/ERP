@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Save, Star, Tag, X } from 'lucide-react'
 import {
+import Pagination from '../../components/ui/Pagination'
   clearDefaultUnitCategory, createUnitCategories, deleteUnitCategory,
   getUnitCategories, getUnitCategory, setDefaultUnitCategory, updateUnitCategory,
 } from '../../api/unitCategories'
@@ -406,36 +407,7 @@ export default function UnitCategoriesPage() {
                 </table>
               </div>
 
-              {meta && meta.last_page > 1 && (
-                <div className="flex items-center justify-between border-t border-slate-200 px-3 py-2">
-                  <p className="text-xs text-slate-500">
-                    Showing{' '}
-                    <span className="font-medium text-slate-700">
-                      {(page - 1) * meta.per_page + 1}–{Math.min(page * meta.per_page, meta.total)}
-                    </span>{' '}
-                    of <span className="font-medium text-slate-700">{meta.total}</span>
-                  </p>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      onClick={() => setPage((p) => p - 1)}
-                      disabled={page === 1}
-                      className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      ← Prev
-                    </button>
-                    <span className="min-w-14 text-center text-xs text-slate-400">
-                      {page} / {meta.last_page}
-                    </span>
-                    <button
-                      onClick={() => setPage((p) => p + 1)}
-                      disabled={page === meta.last_page}
-                      className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40"
-                    >
-                      Next →
-                    </button>
-                  </div>
-                </div>
-              )}
+              <Pagination meta={meta} page={page} onPageChange={setPage} />
             </>
           )}
         </div>

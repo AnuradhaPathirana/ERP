@@ -3,11 +3,14 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import {
+import Pagination from '../../components/ui/Pagination'
   deletePurchaseOrder,
   getPurchaseOrders,
 } from '../../api/purchaseOrders'
+import { getAllSuppliers } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
+import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
 import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
@@ -19,7 +22,7 @@ const CRUMBS = [
   { label: 'Purchase Orders' },
 ]
 
-const INITIAL_FILTERS = { search: '', status: '', date_from: '', date_to: '' }
+const INITIAL_FILTERS = { search: '', status: '', supplier_id: '', date_from: '', date_to: '' }
 
 const STATUS_STYLES = {
   draft:              'bg-slate-100 text-slate-600',
@@ -46,6 +49,13 @@ export default function PurchaseOrdersPage() {
 
   const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
     useTableFilter(INITIAL_FILTERS)
+
+  const { data: suppliersData } = useQuery({
+    queryKey: ['suppliers-all'],
+    queryFn:  getAllSuppliers,
+    staleTime: Infinity,
+  })
+  const supplierOptions = (suppliersData ?? []).map((s) => ({ value: s.id, label: s.name }))
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['purchase-orders', page, applied],
@@ -91,6 +101,14 @@ export default function PurchaseOrdersPage() {
             <option value="">All statuses</option>
             {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
+        </FilterField>
+        <FilterField label="Supplier">
+          <FilterSearchSelect
+            value={draft.supplier_id}
+            onChange={(val) => setDraft((d) => ({ ...d, supplier_id: val }))}
+            options={supplierOptions}
+            placeholder="All suppliers"
+          />
         </FilterField>
         <FilterField label="Date From">
           <input type="date" className={FILTER_INPUT_CLS} value={draft.date_from} onChange={(e) => setDraft((d) => ({ ...d, date_from: e.target.value }))} />
@@ -173,16 +191,7 @@ export default function PurchaseOrdersPage() {
               </table>
             </div>
 
-            {meta && meta.last_page > 1 && (
-              <div className="flex items-center justify-between border-t border-slate-200 px-4 py-2">
-                <p className="text-xs text-slate-500">Showing <span className="font-medium text-slate-700">{(page - 1) * meta.per_page + 1}–{Math.min(page * meta.per_page, meta.total)}</span> of <span className="font-medium text-slate-700">{meta.total}</span></p>
-                <div className="flex items-center gap-1.5">
-                  <button onClick={() => setPage((p) => p - 1)} disabled={page === 1} className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">← Prev</button>
-                  <span className="min-w-14 text-center text-xs text-slate-400">{page} / {meta.last_page}</span>
-                  <button onClick={() => setPage((p) => p + 1)} disabled={page === meta.last_page} className="rounded px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 disabled:cursor-not-allowed disabled:opacity-40">Next →</button>
-                </div>
-              </div>
-            )}
+            <Pagination meta={meta} page={page} onPageChange={setPage} />
           </>
         )}
       </div>

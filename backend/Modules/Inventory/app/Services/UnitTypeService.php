@@ -10,7 +10,7 @@ use Modules\Inventory\Models\UnitType;
 
 class UnitTypeService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    public function paginate(int $perPage = 50): LengthAwarePaginator
     {
         return UnitType::with('category')
             ->orderBy('name')

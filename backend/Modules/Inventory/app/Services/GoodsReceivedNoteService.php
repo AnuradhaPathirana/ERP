@@ -22,7 +22,7 @@ use Modules\Inventory\Models\StockTransaction;
 class GoodsReceivedNoteService
 {
     /** @param array<string, mixed> $filters */
-    public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
+    public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
         $query = GoodsReceivedNote::with(['purchaseOrder', 'supplier', 'store'])
             ->orderByDesc('grn_date')

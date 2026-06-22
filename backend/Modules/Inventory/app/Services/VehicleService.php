@@ -11,7 +11,7 @@ use Modules\Inventory\Models\VehicleMaster;
 
 class VehicleService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    public function paginate(int $perPage = 50): LengthAwarePaginator
     {
         return VehicleMaster::with('assignedDriver')
             ->orderBy('vehicle_code')

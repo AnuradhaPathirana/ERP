@@ -11,7 +11,7 @@ use Modules\Inventory\Models\Driver;
 
 class DriverService
 {
-    public function paginate(int $perPage = 25): LengthAwarePaginator
+    public function paginate(int $perPage = 50): LengthAwarePaginator
     {
         return Driver::orderBy('first_name')->orderBy('last_name')->paginate($perPage);
     }

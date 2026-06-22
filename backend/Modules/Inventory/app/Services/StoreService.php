@@ -12,7 +12,7 @@ use Modules\Inventory\Models\Store;
 class StoreService
 {
     /** @param array<string, mixed> $filters */
-    public function paginate(int $perPage = 25, array $filters = []): LengthAwarePaginator
+    public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
         $query = Store::with(['storeType', 'location', 'parentStore'])
             ->orderBy('store_name');
