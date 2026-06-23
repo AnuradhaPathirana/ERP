@@ -17,7 +17,7 @@ const CRUMBS = [
   { label: 'Suppliers' },
 ]
 
-const INITIAL_FILTERS = { search: '', supplier_type: '', bil_city: '', bil_country: '' }
+const INITIAL_FILTERS = { search: '', supplier_type: '', mobile: '', bil_city: '', bil_country: '' }
 
 const SUPPLIER_TYPES = ['Local', 'Foreign', 'Service', 'Manufacturer', 'Distributor', 'Other']
 
@@ -99,6 +99,15 @@ export default function SuppliersPage() {
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
+        </FilterField>
+
+        <FilterField label="Mobile">
+          <input
+            className={FILTER_INPUT_CLS}
+            placeholder="Mobile number…"
+            value={draft.mobile}
+            onChange={(e) => setDraft((d) => ({ ...d, mobile: e.target.value }))}
+          />
         </FilterField>
 
         <FilterField label="Billing City">

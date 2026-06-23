@@ -30,6 +30,7 @@ use Modules\Inventory\Http\Controllers\GrnPdfController;
 use Modules\Inventory\Http\Controllers\StockController;
 use Modules\Inventory\Http\Controllers\CostingController;
 use Modules\Inventory\Http\Controllers\CostingExpenseTypeController;
+use Modules\Inventory\Http\Controllers\ReportController;
 
 Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(function (): void {
     // Named routes before apiResource so static segments are not swallowed by {unit_category}
@@ -59,6 +60,8 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.unit-conversions.save-rates');
 
     // Products — per-action permission middleware applied in ProductController constructor
+    Route::get('products/all', [ProductController::class, 'all'])
+        ->name('inventory.products.all');
     Route::get('products/check-code', [ProductController::class, 'checkCode'])
         ->name('inventory.products.check-code');
 
@@ -233,6 +236,21 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.grns.pdf');
     Route::apiResource('goods-received-notes', GoodsReceivedNoteController::class)
         ->names('inventory.grns');
+
+    // ── Reports ───────────────────────────────────────────────────────────────
+    Route::prefix('reports/inventory')->name('inventory.reports.')->group(function (): void {
+        Route::get('stock-levels',      [ReportController::class, 'stockLevels'])->name('stock-levels');
+        Route::get('stock-movements',   [ReportController::class, 'stockMovements'])->name('stock-movements');
+        Route::get('low-stock',         [ReportController::class, 'lowStock'])->name('low-stock');
+        Route::get('stock-valuation',   [ReportController::class, 'stockValuation'])->name('stock-valuation');
+        Route::get('batch-expiry',      [ReportController::class, 'batchExpiry'])->name('batch-expiry');
+        Route::get('purchase-requests', [ReportController::class, 'purchaseRequests'])->name('purchase-requests');
+        Route::get('purchase-orders',   [ReportController::class, 'purchaseOrders'])->name('purchase-orders');
+        Route::get('outstanding-pos',   [ReportController::class, 'outstandingPOs'])->name('outstanding-pos');
+        Route::get('grn',               [ReportController::class, 'grn'])->name('grn');
+        Route::get('supplier-summary',  [ReportController::class, 'supplierSummary'])->name('supplier-summary');
+        Route::get('landed-costs',      [ReportController::class, 'landedCosts'])->name('landed-costs');
+    });
 
     // GRN Attachments
     Route::get('goods-received-notes/{goods_received_note}/attachments', [GrnAttachmentController::class, 'index'])

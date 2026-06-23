@@ -25,7 +25,7 @@ class CustomerController extends Controller
 
     public function index(): JsonResponse
     {
-        $filters   = request()->only(['search', 'customer_type', 'billing_city', 'billing_country']);
+        $filters   = request()->only(['search', 'customer_type', 'billing_city', 'billing_country', 'customer_code', 'mobile', 'email']);
         $paginator = $this->service->paginate(50, $filters);
 
         return response()->json([

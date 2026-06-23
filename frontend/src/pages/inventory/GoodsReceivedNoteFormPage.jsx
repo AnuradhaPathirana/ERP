@@ -17,6 +17,8 @@ import {
 import { getGrnAttachments, uploadGrnAttachments, deleteGrnAttachment } from '../../api/grnAttachments'
 import { getPurchaseOrders } from '../../api/purchaseOrders'
 import { getAllSuppliers } from '../../api/suppliers'
+import { getAllLocations } from '../../api/locations'
+import { getAllStores } from '../../api/stores'
 import { getProducts } from '../../api/products'
 import { getAllUnitTypes } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
@@ -25,11 +27,23 @@ import { showError, showSuccess } from '../../utils/alerts'
 
 /* ── Style tokens ─────────────────────────────────────────────── */
 const INPUT_CLS   = 'block w-full rounded border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15'
+const INPUT_ERR   = 'block w-full rounded border-2 border-red-400 bg-red-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-400/20'
 const INPUT_RO    = 'block w-full rounded border-2 border-slate-100 bg-slate-100 px-2 py-1 text-xs text-slate-500 outline-none cursor-default'
 const SELECT_CLS  = 'block w-full rounded border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer'
+const SELECT_ERR  = 'block w-full rounded border-2 border-red-400 bg-red-50 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-400/20 cursor-pointer'
 const TABLE_INPUT = 'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white'
+const TABLE_ERR   = 'block w-full rounded border border-red-400 bg-red-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white'
 const LABEL_CLS   = 'text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap'
 const ERR_CLS     = 'mt-0.5 text-[10px] text-red-500'
+
+/* ── Header field validation rules ───────────────────────────── */
+const HEADER_RULES = {
+  supplier_id:      (v) => v ? null : 'Supplier is required',
+  grn_date:         (v) => v ? null : 'GRN date is required',
+  transaction_date: (v) => v ? null : 'Transaction date is required',
+  location_id:      (v) => v ? null : 'Location is required',
+  store_id:         (v) => v ? null : 'Store is required',
+}
 
 const ALLOWED_ATTACHMENT_TYPES = /^(image\/.+|application\/pdf)$/
 
@@ -225,6 +239,8 @@ export default function GoodsReceivedNoteFormPage() {
     reference_no:     '',
     remarks:          '',
     payment_terms:    '',
+    location_id:      '',
+    store_id:         '',
   })
   const [grnNoPreview,  setGrnNoPreview]  = useState('')
   const [lastGrnDate,   setLastGrnDate]   = useState('')
@@ -246,6 +262,10 @@ export default function GoodsReceivedNoteFormPage() {
   const [items,         setItems]         = useState([])
   const [errors,        setErrors]        = useState({})
   const [batchModalIdx, setBatchModalIdx] = useState(null)
+
+  /* ── Real-time validation state ───────────────────────────── */
+  const [touched,     setTouched]     = useState({})
+  const [itemTouched, setItemTouched] = useState({})
 
   /* ── Product search state (manual rows) ───────────────────── */
   const [productSearch, setProductSearch] = useState({ key: null, query: '', results: [], open: false })
@@ -280,6 +300,19 @@ export default function GoodsReceivedNoteFormPage() {
     queryKey: ['unit-types-all'],
     queryFn:  getAllUnitTypes,
   })
+  const { data: locations = [] } = useQuery({
+    queryKey: ['locations-all'],
+    queryFn:  getAllLocations,
+    staleTime: Infinity,
+  })
+  const { data: allStores = [] } = useQuery({
+    queryKey: ['stores-all'],
+    queryFn:  getAllStores,
+    staleTime: Infinity,
+  })
+  const storesForLocation = form.location_id
+    ? allStores.filter((s) => String(s.location_id) === String(form.location_id))
+    : allStores
 
   const { data: supplierConfirmedPOs, isLoading: loadingConfirmed } = useQuery({
     queryKey: ['pos-supplier-confirmed', form.supplier_id],
@@ -322,13 +355,17 @@ export default function GoodsReceivedNoteFormPage() {
     if (!existingGRN?.data) return
     const grn = existingGRN.data
     setGrnNoPreview(grn.grn_no ?? '')
+    setTouched({})
+    setItemTouched({})
     setForm({
-      supplier_id:      String(grn.supplier_id ?? ''),
-      grn_date:         grn.grn_date         ?? today,
-      transaction_date: grn.transaction_date ?? today,
-      reference_no:     grn.reference_no     ?? '',
-      remarks:          grn.remarks          ?? '',
-      payment_terms:    grn.payment_terms    ?? '',
+      supplier_id:      String(grn.supplier_id   ?? ''),
+      grn_date:         grn.grn_date             ?? today,
+      transaction_date: grn.transaction_date     ?? today,
+      reference_no:     grn.reference_no         ?? '',
+      remarks:          grn.remarks              ?? '',
+      payment_terms:    grn.payment_terms        ?? '',
+      location_id:      String(grn.location_id   ?? ''),
+      store_id:         String(grn.store_id      ?? ''),
     })
     if (grn.items?.length) {
       setItems(grn.items.map((it) => ({
@@ -732,8 +769,12 @@ export default function GoodsReceivedNoteFormPage() {
   }
 
   const handleSubmit = () => {
-    if (!form.supplier_id) {
-      showError('Supplier is required. Please select a supplier.')
+    // Touch all header fields so inline errors appear
+    touchAll()
+
+    const hasHeaderErrors = Object.entries(HEADER_RULES).some(([field, rule]) => rule(form[field]))
+    if (hasHeaderErrors) {
+      showError('Please fill in all required fields highlighted in red.')
       return
     }
     const validItems = items.filter((r) => r.product_id && parseFloat(r.quantity_received) > 0)
@@ -749,6 +790,8 @@ export default function GoodsReceivedNoteFormPage() {
       reference_no:     form.reference_no     || null,
       remarks:          form.remarks          || null,
       payment_terms:    form.payment_terms    || null,
+      location_id:      parseInt(form.location_id) || null,
+      store_id:         parseInt(form.store_id)    || null,
       items: validItems.map((r) => ({
         po_item_id:        r.po_item_id ? parseInt(r.po_item_id) : null,
         product_id:        parseInt(r.product_id),
@@ -776,7 +819,40 @@ export default function GoodsReceivedNoteFormPage() {
     saveMutation.mutate(payload)
   }
 
-  const err = (f) => errors[f]?.[0]
+  /* ── Validation helpers ───────────────────────────────────── */
+  const touch = (field) => setTouched((t) => ({ ...t, [field]: true }))
+  const touchAll = () => setTouched(Object.fromEntries(Object.keys(HEADER_RULES).map((k) => [k, true])))
+
+  // Client-side inline errors (only shown after field is touched)
+  const clientErrors = Object.fromEntries(
+    Object.entries(HEADER_RULES).map(([field, rule]) => [
+      field,
+      touched[field] ? rule(form[field]) : null,
+    ])
+  )
+
+  // Merge client errors with server errors (client takes priority)
+  const getErr = (field) => clientErrors[field] ?? errors[field]?.[0] ?? null
+
+  // Deprecated alias kept for any remaining usages
+  const err = getErr
+
+  // Conditional input/select style based on error state
+  const inpCls  = (field) => getErr(field) ? INPUT_ERR  : INPUT_CLS
+  const selCls  = (field) => getErr(field) ? SELECT_ERR : SELECT_CLS
+
+  // Item-level row validation
+  const touchItemField = (rowKey, field) =>
+    setItemTouched((t) => ({ ...t, [rowKey]: { ...t[rowKey], [field]: true } }))
+
+  const getItemErr = (rowKey, field) => {
+    if (!itemTouched[rowKey]?.[field]) return null
+    const row = items.find((r) => r._key === rowKey)
+    if (!row) return null
+    if (field === 'qty')   return parseFloat(row.quantity_received) > 0 ? null : 'Required'
+    if (field === 'price') return row.unit_price !== '' && parseFloat(row.unit_price) >= 0 ? null : 'Required'
+    return null
+  }
 
   const allSelected = displayedPOs.length > 0 && selectedPoIds.size === displayedPOs.length
 
@@ -807,20 +883,22 @@ export default function GoodsReceivedNoteFormPage() {
           />
           <div className="grid grid-cols-1 gap-x-3 gap-y-1.5 p-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
 
-            <FieldRow label="GRN Date" required>
+            <FieldRow label="GRN Date" required error={getErr('grn_date')}>
               <input
                 type="date"
-                className={INPUT_CLS}
+                className={inpCls('grn_date')}
                 value={form.grn_date}
                 onChange={(e) => setForm((f) => ({ ...f, grn_date: e.target.value }))}
+                onBlur={() => touch('grn_date')}
               />
             </FieldRow>
-            <FieldRow label="Transaction Date" required>
+            <FieldRow label="Transaction Date" required error={getErr('transaction_date')}>
               <input
                 type="date"
-                className={INPUT_CLS}
+                className={inpCls('transaction_date')}
                 value={form.transaction_date}
                 onChange={(e) => setForm((f) => ({ ...f, transaction_date: e.target.value }))}
+                onBlur={() => touch('transaction_date')}
               />
             </FieldRow>
 
@@ -850,11 +928,12 @@ export default function GoodsReceivedNoteFormPage() {
               <input type="text" className={INPUT_RO} value={lastGrnAmount || '—'} readOnly tabIndex={-1} />
             </FieldRow>
 
-            <FieldRow label="Supplier Code/Name" required error={err('supplier_id')}>
+            <FieldRow label="Supplier Code/Name" required error={getErr('supplier_id')}>
               <select
-                className={SELECT_CLS}
+                className={selCls('supplier_id')}
                 value={form.supplier_id}
                 onChange={(e) => handleSupplierChange(e.target.value)}
+                onBlur={() => touch('supplier_id')}
               >
                 <option value="">Select</option>
                 {suppliers.map((s) => (
@@ -864,6 +943,36 @@ export default function GoodsReceivedNoteFormPage() {
                 ))}
               </select>
             </FieldRow>
+
+            <FieldRow label="Location" required error={getErr('location_id')}>
+              <select
+                className={selCls('location_id')}
+                value={form.location_id}
+                onChange={(e) => setForm((f) => ({ ...f, location_id: e.target.value, store_id: '' }))}
+                onBlur={() => touch('location_id')}
+              >
+                <option value="">Select</option>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>{l.location_name}</option>
+                ))}
+              </select>
+            </FieldRow>
+
+            <FieldRow label="Store" required error={getErr('store_id')}>
+              <select
+                className={selCls('store_id')}
+                value={form.store_id}
+                onChange={(e) => setForm((f) => ({ ...f, store_id: e.target.value }))}
+                onBlur={() => touch('store_id')}
+                disabled={!form.location_id}
+              >
+                <option value="">{form.location_id ? 'Select' : 'Select location first'}</option>
+                {storesForLocation.map((s) => (
+                  <option key={s.id} value={s.id}>{s.store_name}</option>
+                ))}
+              </select>
+            </FieldRow>
+
             <FieldRow label="Payment Terms">
               <select
                 className={SELECT_CLS}
@@ -1204,31 +1313,43 @@ export default function GoodsReceivedNoteFormPage() {
 
                         {/* Qty Received */}
                         <td className="px-2 py-1">
-                          <input
-                            ref={setCellRef(row._key, 'qty')}
-                            type="number" min="0" step="0.0001"
-                            max={!isManual && row.remaining_qty != null ? row.remaining_qty : undefined}
-                            className={TABLE_INPUT + ' w-24'}
-                            value={row.quantity_received}
-                            onChange={(e) => setRowField(idx, 'quantity_received', e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
-                            }}
-                          />
+                          <div className="flex flex-col gap-0.5">
+                            <input
+                              ref={setCellRef(row._key, 'qty')}
+                              type="number" min="0" step="0.0001"
+                              max={!isManual && row.remaining_qty != null ? row.remaining_qty : undefined}
+                              className={(getItemErr(row._key, 'qty') ? TABLE_ERR : TABLE_INPUT) + ' w-24'}
+                              value={row.quantity_received}
+                              onChange={(e) => setRowField(idx, 'quantity_received', e.target.value)}
+                              onBlur={() => touchItemField(row._key, 'qty')}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
+                              }}
+                            />
+                            {getItemErr(row._key, 'qty') && (
+                              <span className="text-[9px] text-red-500 leading-none">{getItemErr(row._key, 'qty')}</span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Unit Price */}
                         <td className="px-2 py-1">
-                          <input
-                            ref={setCellRef(row._key, 'price')}
-                            type="number" min="0" step="0.01"
-                            className={TABLE_INPUT + ' w-20'}
-                            value={row.unit_price}
-                            onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'disc') }
-                            }}
-                          />
+                          <div className="flex flex-col gap-0.5">
+                            <input
+                              ref={setCellRef(row._key, 'price')}
+                              type="number" min="0" step="0.01"
+                              className={(getItemErr(row._key, 'price') ? TABLE_ERR : TABLE_INPUT) + ' w-20'}
+                              value={row.unit_price}
+                              onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
+                              onBlur={() => touchItemField(row._key, 'price')}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'disc') }
+                              }}
+                            />
+                            {getItemErr(row._key, 'price') && (
+                              <span className="text-[9px] text-red-500 leading-none">{getItemErr(row._key, 'price')}</span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Disc% */}

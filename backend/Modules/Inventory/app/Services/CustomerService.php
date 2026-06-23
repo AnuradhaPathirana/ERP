@@ -37,6 +37,18 @@ class CustomerService
             $query->where('billing_country', 'like', '%' . $filters['billing_country'] . '%');
         }
 
+        if (!empty($filters['customer_code'])) {
+            $query->where('customer_code', 'like', '%' . $filters['customer_code'] . '%');
+        }
+
+        if (!empty($filters['mobile'])) {
+            $query->where('customer_mobile', 'like', '%' . $filters['mobile'] . '%');
+        }
+
+        if (!empty($filters['email'])) {
+            $query->where('customer_email', 'like', '%' . $filters['email'] . '%');
+        }
+
         return $query->paginate($perPage);
     }
 

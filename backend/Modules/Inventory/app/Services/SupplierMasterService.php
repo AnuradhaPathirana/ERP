@@ -30,6 +30,10 @@ class SupplierMasterService
             $query->where('supplier_type', $filters['supplier_type']);
         }
 
+        if (!empty($filters['mobile'])) {
+            $query->where('mobile', 'like', '%' . $filters['mobile'] . '%');
+        }
+
         if (!empty($filters['bil_city'])) {
             $query->where('bil_city', 'like', '%' . $filters['bil_city'] . '%');
         }

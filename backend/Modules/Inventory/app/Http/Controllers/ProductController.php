@@ -18,7 +18,7 @@ class ProductController extends Controller
 {
     public function __construct(private readonly ProductService $service)
     {
-        $this->middleware('permission:view_products')->only(['index', 'show']);
+        $this->middleware('permission:view_products')->only(['index', 'show', 'all', 'checkCode']);
         $this->middleware('permission:create_products')->only(['store']);
         $this->middleware('permission:edit_products')->only(['update']);
         $this->middleware('permission:delete_products')->only(['destroy']);
@@ -76,6 +76,15 @@ class ProductController extends Controller
         $this->service->delete($product);
 
         return response()->json(null, 204);
+    }
+
+    /** Lightweight list for dropdowns — id, product_code, name only. */
+    public function all(): JsonResponse
+    {
+        $products = Product::orderBy('name')
+            ->get(['id', 'product_code', 'name']);
+
+        return response()->json(['data' => $products]);
     }
 
     /** Check whether a product_code is available (unique). */

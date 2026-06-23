@@ -326,17 +326,15 @@ class GoodsReceivedNoteService
                         $batch->update(['current_qty' => $batch->initial_qty]);
 
                         // Update denormalized stock balance per batch quantity
-                        if ($grn->store_id) {
-                            $pivot = ProductLocationStore::firstOrCreate(
-                                [
-                                    'product_id'  => $item->product_id,
-                                    'store_id'    => $grn->store_id,
-                                    'location_id' => $grn->location_id,
-                                ],
-                                ['current_stock' => 0]
-                            );
-                            $pivot->increment('current_stock', (float) $assignment->quantity);
-                        }
+                        $pivot = ProductLocationStore::firstOrCreate(
+                            [
+                                'product_id'  => $item->product_id,
+                                'store_id'    => $grn->store_id,
+                                'location_id' => $grn->location_id,
+                            ],
+                            ['current_stock' => 0]
+                        );
+                        $pivot->increment('current_stock', (float) $assignment->quantity);
                     }
                 } else {
                     // Non-batch product: single stock transaction as before
@@ -357,17 +355,15 @@ class GoodsReceivedNoteService
                         'created_by'       => auth()->id(),
                     ]);
 
-                    if ($grn->store_id) {
-                        $pivot = ProductLocationStore::firstOrCreate(
-                            [
-                                'product_id'  => $item->product_id,
-                                'store_id'    => $grn->store_id,
-                                'location_id' => $grn->location_id,
-                            ],
-                            ['current_stock' => 0]
-                        );
-                        $pivot->increment('current_stock', (float) $item->quantity_received);
-                    }
+                    $pivot = ProductLocationStore::firstOrCreate(
+                        [
+                            'product_id'  => $item->product_id,
+                            'store_id'    => $grn->store_id,
+                            'location_id' => $grn->location_id,
+                        ],
+                        ['current_stock' => 0]
+                    );
+                    $pivot->increment('current_stock', (float) $item->quantity_received);
                 }
 
                 // Update quantity_received on the linked PO item (skip for manual GRN items)

@@ -48,6 +48,19 @@ const GoodsReceivedNotesPage   = lazy(() => import('./pages/inventory/GoodsRecei
 const GoodsReceivedNoteFormPage = lazy(() => import('./pages/inventory/GoodsReceivedNoteFormPage'))
 const CostingsPage              = lazy(() => import('./pages/inventory/CostingsPage'))
 const CostingFormPage           = lazy(() => import('./pages/inventory/CostingFormPage'))
+// Inventory Reports
+const StockLevelsReport        = lazy(() => import('./pages/inventory/reports/StockLevelsReport'))
+const StockMovementsReport     = lazy(() => import('./pages/inventory/reports/StockMovementsReport'))
+const LowStockReport           = lazy(() => import('./pages/inventory/reports/LowStockReport'))
+const StockValuationReport     = lazy(() => import('./pages/inventory/reports/StockValuationReport'))
+const BatchExpiryReport        = lazy(() => import('./pages/inventory/reports/BatchExpiryReport'))
+const PurchaseRequestsReport   = lazy(() => import('./pages/inventory/reports/PurchaseRequestsReport'))
+const PurchaseOrdersReport     = lazy(() => import('./pages/inventory/reports/PurchaseOrdersReport'))
+const OutstandingPOsReport     = lazy(() => import('./pages/inventory/reports/OutstandingPOsReport'))
+const GrnReport                = lazy(() => import('./pages/inventory/reports/GrnReport'))
+const SupplierSummaryReport    = lazy(() => import('./pages/inventory/reports/SupplierSummaryReport'))
+const LandedCostsReport        = lazy(() => import('./pages/inventory/reports/LandedCostsReport'))
+
 const UserManagementPage    = lazy(() => import('./pages/admin/UserManagementPage'))
 const RolesPage             = lazy(() => import('./pages/admin/RolesPage'))
 const RoleFormPage          = lazy(() => import('./pages/admin/RoleFormPage'))
@@ -145,6 +158,19 @@ export default function App() {
         <Route path="/inventory/costings/create"               element={<Lazy component={CostingFormPage} />} />
         <Route path="/inventory/costings/:id"                  element={<Lazy component={CostingFormPage} />} />
         <Route path="/inventory/costings/:id/edit"             element={<Lazy component={CostingFormPage} />} />
+
+        {/* ── Inventory Reports ── */}
+        <Route path="/inventory/reports/stock-levels"      element={<Lazy component={StockLevelsReport} />} />
+        <Route path="/inventory/reports/stock-movements"   element={<Lazy component={StockMovementsReport} />} />
+        <Route path="/inventory/reports/low-stock"         element={<Lazy component={LowStockReport} />} />
+        <Route path="/inventory/reports/stock-valuation"   element={<Lazy component={StockValuationReport} />} />
+        <Route path="/inventory/reports/batch-expiry"      element={<Lazy component={BatchExpiryReport} />} />
+        <Route path="/inventory/reports/purchase-requests" element={<Lazy component={PurchaseRequestsReport} />} />
+        <Route path="/inventory/reports/purchase-orders"   element={<Lazy component={PurchaseOrdersReport} />} />
+        <Route path="/inventory/reports/outstanding-pos"   element={<Lazy component={OutstandingPOsReport} />} />
+        <Route path="/inventory/reports/grn"               element={<Lazy component={GrnReport} />} />
+        <Route path="/inventory/reports/supplier-summary"  element={<Lazy component={SupplierSummaryReport} />} />
+        <Route path="/inventory/reports/landed-costs"      element={<Lazy component={LandedCostsReport} />} />
       </Route>
 
       {/* Fallback */}

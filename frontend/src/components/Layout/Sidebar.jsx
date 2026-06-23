@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
+  AlertTriangle,
   ArrowLeftRight,
+  BarChart2,
   Box,
   Building2,
   Bus,
@@ -10,7 +12,9 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardList,
+  Clock,
   DollarSign,
+  FlaskConical,
   FolderTree,
   LayoutDashboard,
   Layers,
@@ -56,6 +60,24 @@ const NAV_ITEMS = [
       { label: 'Purchase Orders',   to: '/inventory/purchase-orders',      icon: ShoppingBag,   permissionGuard: 'view_purchase_orders' },
       { label: 'GRN',               to: '/inventory/goods-received-notes', icon: PackageCheck,  permissionGuard: 'view_grns' },
       { label: 'Costings',          to: '/inventory/costings',             icon: Receipt,       permissionGuard: 'view_costings' },
+      {
+        label: 'Reports',
+        icon: BarChart2,
+        isSubgroup: true,
+        children: [
+          { label: 'Stock Levels',       to: '/inventory/reports/stock-levels',       icon: BarChart2,      permissionGuard: 'view_reports' },
+          { label: 'Stock Movements',    to: '/inventory/reports/stock-movements',    icon: ArrowLeftRight, permissionGuard: 'view_reports' },
+          { label: 'Low Stock Alert',    to: '/inventory/reports/low-stock',          icon: AlertTriangle,  permissionGuard: 'view_reports' },
+          { label: 'Stock Valuation',    to: '/inventory/reports/stock-valuation',    icon: DollarSign,     permissionGuard: 'view_reports' },
+          { label: 'Batch / Expiry',     to: '/inventory/reports/batch-expiry',       icon: FlaskConical,   permissionGuard: 'view_reports' },
+          { label: 'Purchase Requests',  to: '/inventory/reports/purchase-requests',  icon: ClipboardList,  permissionGuard: 'view_reports' },
+          { label: 'Purchase Orders',    to: '/inventory/reports/purchase-orders',    icon: ShoppingBag,    permissionGuard: 'view_reports' },
+          { label: 'Outstanding POs',    to: '/inventory/reports/outstanding-pos',    icon: Clock,          permissionGuard: 'view_reports' },
+          { label: 'GRN Report',         to: '/inventory/reports/grn',               icon: PackageCheck,   permissionGuard: 'view_reports' },
+          { label: 'Supplier Summary',   to: '/inventory/reports/supplier-summary',   icon: Users,          permissionGuard: 'view_reports' },
+          { label: 'Landed Costs',       to: '/inventory/reports/landed-costs',       icon: Receipt,        permissionGuard: 'view_reports' },
+        ],
+      },
       {
         label: 'Settings & Configurations',
         icon: Settings2,

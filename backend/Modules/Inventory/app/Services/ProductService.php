@@ -22,8 +22,8 @@ class ProductService
             $term = '%' . $filters['search'] . '%';
             $query->where(function ($q) use ($term) {
                 $q->where('name', 'like', $term)
-                  ->orWhere('product_code', 'like', $term)
-                  ->orWhere('ean_13', 'like', $term);
+                    ->orWhere('product_code', 'like', $term)
+                    ->orWhere('ean_13', 'like', $term);
             });
         }
 
@@ -116,22 +116,49 @@ class ProductService
     /** @param array<array{location_id: ?int, store_id: ?int}> $locationStores */
     private function syncLocationStores(Product $product, array $locationStores): void
     {
-        $product->locationStores()->delete();
-
-        $rows = collect($locationStores)
-            ->filter(fn (array $row) => !empty($row['location_id']) || !empty($row['store_id']))
-            ->values()
-            ->map(fn (array $row) => [
-                'product_id'  => $product->id,
+        $incoming = collect($locationStores)
+            ->filter(fn(array $row) => !empty($row['location_id']) || !empty($row['store_id']))
+            ->map(fn(array $row) => [
                 'location_id' => !empty($row['location_id']) ? (int) $row['location_id'] : null,
                 'store_id'    => !empty($row['store_id'])    ? (int) $row['store_id']    : null,
-                'created_at'  => now(),
-                'updated_at'  => now(),
             ])
+            ->values();
+
+        $incomingKeys = $incoming
+            ->map(fn($r) => "{$r['location_id']}:{$r['store_id']}")
             ->all();
 
-        if (!empty($rows)) {
-            ProductLocationStore::insert($rows);
+        $existing     = $product->locationStores()->get(['location_id', 'store_id']);
+        $existingKeys = $existing
+            ->map(fn($r) => "{$r->location_id}:{$r->store_id}")
+            ->all();
+
+        // Delete only rows removed from the list — preserves current_stock on kept rows
+        foreach ($existing as $row) {
+            if (!in_array("{$row->location_id}:{$row->store_id}", $incomingKeys, true)) {
+                $product->locationStores()
+                    ->where('location_id', $row->location_id)
+                    ->where('store_id',    $row->store_id)
+                    ->delete();
+            }
+        }
+
+        // Insert only genuinely new pairs with current_stock = 0
+        $now      = now();
+        $toInsert = $incoming
+            ->filter(fn($r) => !in_array("{$r['location_id']}:{$r['store_id']}", $existingKeys, true))
+            ->map(fn($r) => [
+                'product_id'  => $product->id,
+                'location_id' => $r['location_id'],
+                'store_id'    => $r['store_id'],
+                'created_at'  => $now,
+                'updated_at'  => $now,
+            ])
+            ->values()
+            ->all();
+
+        if (!empty($toInsert)) {
+            ProductLocationStore::insert($toInsert);
         }
     }
 
@@ -141,10 +168,10 @@ class ProductService
         $product->productAttributes()->delete();
 
         $rows = collect($productAttributes)
-            ->filter(fn (array $row) => !empty($row['attribute_id']) && !empty($row['attribute_type_id']))
+            ->filter(fn(array $row) => !empty($row['attribute_id']) && !empty($row['attribute_type_id']))
             ->unique('attribute_id')
             ->values()
-            ->map(fn (array $row) => [
+            ->map(fn(array $row) => [
                 'product_id'        => $product->id,
                 'attribute_type_id' => (int) $row['attribute_type_id'],
                 'attribute_id'      => (int) $row['attribute_id'],
@@ -177,7 +204,7 @@ class ProductService
             'stock_releasing_method'   => $data->stockReleasingMethod,
             'tracking_type'            => $data->trackingType,
             'lock_purchase'            => $data->lockPurchase,
-            'allow_complimentary_items'=> $data->allowComplementaryItems,
+            'allow_complimentary_items' => $data->allowComplementaryItems,
             'free_issue'               => $data->freeIssue,
             'allow_minus'              => $data->allowMinus,
             'not_allow_direct_sale'    => $data->notAllowDirectSale,

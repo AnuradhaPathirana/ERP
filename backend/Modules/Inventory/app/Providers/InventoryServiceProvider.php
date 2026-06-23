@@ -2,45 +2,22 @@
 
 namespace Modules\Inventory\Providers;
 
+use Modules\Inventory\Console\Commands\RecalculateStockBalances;
 use Nwidart\Modules\Support\ModuleServiceProvider;
-use Illuminate\Console\Scheduling\Schedule;
 
 class InventoryServiceProvider extends ModuleServiceProvider
 {
-    /**
-     * The name of the module.
-     */
-    protected string $name = 'Inventory';
-
-    /**
-     * The lowercase version of the module name.
-     */
+    protected string $name      = 'Inventory';
     protected string $nameLower = 'inventory';
 
-    /**
-     * Command classes to register.
-     *
-     * @var string[]
-     */
-    // protected array $commands = [];
+    /** @var string[] */
+    protected array $commands = [
+        RecalculateStockBalances::class,
+    ];
 
-    /**
-     * Provider classes to register.
-     *
-     * @var string[]
-     */
+    /** @var string[] */
     protected array $providers = [
         EventServiceProvider::class,
         RouteServiceProvider::class,
     ];
-
-    /**
-     * Define module schedules.
-     * 
-     * @param $schedule
-     */
-    // protected function configureSchedules(Schedule $schedule): void
-    // {
-    //     $schedule->command('inspire')->hourly();
-    // }
 }

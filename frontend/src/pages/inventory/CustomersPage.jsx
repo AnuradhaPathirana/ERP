@@ -17,7 +17,7 @@ const CRUMBS = [
   { label: 'Customers' },
 ]
 
-const INITIAL_FILTERS = { search: '', customer_type: '', billing_city: '', billing_country: '' }
+const INITIAL_FILTERS = { search: '', customer_type: '', customer_code: '', mobile: '', email: '', billing_city: '', billing_country: '' }
 
 const CUSTOMER_TYPES = ['Trade', 'Retail', 'Wholesale', 'Corporate']
 
@@ -106,6 +106,33 @@ export default function CustomersPage() {
               <option key={t} value={t}>{t}</option>
             ))}
           </select>
+        </FilterField>
+
+        <FilterField label="Customer Code">
+          <input
+            className={FILTER_INPUT_CLS}
+            placeholder="Code…"
+            value={draft.customer_code}
+            onChange={(e) => setDraft((d) => ({ ...d, customer_code: e.target.value }))}
+          />
+        </FilterField>
+
+        <FilterField label="Mobile">
+          <input
+            className={FILTER_INPUT_CLS}
+            placeholder="Mobile number…"
+            value={draft.mobile}
+            onChange={(e) => setDraft((d) => ({ ...d, mobile: e.target.value }))}
+          />
+        </FilterField>
+
+        <FilterField label="Email">
+          <input
+            className={FILTER_INPUT_CLS}
+            placeholder="Email address…"
+            value={draft.email}
+            onChange={(e) => setDraft((d) => ({ ...d, email: e.target.value }))}
+          />
         </FilterField>
 
         <FilterField label="Billing City">

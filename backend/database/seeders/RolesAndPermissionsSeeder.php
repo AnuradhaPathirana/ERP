@@ -45,6 +45,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'delete_grns',
         'confirm_costings',
         'manage_costing_expense_types',
+        'view_reports',
     ];
 
     public function run(): void

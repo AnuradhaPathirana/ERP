@@ -25,7 +25,7 @@ class SupplierMasterController extends Controller
 
     public function index(): JsonResponse
     {
-        $filters   = request()->only(['search', 'supplier_type', 'bil_city', 'bil_country']);
+        $filters   = request()->only(['search', 'supplier_type', 'mobile', 'bil_city', 'bil_country']);
         $paginator = $this->service->paginate(50, $filters);
 
         return response()->json([

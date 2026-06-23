@@ -106,6 +106,7 @@ export default function CostingFormPage() {
   const [supplierGrns,    setSupplierGrns]    = useState([])
   const [selectedGrnIds,  setSelectedGrnIds]  = useState(new Set())
   const [loadingGrns,     setLoadingGrns]     = useState(false)
+  const [grnSearch,       setGrnSearch]       = useState('')
   // Already-linked GRNs for an existing costing — merged into supplier GRN list because
   // the "available" API excludes GRNs that belong to confirmed costings.
   const linkedGrnsRef = useRef([])
@@ -114,6 +115,9 @@ export default function CostingFormPage() {
   const [expenseRows, setExpenseRows] = useState([]) // { expense_type_id, name, amount, note }
 
   /* ── Derived totals ───────────────────────────────────────── */
+  const filteredGrns  = grnSearch
+    ? supplierGrns.filter((g) => g.grn_no?.toLowerCase().includes(grnSearch.toLowerCase()))
+    : supplierGrns
   const selectedGrns  = supplierGrns.filter((g) => selectedGrnIds.has(g.id))
   const grnTotal      = selectedGrns.reduce((s, g) => s + (parseFloat(g.total_amount) || 0), 0)
   const totalItemsCount = selectedGrns.reduce((s, g) => s + (parseFloat(g.total_items) || 0), 0)
@@ -244,6 +248,21 @@ export default function CostingFormPage() {
     setSelectedGrnIds((prev) => {
       const next = new Set(prev)
       next.has(grnId) ? next.delete(grnId) : next.add(grnId)
+      return next
+    })
+  }
+
+  const allFilteredSelected  = filteredGrns.length > 0 && filteredGrns.every((g) => selectedGrnIds.has(g.id))
+  const someFilteredSelected = filteredGrns.some((g) => selectedGrnIds.has(g.id))
+
+  function toggleAllGrns() {
+    setSelectedGrnIds((prev) => {
+      const next = new Set(prev)
+      if (allFilteredSelected) {
+        filteredGrns.forEach((g) => next.delete(g.id))
+      } else {
+        filteredGrns.forEach((g) => next.add(g.id))
+      }
       return next
     })
   }
@@ -395,18 +414,47 @@ export default function CostingFormPage() {
               title="GRN Selection"
               colorClass="text-amber-700 bg-amber-50 border-amber-100"
               extra={
-                <div className="flex items-center gap-3 text-[10px] text-slate-500">
-                  <span>Total Items: <span className="font-bold text-slate-700">{fmt(totalItemsCount)}</span></span>
-                  <span>GRN Total: <span className="font-bold text-indigo-700">{fmt(grnTotal)}</span></span>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="text"
+                    placeholder="Search GRN No…"
+                    value={grnSearch}
+                    onChange={(e) => setGrnSearch(e.target.value)}
+                    className="rounded border border-amber-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-300/40 w-36"
+                  />
+                  <div className="flex items-center gap-3 text-[10px] text-slate-500">
+                    <span>Total Items: <span className="font-bold text-slate-700">{fmt(totalItemsCount)}</span></span>
+                    <span>GRN Total: <span className="font-bold text-indigo-700">{fmt(grnTotal)}</span></span>
+                  </div>
                 </div>
               }
             />
             {errors.grn_ids && <p className="px-3 pt-1 text-[10px] text-red-500">{errors.grn_ids}</p>}
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto max-h-56 overflow-y-auto">
               <table className="w-full text-xs">
-                <thead>
+                <thead className="sticky top-0 z-10">
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
-                    {!readOnly && <th className="w-8 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500"></th>}
+                    {!readOnly && (
+                      <th className="w-8 px-3 py-2 text-center">
+                        <span
+                          onClick={() => filteredGrns.length > 0 && toggleAllGrns()}
+                          className={`inline-flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded border-2 transition-colors ${
+                            allFilteredSelected
+                              ? 'border-indigo-500 bg-indigo-500'
+                              : someFilteredSelected
+                              ? 'border-indigo-400 bg-indigo-100'
+                              : 'border-slate-300 bg-white hover:border-indigo-400'
+                          }`}
+                        >
+                          {allFilteredSelected && (
+                            <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4L3.5 6L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                          )}
+                          {!allFilteredSelected && someFilteredSelected && (
+                            <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M2 4h4" stroke="#6366f1" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                          )}
+                        </span>
+                      </th>
+                    )}
                     <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">GRN No</th>
                     <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">GRN Date</th>
                     <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">PO No</th>
@@ -419,10 +467,10 @@ export default function CostingFormPage() {
                     <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Select a supplier to load available GRNs.</td></tr>
                   ) : loadingGrns ? (
                     <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">Loading GRNs…</td></tr>
-                  ) : supplierGrns.length === 0 ? (
-                    <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">No confirmed GRNs available for this supplier.</td></tr>
+                  ) : filteredGrns.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-slate-400">{supplierGrns.length === 0 ? 'No confirmed GRNs available for this supplier.' : 'No GRNs match the search.'}</td></tr>
                   ) : (
-                    supplierGrns.map((grn) => (
+                    filteredGrns.map((grn) => (
                       <tr
                         key={grn.id}
                         className={`transition-colors cursor-pointer ${selectedGrnIds.has(grn.id) ? 'bg-indigo-50' : 'hover:bg-slate-50'}`}

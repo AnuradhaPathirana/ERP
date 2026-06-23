@@ -3,8 +3,10 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, Plus } from 'lucide-react'
 import { confirmCosting, deleteCosting, getCostings } from '../../api/costings'
+import { getAllSuppliers } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
+import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
 import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, confirmAction, showError, showSuccess } from '../../utils/alerts'
 import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
@@ -17,7 +19,7 @@ const CRUMBS = [
   { label: 'Costings' },
 ]
 
-const INITIAL_FILTERS = { search: '', costing_type: '', status: '', date_from: '', date_to: '' }
+const INITIAL_FILTERS = { search: '', costing_type: '', status: '', supplier_id: '', date_from: '', date_to: '' }
 
 const STATUS_STYLES = {
   draft:     'bg-amber-100 text-amber-700',
@@ -36,6 +38,13 @@ export default function CostingsPage() {
 
   const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
     useTableFilter(INITIAL_FILTERS)
+
+  const { data: suppliersData } = useQuery({
+    queryKey: ['suppliers-all'],
+    queryFn:  getAllSuppliers,
+    staleTime: Infinity,
+  })
+  const supplierOptions = (suppliersData ?? []).map((s) => ({ value: s.id, label: s.name }))
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['costings', page, applied],
@@ -104,6 +113,14 @@ export default function CostingsPage() {
             <option value="draft">Draft</option>
             <option value="confirmed">Confirmed</option>
           </select>
+        </FilterField>
+        <FilterField label="Supplier">
+          <FilterSearchSelect
+            value={draft.supplier_id}
+            onChange={(val) => setDraft((d) => ({ ...d, supplier_id: val }))}
+            options={supplierOptions}
+            placeholder="All suppliers"
+          />
         </FilterField>
         <FilterField label="Date From">
           <input type="date" className={FILTER_INPUT_CLS} value={draft.date_from} onChange={(e) => setDraft((d) => ({ ...d, date_from: e.target.value }))} />

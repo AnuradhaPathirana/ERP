@@ -1,21 +1,14 @@
 import Swal from 'sweetalert2'
 
-const COMPACT_POPUP = {
-  popup:        'swal2-compact-popup',
-  title:        'swal2-compact-title',
-  htmlContainer:'swal2-compact-html',
-  confirmButton:'swal2-compact-btn',
-  cancelButton: 'swal2-compact-btn',
-}
-
 const Toast = Swal.mixin({
   toast: true,
   position: 'bottom-end',
   showConfirmButton: false,
   timer: 3000,
   timerProgressBar: true,
-  width: 'auto',
-  customClass: { popup: 'swal2-toast-compact' },
+  showClass: { popup: 'swal2-toast-slide-in' },
+  hideClass: { popup: 'swal2-toast-slide-out' },
+  customClass: { popup: 'swal2-toast-mini' },
   didOpen: (toast) => {
     toast.onmouseenter = Swal.stopTimer
     toast.onmouseleave = Swal.resumeTimer
@@ -27,44 +20,58 @@ export function showSuccess(message = 'Operation completed successfully.') {
 }
 
 export function showError(message = 'Something went wrong. Please try again.') {
-  Toast.fire({ icon: 'error', title: message, timer: 4500 })
+  Toast.fire({ icon: 'error', title: message, timer: 5000 })
 }
 
 export function showWarning(message) {
-  Toast.fire({ icon: 'warning', title: message, timer: 4000 })
+  Toast.fire({ icon: 'warning', title: message, timer: 4500 })
 }
 
 export async function confirmDelete(name) {
   const result = await Swal.fire({
     title: 'Delete Record?',
-    html: `<span style="font-size:12px;color:#475569">Delete <strong>${name}</strong>? This cannot be undone.</span>`,
+    html: `Are you sure you want to delete <strong>"${name}"</strong>?<br><span class="swal2-sub-text">This action cannot be undone.</span>`,
     icon: 'warning',
     showCancelButton: true,
     confirmButtonColor: '#ef4444',
     cancelButtonColor: '#64748b',
-    confirmButtonText: 'Yes, Delete',
+    confirmButtonText: '<span>Yes, Delete It</span>',
     cancelButtonText: 'Cancel',
     reverseButtons: true,
     focusCancel: true,
-    width: '340px',
-    customClass: COMPACT_POPUP,
+    width: '360px',
+    customClass: {
+      popup:         'swal2-styled-popup',
+      title:         'swal2-styled-title',
+      htmlContainer: 'swal2-styled-html',
+      confirmButton: 'swal2-styled-confirm-btn swal2-danger-btn',
+      cancelButton:  'swal2-styled-cancel-btn',
+      icon:          'swal2-styled-icon',
+    },
   })
   return result.isConfirmed
 }
 
-export async function confirmAction({ title, message, confirmText = 'Yes, Confirm', confirmColor = '#16a34a' }) {
+export async function confirmAction({ title, message, confirmText = 'Yes, Confirm', confirmColor = '#16a34a', icon = 'question' }) {
   const result = await Swal.fire({
     title,
-    html: `<span style="font-size:12px;color:#475569">${message}</span>`,
-    icon: 'warning',
+    html: `<span>${message}</span>`,
+    icon,
     showCancelButton: true,
     confirmButtonColor: confirmColor,
     cancelButtonColor: '#64748b',
-    confirmButtonText: confirmText,
+    confirmButtonText: `<span>${confirmText}</span>`,
     cancelButtonText: 'Cancel',
     reverseButtons: true,
-    width: '340px',
-    customClass: COMPACT_POPUP,
+    width: '360px',
+    customClass: {
+      popup:         'swal2-styled-popup',
+      title:         'swal2-styled-title',
+      htmlContainer: 'swal2-styled-html',
+      confirmButton: 'swal2-styled-confirm-btn',
+      cancelButton:  'swal2-styled-cancel-btn',
+      icon:          'swal2-styled-icon',
+    },
   })
   return result.isConfirmed
 }
@@ -75,15 +82,21 @@ export async function confirmWithReason({ title, inputLabel, inputPlaceholder, c
     input: 'textarea',
     inputLabel,
     inputPlaceholder,
-    inputAttributes: { style: 'font-size:12px;resize:none;min-height:60px' },
     showCancelButton: true,
     confirmButtonColor: confirmColor,
     cancelButtonColor: '#64748b',
-    confirmButtonText: confirmText,
+    confirmButtonText: `<span>${confirmText}</span>`,
     cancelButtonText: 'Cancel',
     reverseButtons: true,
-    width: '340px',
-    customClass: COMPACT_POPUP,
+    width: '360px',
+    customClass: {
+      popup:         'swal2-styled-popup',
+      title:         'swal2-styled-title',
+      htmlContainer: 'swal2-styled-html',
+      confirmButton: 'swal2-styled-confirm-btn swal2-danger-btn',
+      cancelButton:  'swal2-styled-cancel-btn',
+      input:         'swal2-styled-textarea',
+    },
     preConfirm: (value) => {
       if (!value?.trim()) Swal.showValidationMessage('This field is required.')
       return value
