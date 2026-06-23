@@ -16,8 +16,8 @@ return new class extends Migration
             // Auto-generated document number (e.g. PR-2026-0001)
             $table->string('pr_no', 30)->unique();
 
-            // Optional manual reference
-            $table->string('reference_no', 50)->nullable();
+            // Auto-generated reference number — unique, immutable after assignment
+            $table->string('reference_no', 50)->unique();
 
             // Header dates
             $table->date('request_date');
@@ -33,6 +33,9 @@ return new class extends Migration
             // Target (destination) warehouse — soft links
             $table->unsignedBigInteger('target_location_id')->nullable();
             $table->unsignedBigInteger('target_store_id')->nullable();
+
+            // Customer soft link — nullable, no hard FK (architecture rule)
+            $table->unsignedBigInteger('customer_id')->nullable();
 
             // Logistics
             $table->string('transport_mode', 100)->nullable();
@@ -58,6 +61,7 @@ return new class extends Migration
             $table->index('request_date');
             $table->index('source_store_id');
             $table->index('target_store_id');
+            $table->index('customer_id');
         });
     }
 

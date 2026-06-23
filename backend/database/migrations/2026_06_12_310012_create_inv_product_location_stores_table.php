@@ -23,6 +23,7 @@ return new class extends Migration
                 ->nullable()
                 ->constrained('inv_stores')
                 ->nullOnDelete();
+            $table->decimal('current_stock', 15, 4)->default(0);
             $table->timestamps();
         });
     }

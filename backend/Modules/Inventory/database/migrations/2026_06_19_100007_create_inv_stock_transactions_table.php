@@ -11,7 +11,6 @@ return new class extends Migration
     /**
      * Immutable stock ledger — one row per product movement.
      * Records are never updated or deleted; corrections are made via reversal entries.
-     * Replaces the inv_transactions table from the original workbench export.
      */
     public function up(): void
     {
@@ -27,11 +26,12 @@ return new class extends Migration
 
             // What moved — soft links
             $table->unsignedBigInteger('product_id');
-            $table->unsignedBigInteger('store_id');
+            $table->unsignedBigInteger('store_id')->nullable();
             $table->unsignedBigInteger('location_id')->nullable();
 
             // Batch / serial info (if applicable)
             $table->string('batch_no', 100)->nullable();
+            $table->unsignedBigInteger('batch_id')->nullable();
             $table->date('expiry_date')->nullable();
 
             // Movement quantities — only one of these should be non-zero per row
@@ -47,10 +47,10 @@ return new class extends Migration
 
             $table->timestamps();
 
-            // Composite index for stock balance queries
             $table->index(['product_id', 'store_id', 'location_id'], 'idx_stock_position');
             $table->index(['reference_type', 'reference_id'], 'idx_reference');
             $table->index('transaction_date');
+            $table->index('batch_id');
         });
     }
 

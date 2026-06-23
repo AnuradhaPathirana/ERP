@@ -19,11 +19,14 @@ return new class extends Migration
             $table->string('display_name', 100)->nullable();
             $table->string('product_type', 50)->nullable();
             $table->text('description')->nullable();
-            $table->string('category', 100)->nullable();
-            $table->string('location', 100)->nullable();
+
+            // Soft links — inv_categories and inv_locations are created after this migration
+            $table->unsignedBigInteger('category_id');
+            $table->unsignedBigInteger('location_id')->nullable();
+
             $table->decimal('reorder_level', 15, 4)->nullable();
             $table->decimal('reorder_qty', 15, 4)->nullable();
-            $table->string('reorder_period', 50)->nullable();
+            $table->smallInteger('reorder_period')->unsigned()->nullable();
             $table->string('stock_releasing_method', 50)->nullable();
             $table->enum('tracking_type', ['Batch', 'Serial'])->nullable();
 
@@ -36,6 +39,9 @@ return new class extends Migration
             $table->boolean('is_empty')->default(false);
             $table->boolean('service_charge')->default(false);
             $table->boolean('loyalty')->default(false);
+            $table->boolean('is_batch')->default(false);
+            $table->boolean('is_serial')->default(false);
+
             $table->timestamps();
         });
     }

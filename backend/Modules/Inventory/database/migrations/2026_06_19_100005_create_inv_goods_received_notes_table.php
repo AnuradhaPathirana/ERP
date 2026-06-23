@@ -16,28 +16,33 @@ return new class extends Migration
             // Auto-generated document number (e.g. GRN-2026-0001)
             $table->string('grn_no', 30)->unique();
 
-            // Linked PO — soft link
-            $table->unsignedBigInteger('po_id');
+            // Optional manual reference
+            $table->string('reference_no', 100)->nullable();
 
-            // Supplier (denormalized from PO for reporting speed) — soft link
-            $table->unsignedBigInteger('supplier_id');
+            // Linked PO — soft link, nullable (direct GRN without PO is allowed)
+            $table->unsignedBigInteger('po_id')->nullable();
+
+            // Supplier — soft link, nullable
+            $table->unsignedBigInteger('supplier_id')->nullable();
 
             // Receiving dates
             $table->date('grn_date');
+            $table->date('transaction_date')->nullable();
 
-            // Destination store & location where stock lands — user-selected on GRN form
-            $table->unsignedBigInteger('store_id');
+            // Destination store & location — soft links, nullable
+            $table->unsignedBigInteger('store_id')->nullable();
             $table->unsignedBigInteger('location_id')->nullable();
 
-            // Workflow status
+            // Workflow status: draft | confirmed
             $table->string('status', 20)->default('draft');
-            // Values: draft | confirmed
 
             // Financial total
             $table->decimal('total_amount', 15, 4)->default(0);
 
             // Notes
             $table->text('remarks')->nullable();
+            $table->string('payment_terms', 100)->nullable();
+            $table->json('attachments')->nullable();
 
             // Audit — soft link to users
             $table->unsignedBigInteger('received_by')->nullable();

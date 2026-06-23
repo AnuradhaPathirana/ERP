@@ -79,7 +79,7 @@ const NAV_ITEMS = [
         ],
       },
       {
-        label: 'Settings & Configurations',
+        label: 'Configuration',
         icon: Settings2,
         isSubgroup: true,
         children: [

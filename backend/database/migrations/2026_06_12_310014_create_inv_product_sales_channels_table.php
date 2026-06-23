@@ -22,8 +22,13 @@ return new class extends Migration
             $table->decimal('num_of_units', 15, 4)->nullable();
             $table->decimal('cost_price', 15, 4)->nullable();
             $table->decimal('margin', 10, 4)->nullable();
+            $table->enum('margin_type', ['percentage', 'amount'])->default('percentage');
             $table->decimal('selling_price', 15, 4)->nullable();
+            $table->decimal('max_price', 15, 4)->nullable();
+            $table->decimal('min_price', 15, 4)->nullable();
+            $table->decimal('wholesale_price', 15, 4)->nullable();
             $table->decimal('sale_privileges_discount', 5, 2)->nullable();
+            $table->decimal('purchasing_privileges_discount', 5, 2)->nullable();
             $table->timestamps();
         });
     }

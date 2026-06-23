@@ -20,6 +20,7 @@ return new class extends Migration
             $table->unsignedBigInteger('pr_id')->nullable();
             $table->unsignedBigInteger('supplier_id');
             $table->unsignedBigInteger('store_id');
+            $table->unsignedBigInteger('location_id')->nullable();
 
             // Header dates
             $table->date('order_date');
@@ -56,6 +57,7 @@ return new class extends Migration
             $table->index('store_id');
             $table->index('order_date');
             $table->index('pr_id');
+            $table->index('location_id');
         });
     }
 

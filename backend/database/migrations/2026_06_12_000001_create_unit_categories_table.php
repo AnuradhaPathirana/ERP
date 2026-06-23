@@ -14,6 +14,8 @@ return new class extends Migration
             $table->id();
             $table->string('name', 100);
             $table->string('description', 255)->nullable();
+            $table->unsignedBigInteger('base_unit_type_id')->nullable();
+            $table->boolean('is_default')->default(false);
             $table->timestamps();
         });
     }

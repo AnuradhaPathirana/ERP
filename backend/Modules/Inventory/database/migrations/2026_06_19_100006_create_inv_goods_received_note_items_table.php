@@ -15,19 +15,21 @@ return new class extends Migration
 
             // Soft links
             $table->unsignedBigInteger('grn_id');
-            $table->unsignedBigInteger('po_item_id');
+            $table->unsignedBigInteger('po_item_id')->nullable();
             $table->unsignedBigInteger('product_id');
             $table->unsignedBigInteger('unit_id')->nullable();
 
-            // Quantities — ordered (copied from PO item for reference), and actually received
+            // Quantities
             $table->decimal('quantity_ordered', 15, 4)->default(0);
             $table->decimal('quantity_received', 15, 4)->default(0);
 
             // Pricing
             $table->decimal('unit_price', 15, 4)->default(0);
+            $table->decimal('discount', 8, 4)->default(0);
+            $table->decimal('tax', 8, 4)->default(0);
             $table->decimal('line_total', 15, 4)->default(0);
 
-            // Batch / serial tracking (populated when product has is_batch or is_serial)
+            // Batch / serial tracking
             $table->string('batch_no', 100)->nullable();
             $table->date('expiry_date')->nullable();
 
