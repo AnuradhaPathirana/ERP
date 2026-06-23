@@ -30,6 +30,10 @@ const SELECT_ERR_CLS =
   'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15 cursor-pointer'
 const SELECT_DISABLED_CLS =
   'block w-full rounded-md border-2 border-slate-200 bg-slate-100 px-2 py-1 text-xs text-slate-400 outline-none cursor-not-allowed'
+const TABLE_SELECT =
+  'block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer'
+const TABLE_SELECT_ERR =
+  'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15 cursor-pointer'
 const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
 const ERR_CLS   = 'mt-0.5 text-[10px] text-red-500'
 
@@ -81,8 +85,9 @@ export default function PurchaseRequestFormPage() {
     remarks:             '',
     submit_for_approval: false,
   })
-  const [items, setItems]     = useState([emptyRow()])
-  const [errors, setErrors]   = useState({})
+  const [items, setItems]       = useState([emptyRow()])
+  const [errors, setErrors]     = useState({})
+  const [itemTouched, setItemTouched] = useState({})
   const [products, setProducts] = useState([])
   const stockCache = useRef({})
 
@@ -206,7 +211,17 @@ export default function PurchaseRequestFormPage() {
     if (!form.source_store_id)      clientErrors.source_store_id     = ['Store is required.']
 
     const validItems = items.filter((r) => r.product_id && parseFloat(r.quantity) > 0)
-    if (validItems.length === 0)    clientErrors.items = ['At least one product with a valid quantity is required.']
+    if (validItems.length === 0) clientErrors.items = ['At least one product with a valid quantity is required.']
+
+    const itemsMissingUom = validItems.filter((r) => !r.unit_id)
+    if (itemsMissingUom.length) {
+      setItemTouched((t) => {
+        const next = { ...t }
+        itemsMissingUom.forEach((r) => { next[r._key] = { ...next[r._key], uom: true } })
+        return next
+      })
+      if (!clientErrors.items) clientErrors.items = ['Unit of measure is required for all line items.']
+    }
 
     if (Object.keys(clientErrors).length) {
       setErrors(clientErrors)
@@ -242,9 +257,21 @@ export default function PurchaseRequestFormPage() {
     })
     setItems([emptyRow()])
     setErrors({})
+    setItemTouched({})
   }
 
   const err = (f) => errors[f]?.[0]
+
+  const touchItemField = (rowKey, field) =>
+    setItemTouched((t) => ({ ...t, [rowKey]: { ...t[rowKey], [field]: true } }))
+
+  const getItemErr = (rowKey, field) => {
+    if (!itemTouched[rowKey]?.[field]) return null
+    const row = items.find((r) => r._key === rowKey)
+    if (!row) return null
+    if (field === 'uom') return row.unit_id ? null : 'Required'
+    return null
+  }
 
   if (isEdit && loadingPR) {
     return (
@@ -329,16 +356,22 @@ export default function PurchaseRequestFormPage() {
                         </select>
                       </td>
                       <td className="px-1.5 py-1">
-                        <select
-                          value={row.unit_id}
-                          onChange={(e) => setRowField(idx, 'unit_id', e.target.value)}
-                          className="block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer"
-                        >
-                          <option value="">—</option>
-                          {unitTypes.map((u) => (
-                            <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>
-                          ))}
-                        </select>
+                        <div className="flex flex-col gap-0.5">
+                          <select
+                            value={row.unit_id}
+                            onChange={(e) => setRowField(idx, 'unit_id', e.target.value)}
+                            onBlur={() => touchItemField(row._key, 'uom')}
+                            className={getItemErr(row._key, 'uom') ? TABLE_SELECT_ERR : TABLE_SELECT}
+                          >
+                            <option value="">—</option>
+                            {unitTypes.map((u) => (
+                              <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>
+                            ))}
+                          </select>
+                          {getItemErr(row._key, 'uom') && (
+                            <span className="text-[9px] text-red-500 leading-none">Required</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-1.5 py-1">
                         <input

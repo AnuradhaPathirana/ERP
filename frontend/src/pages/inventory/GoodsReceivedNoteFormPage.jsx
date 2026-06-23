@@ -31,8 +31,10 @@ const INPUT_ERR   = 'block w-full rounded border-2 border-red-400 bg-red-50 px-2
 const INPUT_RO    = 'block w-full rounded border-2 border-slate-100 bg-slate-100 px-2 py-1 text-xs text-slate-500 outline-none cursor-default'
 const SELECT_CLS  = 'block w-full rounded border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer'
 const SELECT_ERR  = 'block w-full rounded border-2 border-red-400 bg-red-50 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-400/20 cursor-pointer'
-const TABLE_INPUT = 'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white'
-const TABLE_ERR   = 'block w-full rounded border border-red-400 bg-red-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white'
+const TABLE_INPUT   = 'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white'
+const TABLE_ERR     = 'block w-full rounded border border-red-400 bg-red-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white'
+const TABLE_SEL     = 'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white cursor-pointer'
+const TABLE_SEL_ERR = 'block w-full rounded border border-red-400 bg-red-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white cursor-pointer'
 const LABEL_CLS   = 'text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap'
 const ERR_CLS     = 'mt-0.5 text-[10px] text-red-500'
 
@@ -259,9 +261,10 @@ export default function GoodsReceivedNoteFormPage() {
   const [loadingItems,  setLoadingItems]  = useState(false)
 
   /* ── GRN items state ──────────────────────────────────────── */
-  const [items,         setItems]         = useState([])
-  const [errors,        setErrors]        = useState({})
-  const [batchModalIdx, setBatchModalIdx] = useState(null)
+  const [items,              setItems]             = useState([])
+  const [errors,             setErrors]            = useState({})
+  const [batchModalIdx,      setBatchModalIdx]     = useState(null)
+  const [batchConfirmModal,  setBatchConfirmModal] = useState({ open: false, firstIdx: null })
 
   /* ── Real-time validation state ───────────────────────────── */
   const [touched,     setTouched]     = useState({})
@@ -783,6 +786,17 @@ export default function GoodsReceivedNoteFormPage() {
       return
     }
 
+    const itemsMissingUom = validItems.filter((r) => !r.unit_id)
+    if (itemsMissingUom.length) {
+      setItemTouched((t) => {
+        const next = { ...t }
+        itemsMissingUom.forEach((r) => { next[r._key] = { ...next[r._key], uom: true } })
+        return next
+      })
+      showError('Unit of measure is required for all line items.')
+      return
+    }
+
     const payload = {
       supplier_id:      form.supplier_id      || null,
       grn_date:         form.grn_date,
@@ -819,6 +833,20 @@ export default function GoodsReceivedNoteFormPage() {
     saveMutation.mutate(payload)
   }
 
+  // Intercept the save button — prompt before confirming if batch items have no batches assigned
+  const handleSaveClick = () => {
+    if (saveStatus === 'confirmed') {
+      const firstIdx = items.findIndex(
+        (r) => r.is_batch && r.product_id && parseFloat(r.quantity_received) > 0 && (!r.batches || r.batches.length === 0)
+      )
+      if (firstIdx !== -1) {
+        setBatchConfirmModal({ open: true, firstIdx })
+        return
+      }
+    }
+    handleSubmit()
+  }
+
   /* ── Validation helpers ───────────────────────────────────── */
   const touch = (field) => setTouched((t) => ({ ...t, [field]: true }))
   const touchAll = () => setTouched(Object.fromEntries(Object.keys(HEADER_RULES).map((k) => [k, true])))
@@ -849,6 +877,7 @@ export default function GoodsReceivedNoteFormPage() {
     if (!itemTouched[rowKey]?.[field]) return null
     const row = items.find((r) => r._key === rowKey)
     if (!row) return null
+    if (field === 'uom')   return row.unit_id ? null : 'Required'
     if (field === 'qty')   return parseFloat(row.quantity_received) > 0 ? null : 'Required'
     if (field === 'price') return row.unit_price !== '' && parseFloat(row.unit_price) >= 0 ? null : 'Required'
     return null
@@ -1295,20 +1324,26 @@ export default function GoodsReceivedNoteFormPage() {
 
                         {/* UOM */}
                         <td className="px-2 py-1">
-                          <select
-                            ref={setCellRef(row._key, 'uom')}
-                            value={row.unit_id ?? ''}
-                            onChange={(e) => setRowField(idx, 'unit_id', e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'qty') }
-                            }}
-                            className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white cursor-pointer"
-                          >
-                            <option value="">—</option>
-                            {unitTypes.map((u) => (
-                              <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>
-                            ))}
-                          </select>
+                          <div className="flex flex-col gap-0.5">
+                            <select
+                              ref={setCellRef(row._key, 'uom')}
+                              value={row.unit_id ?? ''}
+                              onChange={(e) => setRowField(idx, 'unit_id', e.target.value)}
+                              onBlur={() => touchItemField(row._key, 'uom')}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'qty') }
+                              }}
+                              className={getItemErr(row._key, 'uom') ? TABLE_SEL_ERR : TABLE_SEL}
+                            >
+                              <option value="">—</option>
+                              {unitTypes.map((u) => (
+                                <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>
+                              ))}
+                            </select>
+                            {getItemErr(row._key, 'uom') && (
+                              <span className="text-[9px] text-red-500 leading-none">Required</span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Qty Received */}
@@ -1510,7 +1545,7 @@ export default function GoodsReceivedNoteFormPage() {
               <button
                 type="button"
                 disabled={saveMutation.isPending || items.length === 0}
-                onClick={handleSubmit}
+                onClick={handleSaveClick}
                 className="rounded bg-indigo-600 px-4 py-1 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-60 transition-colors"
               >
                 {saveMutation.isPending
@@ -1548,6 +1583,49 @@ export default function GoodsReceivedNoteFormPage() {
           ))}
         </div>
       </div>
+
+      {/* Batch Confirmation Dialog */}
+      {batchConfirmModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-xl border border-slate-200 bg-white p-5 shadow-2xl">
+            <div className="mb-4 flex items-start gap-3">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-amber-100">
+                <Layers size={18} className="text-amber-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-800">Batch Assignment</h3>
+                <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                  One or more items are batch-tracked but have no batches assigned yet.
+                  Do you want to create batches now?
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setBatchConfirmModal({ open: false, firstIdx: null })
+                  handleSubmit()
+                }}
+                className="rounded border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
+              >
+                No, Continue
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const idx = batchConfirmModal.firstIdx
+                  setBatchConfirmModal({ open: false, firstIdx: null })
+                  setBatchModalIdx(idx)
+                }}
+                className="rounded bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-indigo-700"
+              >
+                Yes, Assign Batches
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Batch Assignment Modal */}
       {batchModalIdx !== null && items[batchModalIdx] && (

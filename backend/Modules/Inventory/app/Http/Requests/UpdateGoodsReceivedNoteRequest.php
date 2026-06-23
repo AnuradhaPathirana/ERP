@@ -31,7 +31,7 @@ class UpdateGoodsReceivedNoteRequest extends FormRequest
             'items'                       => ['required', 'array', 'min:1'],
             'items.*.po_item_id'          => ['nullable', 'integer', 'exists:inv_purchase_order_items,id'],
             'items.*.product_id'          => ['required', 'integer', 'exists:inv_products,id'],
-            'items.*.unit_id'             => ['nullable', 'integer', 'exists:inv_unit_types,id'],
+            'items.*.unit_id'             => ['required', 'integer', 'exists:inv_unit_types,id'],
             'items.*.quantity_received'   => ['required', 'numeric', 'min:0.0001'],
             'items.*.unit_price'          => ['required', 'numeric', 'min:0'],
             'items.*.discount'            => ['nullable', 'numeric', 'min:0', 'max:100'],
