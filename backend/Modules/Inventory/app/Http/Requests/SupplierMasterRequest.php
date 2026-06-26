@@ -32,6 +32,8 @@ class SupplierMasterRequest extends FormRequest
             'mobile'                    => ['required', 'string', 'max:20'],
             'land_line'                 => ['required', 'string', 'max:20'],
             'email'                     => ['required', 'email', 'max:100'],
+            'wechat'                    => ['nullable', 'string', 'max:100'],
+            'whatsapp'                  => ['nullable', 'string', 'max:20'],
             'fax'                       => ['nullable', 'string', 'max:20'],
             'website'                   => ['nullable', 'url', 'max:255'],
 

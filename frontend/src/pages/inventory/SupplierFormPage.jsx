@@ -1,8 +1,16 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Banknote, Building2, CreditCard, MapPin, Phone, Receipt, RefreshCw, Save, UserCheck } from 'lucide-react'
+import {
+  Banknote, Building2, CreditCard, MapPin, Paperclip, Phone,
+  Receipt, RefreshCw, Save, Trash2, Upload, UserCheck, X,
+} from 'lucide-react'
 import { checkSupplierCode, createSupplier, getSupplier, updateSupplier } from '../../api/suppliers'
+import {
+  deleteSupplierAttachment,
+  getSupplierAttachments,
+  uploadSupplierAttachments,
+} from '../../api/supplierAttachments'
 import Breadcrumb from '../../components/Breadcrumb'
 import { showError, showSuccess } from '../../utils/alerts'
 
@@ -22,6 +30,8 @@ const EMPTY_FORM = {
   mobile:           '',
   land_line:        '',
   email:            '',
+  wechat:           '',
+  whatsapp:         '',
   fax:              '',
   website:          '',
   bil_address_line_1: '',
@@ -137,12 +147,43 @@ function SectionCard({ icon: Icon, title, colorClass, children }) {
   )
 }
 
+function formatBytes(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function isImageMime(mime) {
+  return typeof mime === 'string' && mime.startsWith('image/')
+}
+
+function FileTypeIcon({ mime }) {
+  const ext = mime?.split('/')[1]?.toUpperCase() ?? 'FILE'
+  const colors = {
+    PDF:  'bg-red-100 text-red-700',
+    DOC:  'bg-blue-100 text-blue-700',
+    DOCX: 'bg-blue-100 text-blue-700',
+    XLS:  'bg-emerald-100 text-emerald-700',
+    XLSX: 'bg-emerald-100 text-emerald-700',
+    ZIP:  'bg-amber-100 text-amber-700',
+    RAR:  'bg-amber-100 text-amber-700',
+  }
+  const cls = colors[ext] ?? 'bg-slate-100 text-slate-600'
+  return (
+    <div className={`flex h-10 w-10 items-center justify-center rounded text-[9px] font-bold ${cls}`}>
+      {ext.slice(0, 4)}
+    </div>
+  )
+}
+
 export default function SupplierFormPage() {
   const { id }      = useParams()
   const isEditing   = Boolean(id)
   const navigate    = useNavigate()
   const queryClient = useQueryClient()
   const nameRef     = useRef(null)
+  const attachFileRef = useRef(null)
 
   const [form,       setForm]       = useState(() => ({
     ...EMPTY_FORM,
@@ -153,11 +194,28 @@ export default function SupplierFormPage() {
   // 'idle' | 'checking' | 'available' | 'taken'
   const [codeStatus, setCodeStatus] = useState('idle')
 
+  /* ── Attachment state ────────────────────────────────────────── */
+  const [newFiles,     setNewFiles]     = useState([])
+  const [isUploading,  setIsUploading]  = useState(false)
+  const [hoverPreview, setHoverPreview] = useState(null) // { url, name }
+
   const { isLoading: isFetching, data: fetchedData } = useQuery({
     queryKey: ['supplier', id],
     queryFn:  () => getSupplier(id),
     enabled:  isEditing,
   })
+
+  /* ── Existing attachments query (edit mode) ──────────────────── */
+  const {
+    data: attachmentsData,
+    refetch: refetchAttachments,
+  } = useQuery({
+    queryKey: ['supplier-attachments', id],
+    queryFn:  () => getSupplierAttachments(id),
+    enabled:  isEditing,
+    staleTime: 0,
+  })
+  const existingFiles = attachmentsData ?? []
 
   const initialized = useRef(false)
   useLayoutEffect(() => {
@@ -203,16 +261,33 @@ export default function SupplierFormPage() {
     }
   }
 
+  /* ── Attachment handlers ─────────────────────────────────────── */
+  const handleAddFiles = (e) => {
+    const incoming = Array.from(e.target.files ?? [])
+    if (attachFileRef.current) attachFileRef.current.value = ''
+    if (!incoming.length) return
+    setNewFiles((prev) => {
+      const existingNames = new Set(prev.map((f) => f.name))
+      return [...prev, ...incoming.filter((f) => !existingNames.has(f.name))]
+    })
+  }
+
+  const handleRemoveNew = (idx) => {
+    setNewFiles((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  const handleDeleteExisting = async (attachmentId) => {
+    try {
+      await deleteSupplierAttachment(id, attachmentId)
+      await refetchAttachments()
+    } catch {
+      showError('Failed to delete attachment.')
+    }
+  }
+
   const mutation = useMutation({
     mutationFn: (payload) =>
       isEditing ? updateSupplier(id, payload) : createSupplier(payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['suppliers'] })
-      queryClient.invalidateQueries({ queryKey: ['suppliers-all'] })
-      if (isEditing) queryClient.invalidateQueries({ queryKey: ['supplier', id] })
-      showSuccess(isEditing ? 'Supplier updated successfully.' : 'Supplier created successfully.')
-      navigate('/inventory/suppliers')
-    },
     onError: (err) => {
       const apiErrors = err.response?.data?.errors ?? {}
       if (Object.keys(apiErrors).length) {
@@ -223,7 +298,7 @@ export default function SupplierFormPage() {
     },
   })
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault()
     const fields = Object.keys(EMPTY_FORM)
     const newErrors = Object.fromEntries(fields.map((f) => [f, validate(f, form[f])]))
@@ -236,7 +311,7 @@ export default function SupplierFormPage() {
     const num = (v) => (v === '' ? null : Number(v))
     const int = (v) => (v === '' ? null : parseInt(v, 10))
 
-    mutation.mutate({
+    const payload = {
       supplier_name:    form.supplier_name.trim(),
       supplier_code:    str(form.supplier_code),
       reference_no:     str(form.reference_no),
@@ -245,6 +320,8 @@ export default function SupplierFormPage() {
       mobile:           str(form.mobile),
       land_line:        str(form.land_line),
       email:            str(form.email),
+      wechat:           str(form.wechat),
+      whatsapp:         str(form.whatsapp),
       fax:              str(form.fax),
       website:          str(form.website),
       bil_address_line_1: str(form.bil_address_line_1),
@@ -269,7 +346,31 @@ export default function SupplierFormPage() {
       contact_person_mobile:      str(form.contact_person_mobile),
       contact_person_email:       str(form.contact_person_email),
       contact_person_fax:         str(form.contact_person_fax),
-    })
+    }
+
+    try {
+      const response = await mutation.mutateAsync(payload)
+      const supplierId = isEditing ? Number(id) : (response?.data?.id ?? response?.id)
+
+      if (newFiles.length > 0 && supplierId) {
+        setIsUploading(true)
+        try {
+          await uploadSupplierAttachments(supplierId, newFiles)
+        } catch {
+          showError('Supplier saved, but some attachments failed to upload.')
+        } finally {
+          setIsUploading(false)
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['suppliers'] })
+      queryClient.invalidateQueries({ queryKey: ['suppliers-all'] })
+      if (isEditing) queryClient.invalidateQueries({ queryKey: ['supplier', id] })
+      showSuccess(isEditing ? 'Supplier updated successfully.' : 'Supplier created successfully.')
+      navigate('/inventory/suppliers')
+    } catch {
+      // onError handles display
+    }
   }
 
   const crumbs = [
@@ -288,6 +389,8 @@ export default function SupplierFormPage() {
     className: fieldCls(errors, touched, name),
     autoComplete: 'off', ...extra,
   })
+
+  const isSaving = mutation.isPending || isUploading
 
   return (
     <div className="w-full">
@@ -369,7 +472,7 @@ export default function SupplierFormPage() {
 
             {/* Contact */}
             <SectionCard icon={Phone} title="Contact" colorClass="text-sky-700 bg-sky-50 border-sky-100">
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
                 <div>
                   <Label required>Mobile</Label>
                   <input type="tel" placeholder="+1 234 567 8900" maxLength={20} {...inp('mobile')} />
@@ -385,8 +488,18 @@ export default function SupplierFormPage() {
                   <input type="email" placeholder="supplier@example.com" maxLength={100} {...inp('email')} />
                   <FieldError errors={errors} touched={touched} name="email" />
                 </div>
+                <div>
+                  <Label>WeChat</Label>
+                  <input type="text" placeholder="WeChat ID" maxLength={100} {...inp('wechat')} />
+                  <FieldError errors={errors} touched={touched} name="wechat" />
+                </div>
               </div>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <Label>WhatsApp</Label>
+                  <input type="tel" placeholder="+1 234 567 8900" maxLength={20} {...inp('whatsapp')} />
+                  <FieldError errors={errors} touched={touched} name="whatsapp" />
+                </div>
                 <div>
                   <Label>Fax</Label>
                   <input type="tel" placeholder="+1 234 567 8900" maxLength={20} {...inp('fax')} />
@@ -552,6 +665,134 @@ export default function SupplierFormPage() {
           </div>
         </div>
 
+        {/* ── Attachments (full-width) ─────────────────────────────── */}
+        <div className="mt-2">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between gap-1.5 border-b border-rose-100 bg-rose-50 px-3 py-2">
+              <div className="flex items-center gap-1.5 text-rose-700">
+                <Paperclip size={13} />
+                <h2 className="text-xs font-bold">Attachments</h2>
+                {(existingFiles.length > 0 || newFiles.length > 0) && (
+                  <span className="rounded-full bg-rose-200 px-1.5 py-px text-[10px] font-semibold text-rose-800">
+                    {existingFiles.length + newFiles.length}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => attachFileRef.current?.click()}
+                className="flex items-center gap-1 rounded border border-rose-300 bg-white px-2 py-0.5 text-[10px] font-semibold text-rose-700 transition hover:bg-rose-50"
+              >
+                <Upload size={10} strokeWidth={2.5} />
+                Add Files
+              </button>
+              <input
+                ref={attachFileRef}
+                type="file"
+                multiple
+                className="hidden"
+                onChange={handleAddFiles}
+              />
+            </div>
+
+            <div className="p-2.5">
+              {existingFiles.length === 0 && newFiles.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-6 text-slate-400">
+                  <Paperclip size={24} strokeWidth={1.5} className="mb-1 opacity-40" />
+                  <p className="text-xs">No attachments yet. Click <strong>Add Files</strong> to upload.</p>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {/* Existing saved attachments */}
+                  {existingFiles.map((file) => (
+                    <div
+                      key={file.id}
+                      className="relative flex flex-col items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1.5 w-22.5 group"
+                    >
+                      {isImageMime(file.mime_type) ? (
+                        <a
+                          href={file.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          onMouseEnter={() => setHoverPreview({ url: file.url, name: file.file_name })}
+                          onMouseLeave={() => setHoverPreview(null)}
+                        >
+                          <img
+                            src={file.url}
+                            alt={file.file_name}
+                            className="h-12 w-18.5 rounded object-cover border border-slate-200"
+                          />
+                        </a>
+                      ) : (
+                        <a href={file.url} target="_blank" rel="noreferrer">
+                          <FileTypeIcon mime={file.mime_type} />
+                        </a>
+                      )}
+                      <p className="w-full truncate text-center text-[9px] text-slate-600" title={file.file_name}>
+                        {file.file_name}
+                      </p>
+                      {file.file_size && (
+                        <p className="text-[9px] text-slate-400">{formatBytes(file.file_size)}</p>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteExisting(file.id)}
+                        className="absolute -right-1 -top-1 hidden group-hover:flex items-center justify-center h-4 w-4 rounded-full bg-red-500 text-white shadow"
+                        title="Remove"
+                      >
+                        <X size={8} strokeWidth={3} />
+                      </button>
+                    </div>
+                  ))}
+
+                  {/* Pending new files (queued for upload on save) */}
+                  {newFiles.map((file, idx) => {
+                    const objectUrl = URL.createObjectURL(file)
+                    return (
+                      <div
+                        key={`new-${idx}`}
+                        className="relative flex flex-col items-center gap-1 rounded-lg border border-dashed border-indigo-300 bg-indigo-50/40 p-1.5 w-22.5 group"
+                      >
+                        {isImageMime(file.type) ? (
+                          <a
+                            href={objectUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            onMouseEnter={() => setHoverPreview({ url: objectUrl, name: file.name })}
+                            onMouseLeave={() => setHoverPreview(null)}
+                          >
+                            <img
+                              src={objectUrl}
+                              alt={file.name}
+                              className="h-12 w-18.5 rounded object-cover border border-indigo-200"
+                            />
+                          </a>
+                        ) : (
+                          <a href={objectUrl} target="_blank" rel="noreferrer">
+                            <FileTypeIcon mime={file.type} />
+                          </a>
+                        )}
+                        <p className="w-full truncate text-center text-[9px] text-slate-600" title={file.name}>
+                          {file.name}
+                        </p>
+                        <p className="text-[9px] text-indigo-500">Pending</p>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveNew(idx)}
+                          className="absolute -right-1 -top-1 hidden group-hover:flex items-center justify-center h-4 w-4 rounded-full bg-red-500 text-white shadow"
+                          title="Remove"
+                        >
+                          <X size={8} strokeWidth={3} />
+                        </button>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* ── Footer ──────────────────────────────────────────────────── */}
         <div className="mt-2 flex items-center justify-end gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5">
           <Link
@@ -562,11 +803,11 @@ export default function SupplierFormPage() {
           </Link>
           <button
             type="submit"
-            disabled={mutation.isPending}
+            disabled={isSaving}
             className="flex items-center gap-1.5 rounded bg-indigo-600 px-3 py-1 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <Save size={12} strokeWidth={2.5} />
-            {mutation.isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Create Supplier'}
+            {isSaving ? (isUploading ? 'Uploading…' : 'Saving…') : isEditing ? 'Save Changes' : 'Create Supplier'}
           </button>
         </div>
 
@@ -576,6 +817,20 @@ export default function SupplierFormPage() {
           </p>
         )}
       </form>
+
+      {/* ── Image hover preview popup ────────────────────────────────── */}
+      {hoverPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="rounded-xl border border-slate-300 bg-white p-2 shadow-2xl max-w-sm pointer-events-none">
+            <img
+              src={hoverPreview.url}
+              alt={hoverPreview.name}
+              className="max-h-64 max-w-xs rounded object-contain"
+            />
+            <p className="mt-1 truncate text-center text-[10px] text-slate-500">{hoverPreview.name}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

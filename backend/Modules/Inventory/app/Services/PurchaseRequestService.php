@@ -67,9 +67,7 @@ class PurchaseRequestService
     public function create(PurchaseRequestData $data): PurchaseRequest
     {
         return DB::transaction(function () use ($data): PurchaseRequest {
-            $status = $data->submitForApproval
-                ? PurchaseRequestStatus::Submitted
-                : PurchaseRequestStatus::Draft;
+            $status = PurchaseRequestStatus::from($data->status);
 
             $pr = PurchaseRequest::create([
                 'pr_no'              => $this->generatePrNo(),
@@ -96,15 +94,13 @@ class PurchaseRequestService
 
     public function update(PurchaseRequest $pr, PurchaseRequestData $data): PurchaseRequest
     {
-        // Can only edit draft PRs
-        if ($pr->status !== PurchaseRequestStatus::Draft) {
-            abort(422, 'Only draft purchase requests can be edited.');
+        // Allow editing draft or approved PRs
+        if (!in_array($pr->status, [PurchaseRequestStatus::Draft, PurchaseRequestStatus::Approved])) {
+            abort(422, 'Only draft or approved purchase requests can be edited.');
         }
 
         return DB::transaction(function () use ($pr, $data): PurchaseRequest {
-            $status = $data->submitForApproval
-                ? PurchaseRequestStatus::Submitted
-                : PurchaseRequestStatus::Draft;
+            $status = PurchaseRequestStatus::from($data->status);
 
             $pr->update([
                 'request_date'       => $data->requestDate,

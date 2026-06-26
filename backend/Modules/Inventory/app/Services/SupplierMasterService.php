@@ -97,6 +97,8 @@ class SupplierMasterService
             'mobile'                     => $data->mobile,
             'land_line'                  => $data->landLine,
             'email'                      => $data->email,
+            'wechat'                     => $data->wechat,
+            'whatsapp'                   => $data->whatsapp,
             'fax'                        => $data->fax,
             'website'                    => $data->website,
             'bil_address_line_1'         => $data->bilAddressLine1,

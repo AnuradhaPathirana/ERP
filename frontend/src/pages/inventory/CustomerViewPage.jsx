@@ -135,6 +135,7 @@ export default function CustomerViewPage() {
               <Row label="Customer Name"              value={fmt(c?.customer_name)} />
               <Row label="NIC / Passport / DL"        value={fmt(c?.nic_passport_driving_licence)} mono />
               <Row label="BR Number"                  value={fmt(c?.br_no)} mono />
+              <Row label="Customer TIN"               value={fmt(c?.customer_tin)} mono />
             </div>
           </SectionCard>
 

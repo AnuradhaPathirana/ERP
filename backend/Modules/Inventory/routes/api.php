@@ -26,6 +26,7 @@ use Modules\Inventory\Http\Controllers\PurchaseOrderController;
 use Modules\Inventory\Http\Controllers\BatchController;
 use Modules\Inventory\Http\Controllers\GoodsReceivedNoteController;
 use Modules\Inventory\Http\Controllers\GrnAttachmentController;
+use Modules\Inventory\Http\Controllers\SupplierAttachmentController;
 use Modules\Inventory\Http\Controllers\GrnPdfController;
 use Modules\Inventory\Http\Controllers\StockController;
 use Modules\Inventory\Http\Controllers\CostingController;
@@ -259,4 +260,12 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.grns.attachments.store');
     Route::delete('goods-received-notes/{goods_received_note}/attachments/{attachment}', [GrnAttachmentController::class, 'destroy'])
         ->name('inventory.grns.attachments.destroy');
+
+    // Supplier Attachments
+    Route::get('supplier-masters/{supplier_master}/attachments', [SupplierAttachmentController::class, 'index'])
+        ->name('inventory.supplier-masters.attachments.index');
+    Route::post('supplier-masters/{supplier_master}/attachments', [SupplierAttachmentController::class, 'store'])
+        ->name('inventory.supplier-masters.attachments.store');
+    Route::delete('supplier-masters/{supplier_master}/attachments/{attachment}', [SupplierAttachmentController::class, 'destroy'])
+        ->name('inventory.supplier-masters.attachments.destroy');
 });

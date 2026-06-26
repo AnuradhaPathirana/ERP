@@ -23,6 +23,7 @@ final class PurchaseRequestData
         public readonly ?string $transportMode,
         public readonly ?string $remarks,
         public readonly bool    $submitForApproval,
+        public readonly string  $status,
         public readonly array   $items,
     ) {}
 
@@ -52,6 +53,7 @@ final class PurchaseRequestData
             transportMode:     $request->validated('transport_mode'),
             remarks:           $request->validated('remarks'),
             submitForApproval: (bool) ($request->validated('submit_for_approval') ?? false),
+            status:            $request->validated('status') ?? 'approved',
             items:             (array) ($request->validated('items') ?? []),
         );
     }

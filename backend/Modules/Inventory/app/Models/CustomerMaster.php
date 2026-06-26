@@ -23,6 +23,7 @@ class CustomerMaster extends Model
         'nic_passport_driving_licence',
         'attachments',
         'br_no',
+        'customer_tin',
         'customer_mobile',
         'customer_land_line',
         'customer_email',

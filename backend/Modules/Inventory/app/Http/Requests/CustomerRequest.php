@@ -33,6 +33,7 @@ class CustomerRequest extends FormRequest
             'reference_no'                 => ['nullable', 'string', 'max:50'],
             'attachments'                  => ['nullable', 'string', 'max:255'],
             'br_no'                        => ['nullable', 'string', 'max:50'],
+            'customer_tin'                 => ['nullable', 'string', 'max:50'],
 
             // Contact — required
             'customer_mobile'              => ['required', 'string', 'max:20'],
@@ -80,6 +81,7 @@ class CustomerRequest extends FormRequest
             'reference_no'                 => 'reference number',
             'attachments'                  => 'attachments',
             'br_no'                        => 'BR number',
+            'customer_tin'                 => 'customer TIN',
             'customer_mobile'              => 'customer mobile',
             'customer_land_line'           => 'land line',
             'customer_email'               => 'email',

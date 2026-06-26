@@ -22,6 +22,8 @@ class SupplierMasterResource extends JsonResource
             'mobile'                     => $this->mobile,
             'land_line'                  => $this->land_line,
             'email'                      => $this->email,
+            'wechat'                     => $this->wechat,
+            'whatsapp'                   => $this->whatsapp,
             'fax'                        => $this->fax,
             'website'                    => $this->website,
 

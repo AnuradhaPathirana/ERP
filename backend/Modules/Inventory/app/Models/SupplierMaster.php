@@ -7,6 +7,7 @@ namespace Modules\Inventory\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class SupplierMaster extends Model
 {
@@ -23,6 +24,8 @@ class SupplierMaster extends Model
         'mobile',
         'land_line',
         'email',
+        'wechat',
+        'whatsapp',
         'fax',
         'website',
         'bil_address_line_1',
@@ -59,5 +62,10 @@ class SupplierMaster extends Model
     {
         return $this->belongsToMany(Product::class, 'inv_product_supplier')
             ->withTimestamps();
+    }
+
+    public function attachmentFiles(): HasMany
+    {
+        return $this->hasMany(SupplierAttachment::class, 'supplier_master_id');
     }
 }

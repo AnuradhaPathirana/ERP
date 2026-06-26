@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
-  CalendarDays, ClipboardList, Plus, RefreshCw, Save, Send, Trash2, Warehouse,
+  CalendarDays, ClipboardList, Plus, RefreshCw, Save, Trash2, Warehouse,
 } from 'lucide-react'
 import {
   createPurchaseRequest,
@@ -83,13 +83,14 @@ export default function PurchaseRequestFormPage() {
     required_date:       '',
     transport_mode:      '',
     remarks:             '',
-    submit_for_approval: false,
+    status:              'approved',
   })
   const [items, setItems]       = useState([emptyRow()])
   const [errors, setErrors]     = useState({})
   const [itemTouched, setItemTouched] = useState({})
   const [products, setProducts] = useState([])
   const stockCache = useRef({})
+  const itemsRef   = useRef(items)
 
   const { data: locations  = [] } = useQuery({ queryKey: ['locations-all'],   queryFn: getAllLocations })
   const { data: stores     = [] } = useQuery({ queryKey: ['stores-all'],      queryFn: getAllStores })
@@ -103,11 +104,66 @@ export default function PurchaseRequestFormPage() {
     staleTime: 0,
   })
 
+  // Declared early so effects below can reference it without a TDZ crash
+  const fetchStock = useCallback(async (productId, storeId) => {
+    if (!productId || !storeId) return null
+    const cacheKey = `${productId}_${storeId}`
+    if (stockCache.current[cacheKey] !== undefined) return stockCache.current[cacheKey]
+    try {
+      const r   = await api.get('/api/v1/stock/product', { params: { product_id: productId, store_id: storeId } })
+      const qty = r.data?.data?.total_stock ?? 0
+      stockCache.current[cacheKey] = qty
+      return qty
+    } catch {
+      return null
+    }
+  }, [])
+
   useEffect(() => {
     if (!isEdit && nextRefNo) {
       setForm((f) => ({ ...f, reference_no: nextRefNo }))
     }
   }, [nextRefNo, isEdit])
+
+  // Pre-fill UOM with "m" for rows that have no unit set yet
+  useEffect(() => {
+    if (!unitTypes.length) return
+    const mUnit = unitTypes.find((u) => u.symbol === 'm' || u.name === 'm')
+    if (!mUnit) return
+    setItems((prev) =>
+      prev.map((row) => row.unit_id === '' ? { ...row, unit_id: String(mUnit.id) } : row)
+    )
+  }, [unitTypes])
+
+  // Keep itemsRef current so the stock effect reads the latest rows without a stale closure
+  useEffect(() => { itemsRef.current = items }, [items])
+
+  // Re-fetch stock for every product row whenever source store is selected or changed
+  useEffect(() => {
+    const storeId = form.source_store_id
+    if (!storeId) {
+      setItems((prev) => prev.map((row) => ({ ...row, stock_in_hand: null })))
+      return
+    }
+    let cancelled = false
+    const toFetch = itemsRef.current.filter((row) => row.product_id)
+    if (!toFetch.length) return
+    Promise.all(
+      toFetch.map(async (row) => ({
+        key:   row._key,
+        stock: await fetchStock(Number(row.product_id), storeId),
+      }))
+    ).then((results) => {
+      if (cancelled) return
+      setItems((prev) =>
+        prev.map((r) => {
+          const hit = results.find((x) => x.key === r._key)
+          return hit ? { ...r, stock_in_hand: hit.stock } : r
+        })
+      )
+    })
+    return () => { cancelled = true }
+  }, [form.source_store_id, fetchStock])
 
   // Stores filtered by their location_id — resets child store when location changes
   const sourceStores = form.source_location_id
@@ -145,7 +201,7 @@ export default function PurchaseRequestFormPage() {
       required_date:       pr.required_date       ?? '',
       transport_mode:      pr.transport_mode      ?? '',
       remarks:             pr.remarks             ?? '',
-      submit_for_approval: false,
+      status:              pr.status              ?? 'approved',
     })
     if (pr.items?.length) {
       setItems(pr.items.map((it) => ({
@@ -160,20 +216,6 @@ export default function PurchaseRequestFormPage() {
     }
   }, [existingPR])
 
-  const fetchStock = useCallback(async (productId, storeId) => {
-    if (!productId || !storeId) return null
-    const cacheKey = `${productId}_${storeId}`
-    if (stockCache.current[cacheKey] !== undefined) return stockCache.current[cacheKey]
-    try {
-      const r   = await api.get('/api/v1/stock/product', { params: { product_id: productId, store_id: storeId } })
-      const qty = r.data?.data?.total_stock ?? 0
-      stockCache.current[cacheKey] = qty
-      return qty
-    } catch {
-      return null
-    }
-  }, [])
-
   const handleProductSelect = async (idx, productId) => {
     const product = products.find((p) => p.id === parseInt(productId))
     const stock   = product ? await fetchStock(product.id, form.source_store_id) : null
@@ -184,7 +226,14 @@ export default function PurchaseRequestFormPage() {
     ))
   }
 
-  const addRows = (n = 1) => setItems((prev) => [...prev, ...Array.from({ length: n }, emptyRow)])
+  const defaultUnitId = () => {
+    const mUnit = unitTypes.find((u) => u.symbol === 'm' || u.name === 'm')
+    return mUnit ? String(mUnit.id) : ''
+  }
+  const addRows = (n = 1) => setItems((prev) => [
+    ...prev,
+    ...Array.from({ length: n }, () => ({ ...emptyRow(), unit_id: defaultUnitId() })),
+  ])
   const removeRow = (idx) => setItems((prev) => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
   const setRowField = (idx, field, value) => setItems((prev) => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row))
   const setField = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
@@ -204,7 +253,7 @@ export default function PurchaseRequestFormPage() {
     },
   })
 
-  const handleSubmit = (submitForApproval) => {
+  const handleSubmit = () => {
     const clientErrors = {}
 
     if (!form.source_location_id)   clientErrors.source_location_id  = ['Location is required.']
@@ -232,7 +281,6 @@ export default function PurchaseRequestFormPage() {
     setErrors({})
     saveMutation.mutate({
       ...form,
-      submit_for_approval: submitForApproval,
       source_location_id:  form.source_location_id || null,
       source_store_id:     form.source_store_id    || null,
       target_location_id:  form.target_location_id || null,
@@ -253,7 +301,7 @@ export default function PurchaseRequestFormPage() {
       target_location_id: '', target_store_id: '',
       customer_id: '',
       required_date: '', transport_mode: '', remarks: '',
-      submit_for_approval: false,
+      status: 'approved',
     })
     setItems([emptyRow()])
     setErrors({})
@@ -449,61 +497,51 @@ export default function PurchaseRequestFormPage() {
             )}
 
             {/* Bottom Actions Bar */}
-            <div className="mt-auto flex items-center justify-between border-t-2 border-slate-100 bg-white px-3 py-2">
-              {/* Custom Checkbox */}
-              <label className="flex cursor-pointer select-none items-center gap-2 group">
-                <input
-                  id="submit-approval-check"
-                  type="checkbox"
-                  checked={form.submit_for_approval}
-                  onChange={(e) => setForm((f) => ({ ...f, submit_for_approval: e.target.checked }))}
-                  className="sr-only"
-                />
-                <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition-all ${
-                  form.submit_for_approval
-                    ? 'border-emerald-500 bg-emerald-500'
-                    : 'border-slate-300 bg-white group-hover:border-emerald-400'
-                }`}>
-                  {form.submit_for_approval && (
-                    <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                </span>
-                <span className="text-xs font-semibold text-slate-600 group-hover:text-slate-800 transition-colors">
-                  Submit for Approval
-                </span>
+            <div className="mt-auto flex items-center justify-end gap-2 border-t-2 border-slate-100 bg-white px-3 py-2">
+              {/* Status dropdown */}
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap">
+                Status
               </label>
+              <select
+                value={form.status}
+                onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                className={`rounded-md border-2 px-2 py-1 text-xs font-semibold outline-none transition-all cursor-pointer ${
+                  form.status === 'approved'
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 focus:border-emerald-500'
+                    : 'border-slate-200 bg-slate-50 text-slate-700 focus:border-indigo-400'
+                }`}
+              >
+                <option value="draft">Draft</option>
+                <option value="approved">Approved</option>
+              </select>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className="flex items-center gap-1 rounded border-2 border-red-200 bg-white px-3 py-1 text-xs font-bold text-red-500 transition-all hover:bg-red-50 hover:border-red-300 active:scale-95"
-                >
-                  <RefreshCw size={11} /> Clear
-                </button>
-                <button
-                  type="button"
-                  disabled={saveMutation.isPending}
-                  onClick={() => handleSubmit(form.submit_for_approval)}
-                  className={`flex items-center gap-1 rounded px-4 py-1 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-60 active:scale-95 ${
-                    form.submit_for_approval
-                      ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100'
-                      : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'
-                  }`}
-                >
-                  {saveMutation.isPending ? (
-                    <><RefreshCw size={11} className="animate-spin" /> Saving…</>
-                  ) : isEdit ? (
-                    <><Save size={11} /> Update</>
-                  ) : form.submit_for_approval ? (
-                    <><Send size={11} /> Save &amp; Submit</>
-                  ) : (
-                    <><Save size={11} /> Save Draft</>
-                  )}
-                </button>
-              </div>
+              <button
+                type="button"
+                onClick={handleClear}
+                className="flex items-center gap-1 rounded border-2 border-red-200 bg-white px-3 py-1 text-xs font-bold text-red-500 transition-all hover:bg-red-50 hover:border-red-300 active:scale-95"
+              >
+                <RefreshCw size={11} /> Clear
+              </button>
+              <button
+                type="button"
+                disabled={saveMutation.isPending}
+                onClick={handleSubmit}
+                className={`flex items-center gap-1 rounded px-4 py-1 text-xs font-bold text-white shadow-sm transition-all disabled:opacity-60 active:scale-95 ${
+                  form.status === 'approved'
+                    ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-100'
+                    : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-100'
+                }`}
+              >
+                {saveMutation.isPending ? (
+                  <><RefreshCw size={11} className="animate-spin" /> Saving…</>
+                ) : isEdit ? (
+                  <><Save size={11} /> Update</>
+                ) : form.status === 'draft' ? (
+                  <><Save size={11} /> Save Draft</>
+                ) : (
+                  <><Save size={11} /> Save</>
+                )}
+              </button>
             </div>
           </div>
         </div>

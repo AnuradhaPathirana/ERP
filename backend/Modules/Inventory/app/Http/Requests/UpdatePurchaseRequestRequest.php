@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Inventory\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdatePurchaseRequestRequest extends FormRequest
 {
@@ -29,6 +30,7 @@ class UpdatePurchaseRequestRequest extends FormRequest
             'transport_mode'      => ['nullable', 'string', 'max:100'],
             'remarks'             => ['nullable', 'string'],
             'submit_for_approval' => ['nullable', 'boolean'],
+            'status'              => ['nullable', 'string', Rule::in(['draft', 'approved'])],
 
             'items'                        => ['required', 'array', 'min:1'],
             'items.*.product_id'           => ['required', 'integer', 'exists:inv_products,id'],

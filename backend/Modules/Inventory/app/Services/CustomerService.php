@@ -92,6 +92,7 @@ class CustomerService
             'nic_passport_driving_licence' => $data->nicPassportDrivingLicence,
             'attachments'                  => $data->attachments,
             'br_no'                        => $data->brNo,
+            'customer_tin'                 => $data->customerTin,
             'customer_mobile'              => $data->customerMobile,
             'customer_land_line'           => $data->customerLandLine,
             'customer_email'               => $data->customerEmail,

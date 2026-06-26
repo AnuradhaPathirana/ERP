@@ -24,6 +24,7 @@ const EMPTY_FORM = {
   customer_name:                '',
   nic_passport_driving_licence: '',
   br_no:                        '',
+  customer_tin:                 '',
   customer_mobile:              '',
   customer_land_line:           '',
   customer_email:               '',
@@ -347,6 +348,7 @@ export default function CustomerFormPage() {
       customer_name:                form.customer_name.trim(),
       nic_passport_driving_licence: str(form.nic_passport_driving_licence),
       br_no:                        str(form.br_no),
+      customer_tin:                 str(form.customer_tin),
       customer_mobile:              str(form.customer_mobile),
       customer_land_line:           str(form.customer_land_line),
       customer_email:               str(form.customer_email),
@@ -404,7 +406,8 @@ export default function CustomerFormPage() {
 
             {/* General */}
             <SectionCard icon={User} title="General" colorClass="text-indigo-700 bg-indigo-50 border-indigo-100">
-              <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
+              {/* Row 1: Code | Reference | Type */}
+              <div className="grid grid-cols-3 gap-2">
                 <div>
                   <Label required>Customer Code</Label>
                   <div className="flex items-center gap-1">
@@ -442,14 +445,6 @@ export default function CustomerFormPage() {
                   <FieldError errors={errors} touched={touched} name="reference_no" />
                 </div>
                 <div>
-                  <Label required>Title</Label>
-                  <select {...inp('title')}>
-                    <option value="">— Select —</option>
-                    {TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <FieldError errors={errors} touched={touched} name="title" />
-                </div>
-                <div>
                   <Label required>Customer Type</Label>
                   <select {...inp('customer_type')}>
                     <option value="">— Select —</option>
@@ -458,22 +453,39 @@ export default function CustomerFormPage() {
                   <FieldError errors={errors} touched={touched} name="customer_type" />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
-                <div className="xl:col-span-2">
+              {/* Row 2: Title (narrow) | Customer Name (wide) | NIC/Passport (wider) */}
+              <div className="grid grid-cols-6 gap-2">
+                <div>
+                  <Label required>Title</Label>
+                  <select {...inp('title')}>
+                    <option value="">— Select —</option>
+                    {TITLES.map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  <FieldError errors={errors} touched={touched} name="title" />
+                </div>
+                <div className="col-span-3">
                   <Label required>Customer Name</Label>
                   <input ref={nameRef} type="text" placeholder="Full customer name" maxLength={100} {...inp('customer_name')} />
                   <FieldError errors={errors} touched={touched} name="customer_name" />
                 </div>
-                <div>
-                  <Label required>NIC / Passport / Driving Licence</Label>
+                <div className="col-span-2">
+                  <Label required>NIC / Passport / DL</Label>
                   <input type="text" placeholder="ID number" maxLength={50} {...inp('nic_passport_driving_licence')} />
                   <FieldError errors={errors} touched={touched} name="nic_passport_driving_licence" />
                 </div>
               </div>
-              <div>
-                <Label>BR Number</Label>
-                <input type="text" placeholder="Business reg. no." maxLength={50} {...inp('br_no')} />
-                <FieldError errors={errors} touched={touched} name="br_no" />
+              {/* Row 3: BR Number | Customer TIN */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <Label>BR Number</Label>
+                  <input type="text" placeholder="Business reg. no." maxLength={50} {...inp('br_no')} />
+                  <FieldError errors={errors} touched={touched} name="br_no" />
+                </div>
+                <div>
+                  <Label>Customer TIN</Label>
+                  <input type="text" placeholder="Tax identification no." maxLength={50} {...inp('customer_tin')} />
+                  <FieldError errors={errors} touched={touched} name="customer_tin" />
+                </div>
               </div>
             </SectionCard>
 

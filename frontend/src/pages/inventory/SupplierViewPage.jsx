@@ -1,7 +1,9 @@
+import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Edit2, Trash2 } from 'lucide-react'
+import { Edit2, Paperclip, Trash2 } from 'lucide-react'
 import { deleteSupplier, getSupplier } from '../../api/suppliers'
+import { getSupplierAttachments } from '../../api/supplierAttachments'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 
@@ -28,15 +30,54 @@ function SectionCard({ title, children }) {
   )
 }
 
+function formatBytes(bytes) {
+  if (!bytes) return ''
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function isImageMime(mime) {
+  return typeof mime === 'string' && mime.startsWith('image/')
+}
+
+function FileTypeIcon({ mime }) {
+  const ext = mime?.split('/')[1]?.toUpperCase() ?? 'FILE'
+  const colors = {
+    PDF:  'bg-red-100 text-red-700',
+    DOC:  'bg-blue-100 text-blue-700',
+    DOCX: 'bg-blue-100 text-blue-700',
+    XLS:  'bg-emerald-100 text-emerald-700',
+    XLSX: 'bg-emerald-100 text-emerald-700',
+    ZIP:  'bg-amber-100 text-amber-700',
+    RAR:  'bg-amber-100 text-amber-700',
+  }
+  const cls = colors[ext] ?? 'bg-slate-100 text-slate-600'
+  return (
+    <div className={`flex h-10 w-10 items-center justify-center rounded text-[9px] font-bold ${cls}`}>
+      {ext.slice(0, 4)}
+    </div>
+  )
+}
+
 export default function SupplierViewPage() {
   const { id }      = useParams()
   const navigate    = useNavigate()
   const queryClient = useQueryClient()
 
+  const [hoverPreview, setHoverPreview] = useState(null)
+
   const { data, isLoading, isError } = useQuery({
     queryKey: ['supplier', id],
     queryFn:  () => getSupplier(id),
   })
+
+  const { data: attachmentsData } = useQuery({
+    queryKey: ['supplier-attachments', id],
+    queryFn:  () => getSupplierAttachments(id),
+    staleTime: 0,
+  })
+  const attachments = attachmentsData ?? []
 
   const deleteMutation = useMutation({
     mutationFn: () => deleteSupplier(id),
@@ -130,10 +171,12 @@ export default function SupplierViewPage() {
               <Row label="Mobile"    value={fmt(s?.mobile)} />
               <Row label="Land Line" value={fmt(s?.land_line)} />
               <Row label="Email"     value={fmt(s?.email)} />
+              <Row label="WeChat"    value={fmt(s?.wechat)} />
             </div>
             <div className="divide-y divide-slate-50">
-              <Row label="Fax"     value={fmt(s?.fax)} />
-              <Row label="Website" value={fmt(s?.website)} />
+              <Row label="WhatsApp" value={fmt(s?.whatsapp)} />
+              <Row label="Fax"      value={fmt(s?.fax)} />
+              <Row label="Website"  value={fmt(s?.website)} />
             </div>
           </div>
         </SectionCard>
@@ -210,6 +253,62 @@ export default function SupplierViewPage() {
           </div>
         </SectionCard>
 
+        {/* Attachments */}
+        <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+          <div className="flex items-center gap-1.5 border-b border-rose-100 bg-rose-50 px-3 py-1.5">
+            <Paperclip size={13} className="text-rose-600" />
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-rose-700">Attachments</h2>
+            {attachments.length > 0 && (
+              <span className="rounded-full bg-rose-200 px-1.5 py-px text-[10px] font-semibold text-rose-800">
+                {attachments.length}
+              </span>
+            )}
+          </div>
+          <div className="px-4 py-3">
+            {attachments.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-5 text-slate-400">
+                <Paperclip size={22} strokeWidth={1.5} className="mb-1 opacity-40" />
+                <p className="text-xs">No attachments for this supplier.</p>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {attachments.map((file) => (
+                  <div
+                    key={file.id}
+                    className="relative flex flex-col items-center gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1.5 w-22.5"
+                  >
+                    {isImageMime(file.mime_type) ? (
+                      <a
+                        href={file.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        onMouseEnter={() => setHoverPreview({ url: file.url, name: file.file_name })}
+                        onMouseLeave={() => setHoverPreview(null)}
+                      >
+                        <img
+                          src={file.url}
+                          alt={file.file_name}
+                          className="h-12 w-18.5 rounded object-cover border border-slate-200"
+                        />
+                      </a>
+                    ) : (
+                      <a href={file.url} target="_blank" rel="noreferrer">
+                        <FileTypeIcon mime={file.mime_type} />
+                      </a>
+                    )}
+                    <p className="w-full truncate text-center text-[9px] text-slate-600" title={file.file_name}>
+                      {file.file_name}
+                    </p>
+                    {file.file_size && (
+                      <p className="text-[9px] text-slate-400">{formatBytes(file.file_size)}</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* Record Info */}
         <SectionCard title="Record Info">
           <div className="divide-y divide-slate-50">
@@ -225,6 +324,20 @@ export default function SupplierViewPage() {
           ← Back to Suppliers
         </Link>
       </div>
+
+      {/* Image hover preview popup */}
+      {hoverPreview && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+          <div className="rounded-xl border border-slate-300 bg-white p-2 shadow-2xl max-w-sm pointer-events-none">
+            <img
+              src={hoverPreview.url}
+              alt={hoverPreview.name}
+              className="max-h-64 max-w-xs rounded object-contain"
+            />
+            <p className="mt-1 truncate text-center text-[10px] text-slate-500">{hoverPreview.name}</p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
