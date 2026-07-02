@@ -154,6 +154,6 @@ Every delete any record ask Yes or No with a smart popup
 - **Typography:** Use a clean, highly readable system font stack (e.g., Inter, Segoe UI, system-ui). Maintain strict text hierarchy (Headers at `text-xl` or `text-2xl` bold, Body at `text-sm`).
 - **Color Usage:** Stick to a professional slate palette (`bg-slate-50`, `text-slate-900`). Use accent colors strictly for status feedback: Red for alerts/out-of-stock, Green for active/success, Amber for warnings/low-stock.
 
-
+# Always Properly read Existing backend and frontend code Structure and styles that are used to apply each new developments
 
 # ask me questions before start development , if you need more clarification of each Development

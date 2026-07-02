@@ -9,7 +9,7 @@ use Modules\Inventory\Http\Requests\UpdateGoodsReceivedNoteRequest;
 
 final class GoodsReceivedNoteData
 {
-    /** @param array<array{po_item_id:int, product_id:int, unit_id:?int, quantity_received:float, unit_price:float, batch_no:?string, expiry_date:?string}> $items */
+    /** @param array<array{po_item_id:int, product_id:int, unit_id:?int, quantity_received:float, no_of_pieces:?int, unit_price:float, batch_no:?string, expiry_date:?string}> $items */
     public function __construct(
         public readonly ?int    $poId,
         public readonly ?int    $supplierId,

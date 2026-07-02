@@ -434,7 +434,7 @@ class GoodsReceivedNoteService
     }
 
     /**
-     * @param array<array{po_item_id:int, product_id:int, unit_id:?int, quantity_received:float, unit_price:float, discount:?float, tax:?float, batch_no:?string, expiry_date:?string, batches:?array}> $items
+     * @param array<array{po_item_id:int, product_id:int, unit_id:?int, quantity_received:float, no_of_pieces:?int, unit_price:float, discount:?float, tax:?float, batch_no:?string, expiry_date:?string, batches:?array}> $items
      */
     private function syncItems(GoodsReceivedNote $grn, array $items): void
     {
@@ -458,6 +458,7 @@ class GoodsReceivedNoteService
             $hasPoItem   = !empty($row['po_item_id']);
             $ordered     = $hasPoItem ? (float) ($poItem[$row['po_item_id']]?->quantity_ordered ?? 0) : 0;
             $qtyRcv      = (float) $row['quantity_received'];
+            $noOfPieces  = (int) ($row['no_of_pieces'] ?? 0);
             $unitPrice   = (float) ($row['unit_price'] ?? 0);
             $discountPct = (float) ($row['discount'] ?? 0);
             $taxPct      = (float) ($row['tax'] ?? 0);
@@ -480,6 +481,7 @@ class GoodsReceivedNoteService
                 'unit_id'           => !empty($row['unit_id']) ? (int) $row['unit_id'] : null,
                 'quantity_ordered'  => $ordered,
                 'quantity_received' => $qtyRcv,
+                'no_of_pieces'      => $noOfPieces,
                 'unit_price'        => $unitPrice,
                 'discount'          => $discountPct,
                 'tax'               => $taxPct,

@@ -20,6 +20,7 @@ class GoodsReceivedNoteItemResource extends JsonResource
             'unit_id'           => $this->unit_id,
             'quantity_ordered'  => (float) $this->quantity_ordered,
             'quantity_received' => (float) $this->quantity_received,
+            'no_of_pieces'      => (int) $this->no_of_pieces,
             'unit_price'        => (float) $this->unit_price,
             'discount'          => (float) $this->discount,
             'tax'               => (float) $this->tax,

@@ -384,6 +384,7 @@ export default function GoodsReceivedNoteFormPage() {
         already_received:   null,
         remaining_qty:      null,
         quantity_received:  it.quantity_received,
+        no_of_pieces:       it.no_of_pieces ?? '',
         unit_price:         toPrice(it.unit_price),
         discount:           it.discount ?? '',
         tax:                it.tax      ?? '',
@@ -442,6 +443,7 @@ export default function GoodsReceivedNoteFormPage() {
     already_received:  it.quantity_received,
     remaining_qty:     it.remaining_qty,
     quantity_received: it.remaining_qty,
+    no_of_pieces:      '',
     unit_price:        toPrice(it.unit_price),
     discount:          it.discount ?? '',
     tax:               it.tax      ?? '',
@@ -561,6 +563,7 @@ export default function GoodsReceivedNoteFormPage() {
       already_received:  null,
       remaining_qty:     null,
       quantity_received: '',
+      no_of_pieces:      '',
       unit_price:        '',
       discount:          '',
       tax:               '',
@@ -797,6 +800,17 @@ export default function GoodsReceivedNoteFormPage() {
       return
     }
 
+    const itemsMissingPieces = validItems.filter((r) => r.no_of_pieces === '' || parseInt(r.no_of_pieces, 10) < 0)
+    if (itemsMissingPieces.length) {
+      setItemTouched((t) => {
+        const next = { ...t }
+        itemsMissingPieces.forEach((r) => { next[r._key] = { ...next[r._key], pieces: true } })
+        return next
+      })
+      showError('No. of pieces is required for all line items.')
+      return
+    }
+
     const payload = {
       supplier_id:      form.supplier_id      || null,
       grn_date:         form.grn_date,
@@ -811,6 +825,7 @@ export default function GoodsReceivedNoteFormPage() {
         product_id:        parseInt(r.product_id),
         unit_id:           r.unit_id ? parseInt(r.unit_id) : null,
         quantity_received: parseFloat(r.quantity_received),
+        no_of_pieces:      parseInt(r.no_of_pieces, 10),
         unit_price:        parseFloat(r.unit_price) || 0,
         discount:          parseFloat(r.discount)   || 0,
         tax:               parseFloat(r.tax)        || 0,
@@ -879,6 +894,7 @@ export default function GoodsReceivedNoteFormPage() {
     if (!row) return null
     if (field === 'uom')   return row.unit_id ? null : 'Required'
     if (field === 'qty')   return parseFloat(row.quantity_received) > 0 ? null : 'Required'
+    if (field === 'pieces') return row.no_of_pieces !== '' && parseInt(row.no_of_pieces, 10) >= 0 ? null : 'Required'
     if (field === 'price') return row.unit_price !== '' && parseFloat(row.unit_price) >= 0 ? null : 'Required'
     return null
   }
@@ -1259,6 +1275,7 @@ export default function GoodsReceivedNoteFormPage() {
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-right">Available</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">UOM</th>
                     <th className="w-28 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty Received</th>
+                    <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">No Of Pieces</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-center">Disc %</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600 text-center">Tax %</th>
@@ -1358,11 +1375,31 @@ export default function GoodsReceivedNoteFormPage() {
                               onChange={(e) => setRowField(idx, 'quantity_received', e.target.value)}
                               onBlur={() => touchItemField(row._key, 'qty')}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
+                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'pieces') }
                               }}
                             />
                             {getItemErr(row._key, 'qty') && (
                               <span className="text-[9px] text-red-500 leading-none">{getItemErr(row._key, 'qty')}</span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* No Of Pieces */}
+                        <td className="px-2 py-1">
+                          <div className="flex flex-col gap-0.5">
+                            <input
+                              ref={setCellRef(row._key, 'pieces')}
+                              type="number" min="0" step="1" placeholder="0"
+                              className={(getItemErr(row._key, 'pieces') ? TABLE_ERR : TABLE_INPUT) + ' w-20'}
+                              value={row.no_of_pieces}
+                              onChange={(e) => setRowField(idx, 'no_of_pieces', e.target.value)}
+                              onBlur={() => touchItemField(row._key, 'pieces')}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
+                              }}
+                            />
+                            {getItemErr(row._key, 'pieces') && (
+                              <span className="text-[9px] text-red-500 leading-none">{getItemErr(row._key, 'pieces')}</span>
                             )}
                           </div>
                         </td>
@@ -1460,7 +1497,7 @@ export default function GoodsReceivedNoteFormPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-slate-200 bg-slate-50/50">
-                    <td colSpan={8} />
+                    <td colSpan={9} />
                     <td className="px-1.5 py-1.5 text-center text-xs font-bold text-amber-600 tabular-nums">
                       -{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
@@ -1474,7 +1511,7 @@ export default function GoodsReceivedNoteFormPage() {
                     <td />
                   </tr>
                   <tr className="bg-indigo-50 border-t border-indigo-100">
-                    <td colSpan={8} className="px-3 py-1.5">
+                    <td colSpan={9} className="px-3 py-1.5">
                       <div className="flex items-center gap-4 text-xs">
                         <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
                         <span className="text-slate-500">Gross: <span className="font-bold text-slate-700">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>

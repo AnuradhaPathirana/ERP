@@ -34,6 +34,7 @@ class StoreGoodsReceivedNoteRequest extends FormRequest
             'items.*.product_id'          => ['required', 'integer', 'exists:inv_products,id'],
             'items.*.unit_id'             => ['required', 'integer', 'exists:inv_unit_types,id'],
             'items.*.quantity_received'   => ['required', 'numeric', 'min:0.0001'],
+            'items.*.no_of_pieces'        => ['required', 'integer', 'min:0'],
             'items.*.unit_price'          => ['required', 'numeric', 'min:0'],
             'items.*.discount'            => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.tax'                 => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -64,6 +65,7 @@ class StoreGoodsReceivedNoteRequest extends FormRequest
             'items.*.product_id'        => 'product',
             'items.*.unit_id'           => 'unit of measure',
             'items.*.quantity_received' => 'quantity received',
+            'items.*.no_of_pieces'      => 'no. of pieces',
             'items.*.unit_price'        => 'unit price',
         ];
     }
