@@ -38,6 +38,10 @@ export const getLastGrn = () =>
 export const downloadGrnPdf = (id) =>
   api.get(`/api/v1/goods-received-notes/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data)
 
+/** Download GRN piece QR labels as PDF — returns a Blob */
+export const downloadGrnPieceLabelsPdf = (id) =>
+  api.get(`/api/v1/goods-received-notes/${id}/piece-labels/pdf`, { responseType: 'blob' }).then((r) => r.data)
+
 /** Fetch last recorded unit_price per product from GRN history { product_id: "price" } */
 export const getLastGrnProductPrices = (productIds = []) =>
   api.get('/api/v1/goods-received-notes/last-product-prices', {

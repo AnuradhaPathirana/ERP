@@ -2,11 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ClipboardList, Download, FileText, Layers, PackageCheck, Plus, ShoppingCart, Trash2, X } from 'lucide-react'
+import { ClipboardList, Download, FileText, Layers, PackageCheck, Plus, QrCode, ShoppingCart, Trash2, X } from 'lucide-react'
 import {
   confirmGoodsReceivedNote,
   createGoodsReceivedNote,
   downloadGrnPdf,
+  downloadGrnPieceLabelsPdf,
   getGoodsReceivedNote,
   getLastGrn,
   getLastGrnProductPrices,
@@ -249,8 +250,9 @@ export default function GoodsReceivedNoteFormPage() {
   const [lastGrnAmount, setLastGrnAmount] = useState('')
 
   /* ── Save status & PDF ────────────────────────────────────── */
-  const [saveStatus,    setSaveStatus]    = useState('confirmed')  // 'draft' | 'confirmed'
-  const [isDownloading, setIsDownloading] = useState(false)
+  const [saveStatus,      setSaveStatus]      = useState('confirmed')  // 'draft' | 'confirmed'
+  const [isDownloading,   setIsDownloading]   = useState(false)
+  const [isPrintingLabels, setIsPrintingLabels] = useState(false)
 
   /* ── Attachment state ─────────────────────────────────────── */
   const [newFiles,    setNewFiles]    = useState([])
@@ -771,6 +773,26 @@ export default function GoodsReceivedNoteFormPage() {
       showError('Failed to download PDF.')
     } finally {
       setIsDownloading(false)
+    }
+  }
+
+  /* ── Piece QR labels PDF ──────────────────────────────────── */
+  const handlePrintPieceLabels = async () => {
+    const grnId = isEdit ? id : null
+    if (!grnId) return
+    setIsPrintingLabels(true)
+    try {
+      const blob = await downloadGrnPieceLabelsPdf(grnId)
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `GRN_${grnNoPreview || grnId}_Piece_Labels.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      showError(err?.response?.data?.message || 'Failed to generate piece labels.')
+    } finally {
+      setIsPrintingLabels(false)
     }
   }
 
@@ -1537,8 +1559,8 @@ export default function GoodsReceivedNoteFormPage() {
           {/* Action buttons */}
           <div className="flex items-center justify-between gap-3 border-t border-slate-200 px-3 py-2">
 
-            {/* Left: PDF download (edit mode only) */}
-            <div>
+            {/* Left: PDF download + Piece labels (edit mode only) */}
+            <div className="flex items-center gap-2">
               {isEdit && (
                 <button
                   type="button"
@@ -1548,6 +1570,17 @@ export default function GoodsReceivedNoteFormPage() {
                 >
                   <Download size={12} />
                   {isDownloading ? 'Generating…' : 'Download PDF'}
+                </button>
+              )}
+              {isEdit && existingGRN?.data?.status === 'confirmed' && (
+                <button
+                  type="button"
+                  onClick={handlePrintPieceLabels}
+                  disabled={isPrintingLabels}
+                  className="flex items-center gap-1.5 rounded border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-60"
+                >
+                  <QrCode size={12} />
+                  {isPrintingLabels ? 'Generating…' : 'Print Piece Labels'}
                 </button>
               )}
             </div>

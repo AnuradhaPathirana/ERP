@@ -46,6 +46,7 @@ const PurchaseOrdersPage       = lazy(() => import('./pages/inventory/PurchaseOr
 const PurchaseOrderFormPage    = lazy(() => import('./pages/inventory/PurchaseOrderFormPage'))
 const GoodsReceivedNotesPage   = lazy(() => import('./pages/inventory/GoodsReceivedNotesPage'))
 const GoodsReceivedNoteFormPage = lazy(() => import('./pages/inventory/GoodsReceivedNoteFormPage'))
+const PieceScanResultPage       = lazy(() => import('./pages/inventory/PieceScanResultPage'))
 const CostingsPage              = lazy(() => import('./pages/inventory/CostingsPage'))
 const CostingFormPage           = lazy(() => import('./pages/inventory/CostingFormPage'))
 // Inventory Reports
@@ -86,6 +87,9 @@ export default function App() {
     <Routes>
       {/* Public */}
       <Route path="/login" element={<LoginPage />} />
+
+      {/* Standalone — scanned via phone camera, no desktop admin chrome */}
+      <Route path="/inventory/pieces/:pieceCode" element={<Lazy component={PieceScanResultPage} />} />
 
       {/* Protected shell */}
       <Route element={<Layout />}>

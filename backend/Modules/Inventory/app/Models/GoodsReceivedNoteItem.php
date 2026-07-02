@@ -67,4 +67,9 @@ class GoodsReceivedNoteItem extends Model
     {
         return $this->hasMany(GrnItemBatch::class, 'grn_item_id');
     }
+
+    public function pieces(): HasMany
+    {
+        return $this->hasMany(GrnItemPiece::class, 'grn_item_id');
+    }
 }

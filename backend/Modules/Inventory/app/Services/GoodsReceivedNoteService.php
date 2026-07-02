@@ -14,6 +14,7 @@ use Modules\Inventory\Models\Batch;
 use Modules\Inventory\Models\GoodsReceivedNote;
 use Modules\Inventory\Models\GoodsReceivedNoteItem;
 use Modules\Inventory\Models\GrnItemBatch;
+use Modules\Inventory\Models\GrnItemPiece;
 use Modules\Inventory\Models\ProductLocationStore;
 use Modules\Inventory\Models\PurchaseOrder;
 use Modules\Inventory\Models\PurchaseOrderItem;
@@ -296,7 +297,7 @@ class GoodsReceivedNoteService
                 ->unique()
                 ->values();
 
-            foreach ($grn->items as $item) {
+            foreach ($grn->items as $itemSeq => $item) {
                 $batchAssignments = $item->batchAssignments;
 
                 if ($batchAssignments->isNotEmpty()) {
@@ -366,6 +367,8 @@ class GoodsReceivedNoteService
                     $pivot->increment('current_stock', (float) $item->quantity_received);
                 }
 
+                $this->generatePiecesForItem($grn, $item, $itemSeq + 1);
+
                 // Update quantity_received on the linked PO item (skip for manual GRN items)
                 if ($item->po_item_id) {
                     PurchaseOrderItem::where('id', $item->po_item_id)
@@ -431,6 +434,66 @@ class GoodsReceivedNoteService
             : 1;
 
         return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Generate one QR-coded piece record per physical piece received for this item.
+     * Runs only at confirmation time, since GRN items become immutable once confirmed.
+     */
+    private function generatePiecesForItem(GoodsReceivedNote $grn, GoodsReceivedNoteItem $item, int $itemSeq): void
+    {
+        if ($item->no_of_pieces <= 0 || !$grn->store_id) {
+            return;
+        }
+
+        $batchAssignments = $item->batchAssignments;
+        $pieceRows         = [];
+        $pieceNo           = 1;
+
+        if ($batchAssignments->isNotEmpty()) {
+            $totalQty         = (float) $item->quantity_received;
+            $allocated        = 0;
+            $assignmentsCount = $batchAssignments->count();
+
+            foreach ($batchAssignments as $index => $assignment) {
+                $isLast = $index === $assignmentsCount - 1;
+                $share  = $isLast
+                    ? $item->no_of_pieces - $allocated
+                    : (int) round(((float) $assignment->quantity / $totalQty) * $item->no_of_pieces);
+                $allocated += $share;
+
+                for ($i = 0; $i < $share; $i++) {
+                    $pieceRows[] = $this->buildPieceRow($grn, $item, $itemSeq, $pieceNo, (int) $assignment->batch_id);
+                    $pieceNo++;
+                }
+            }
+        } else {
+            for ($i = 0; $i < $item->no_of_pieces; $i++) {
+                $pieceRows[] = $this->buildPieceRow($grn, $item, $itemSeq, $pieceNo, null);
+                $pieceNo++;
+            }
+        }
+
+        GrnItemPiece::insert($pieceRows);
+    }
+
+    /** @return array<string, mixed> */
+    private function buildPieceRow(GoodsReceivedNote $grn, GoodsReceivedNoteItem $item, int $itemSeq, int $pieceNo, ?int $batchId): array
+    {
+        return [
+            'grn_item_id' => $item->id,
+            'grn_id'      => $grn->id,
+            'product_id'  => $item->product_id,
+            'batch_id'    => $batchId,
+            'store_id'    => $grn->store_id,
+            'location_id' => $grn->location_id,
+            'piece_no'    => $pieceNo,
+            'piece_code'  => sprintf('%s-I%03d-P%03d', $grn->grn_no, $itemSeq, $pieceNo),
+            'status'      => 'in_stock',
+            'created_by'  => auth()->id(),
+            'created_at'  => now(),
+            'updated_at'  => now(),
+        ];
     }
 
     /**

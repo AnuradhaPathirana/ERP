@@ -28,6 +28,8 @@ use Modules\Inventory\Http\Controllers\GoodsReceivedNoteController;
 use Modules\Inventory\Http\Controllers\GrnAttachmentController;
 use Modules\Inventory\Http\Controllers\SupplierAttachmentController;
 use Modules\Inventory\Http\Controllers\GrnPdfController;
+use Modules\Inventory\Http\Controllers\GrnItemPieceController;
+use Modules\Inventory\Http\Controllers\GrnPieceLabelPdfController;
 use Modules\Inventory\Http\Controllers\StockController;
 use Modules\Inventory\Http\Controllers\CostingController;
 use Modules\Inventory\Http\Controllers\CostingExpenseTypeController;
@@ -235,8 +237,14 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.grns.confirm');
     Route::get('goods-received-notes/{goods_received_note}/pdf', [GrnPdfController::class, 'download'])
         ->name('inventory.grns.pdf');
+    Route::get('goods-received-notes/{goods_received_note}/piece-labels/pdf', [GrnPieceLabelPdfController::class, 'download'])
+        ->name('inventory.grns.piece-labels.pdf');
     Route::apiResource('goods-received-notes', GoodsReceivedNoteController::class)
         ->names('inventory.grns');
+
+    // ── GRN Piece QR scan resolve ────────────────────────────────────────────
+    Route::get('pieces/{pieceCode}', [GrnItemPieceController::class, 'show'])
+        ->name('inventory.pieces.show');
 
     // ── Reports ───────────────────────────────────────────────────────────────
     Route::prefix('reports/inventory')->name('inventory.reports.')->group(function (): void {

@@ -56,6 +56,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Frontend URL
+    |--------------------------------------------------------------------------
+    |
+    | The public origin of the React frontend. Used when generating deep
+    | links (e.g. QR code scan-to-view URLs) that must resolve in a browser
+    | rather than hit the API directly.
+    |
+    */
+
+    'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost')),
+
+    /*
+    |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------
     |
