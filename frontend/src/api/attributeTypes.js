@@ -3,8 +3,8 @@ import api from './axios'
 const BASE = '/api/v1/attribute-types'
 
 /** @returns {Promise<{ data: object[], meta: { current_page, last_page, per_page, total } }>} */
-export const getAttributeTypes = (page = 1) =>
-  api.get(BASE, { params: { page } }).then((r) => r.data)
+export const getAttributeTypes = (page = 1, filters = {}) =>
+  api.get(BASE, { params: { page, ...filters } }).then((r) => r.data)
 
 /** @returns {Promise<{ data: object }>} */
 export const getAttributeType = (id) =>

@@ -24,7 +24,8 @@ class AttributeController extends Controller
 
     public function index(): JsonResponse
     {
-        $paginator = $this->service->paginate();
+        $filters   = request()->only(['search', 'attribute_type_id', 'category_id']);
+        $paginator = $this->service->paginate(50, $filters);
 
         return response()->json([
             'data' => collect($paginator->items())

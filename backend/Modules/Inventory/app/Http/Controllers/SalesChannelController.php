@@ -76,7 +76,7 @@ class SalesChannelController extends Controller
     /** Flat list for dropdowns — id + name + type. */
     public function all(): JsonResponse
     {
-        $items = SalesChannel::orderBy('sales_channel_name')
+        $items = SalesChannel::orderBy('id')
             ->get(['id', 'sales_channel_name', 'type'])
             ->map(fn (SalesChannel $c) => [
                 'id'   => $c->id,

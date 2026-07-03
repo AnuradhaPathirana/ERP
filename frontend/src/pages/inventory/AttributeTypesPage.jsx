@@ -5,8 +5,12 @@ import { ChevronDown, ChevronRight, Edit2, ListFilter, Save, X } from 'lucide-re
 import { createAttributeType, deleteAttributeType, getAttributeType, getAttributeTypes, updateAttributeType } from '../../api/attributeTypes'
 import { getAllCategories } from '../../api/categories'
 import Breadcrumb from '../../components/Breadcrumb'
+import TableFilter, { FilterField } from '../../components/TableFilter'
+import TreeSelect from '../../components/TreeSelect'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
+import { useTableFilter } from '../../hooks/useTableFilter'
+import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 import { DeleteBtn } from '../../components/ui/ActionButtons'
 import Pagination from '../../components/ui/Pagination'
 
@@ -19,6 +23,8 @@ const TYPE_BADGE = {
   product: 'bg-blue-50 text-blue-700',
   service: 'bg-violet-50 text-violet-700',
 }
+
+const INITIAL_FILTERS = { search: '', category_id: '', product_service_type: '' }
 
 const EMPTY_FORM = {
   category_id:          '',
@@ -403,10 +409,21 @@ export default function AttributeTypesPage() {
   const queryClient = useQueryClient()
   const { can } = usePermissions()
 
+  const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
+    useTableFilter(INITIAL_FILTERS)
+
+  const resetPage = () => setPage(1)
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['attribute-types', page],
-    queryFn:  () => getAttributeTypes(page),
+    queryKey: ['attribute-types', page, applied],
+    queryFn:  () => getAttributeTypes(page, applied),
     placeholderData: (prev) => prev,
+  })
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories-all'],
+    queryFn:  getAllCategories,
+    staleTime: 5 * 60 * 1000,
   })
 
   const deleteMutation = useMutation({
@@ -437,6 +454,49 @@ export default function AttributeTypesPage() {
         <h1 className="text-xl font-bold leading-none text-slate-800">Attribute Types</h1>
         <Breadcrumb crumbs={CRUMBS} />
       </div>
+
+      {/* ── Filter Panel ── */}
+      <TableFilter
+        open={open}
+        onToggle={toggle}
+        onApply={() => apply(resetPage)}
+        onClear={() => clear(resetPage)}
+        activeCount={activeCount}
+      >
+        <FilterField label="Search">
+          <input
+            className={FILTER_INPUT_CLS}
+            placeholder="Name or description…"
+            value={draft.search}
+            onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
+          />
+        </FilterField>
+
+        <FilterField label="Category">
+          <TreeSelect
+            name="category_id"
+            value={draft.category_id}
+            onChange={(e) => setDraft((d) => ({ ...d, category_id: e.target.value }))}
+            items={categories}
+            parentField="parent_category_id"
+            labelField="category_name"
+            placeholder="All categories"
+            emptyText="No categories available."
+          />
+        </FilterField>
+
+        <FilterField label="Type">
+          <select
+            className={FILTER_SELECT_CLS}
+            value={draft.product_service_type}
+            onChange={(e) => setDraft((d) => ({ ...d, product_service_type: e.target.value }))}
+          >
+            <option value="">All types</option>
+            <option value="product">Product</option>
+            <option value="service">Service</option>
+          </select>
+        </FilterField>
+      </TableFilter>
 
       <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-3">
 
@@ -471,7 +531,9 @@ export default function AttributeTypesPage() {
                     {rows.length === 0 ? (
                       <tr>
                         <td colSpan={8} className="px-4 py-8 text-center text-sm text-slate-400">
-                          No attribute types yet. Use the form to create the first one.
+                          {activeCount > 0
+                            ? 'No attribute types match the current filters.'
+                            : 'No attribute types yet. Use the form to create the first one.'}
                         </td>
                       </tr>
                     ) : (

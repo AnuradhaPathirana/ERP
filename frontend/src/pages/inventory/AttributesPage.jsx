@@ -3,9 +3,14 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Edit2, Save, Tag, X } from 'lucide-react'
 import { createAttribute, deleteAttribute, getAttribute, getAttributes, updateAttribute } from '../../api/attributes'
 import { getAllAttributeTypes } from '../../api/attributeTypes'
+import { getAllCategories } from '../../api/categories'
 import Breadcrumb from '../../components/Breadcrumb'
+import TableFilter, { FilterField } from '../../components/TableFilter'
+import TreeSelect from '../../components/TreeSelect'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
+import { useTableFilter } from '../../hooks/useTableFilter'
+import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 import { DeleteBtn } from '../../components/ui/ActionButtons'
 import Pagination from '../../components/ui/Pagination'
 
@@ -13,6 +18,8 @@ const CRUMBS = [
   { label: 'Inventory', to: '/inventory/attributes' },
   { label: 'Attributes' },
 ]
+
+const INITIAL_FILTERS = { search: '', category_id: '', attribute_type_id: '' }
 
 const EMPTY_FORM = {
   attribute_type_id: '',
@@ -259,11 +266,46 @@ export default function AttributesPage() {
   const queryClient = useQueryClient()
   const { can } = usePermissions()
 
+  const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
+    useTableFilter(INITIAL_FILTERS)
+
+  const resetPage = () => setPage(1)
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['attributes', page],
-    queryFn:  () => getAttributes(page),
+    queryKey: ['attributes', page, applied],
+    queryFn:  () => getAttributes(page, applied),
     placeholderData: (prev) => prev,
   })
+
+  const { data: categories = [] } = useQuery({
+    queryKey: ['categories-all'],
+    queryFn:  getAllCategories,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: attributeTypesData } = useQuery({
+    queryKey: ['attribute-types-all'],
+    queryFn:  getAllAttributeTypes,
+    staleTime: 5 * 60 * 1000,
+  })
+  const attributeTypes = attributeTypesData ?? []
+
+  // Cascade: once a Category is picked, only show Attribute Types under it.
+  const filterAttributeTypeOptions = attributeTypes.filter(
+    (t) => !draft.category_id || String(t.category_id) === String(draft.category_id)
+  )
+
+  const handleFilterCategoryChange = (e) => {
+    const value = e.target.value
+    setDraft((d) => ({
+      ...d,
+      category_id: value,
+      // Drop the selected Attribute Type if it no longer belongs to the new category.
+      attribute_type_id: attributeTypes.some(
+        (t) => String(t.id) === d.attribute_type_id && (!value || String(t.category_id) === String(value))
+      ) ? d.attribute_type_id : '',
+    }))
+  }
 
   const deleteMutation = useMutation({
     mutationFn: deleteAttribute,
@@ -293,6 +335,50 @@ export default function AttributesPage() {
         <h1 className="text-xl font-bold leading-none text-slate-800">Attributes</h1>
         <Breadcrumb crumbs={CRUMBS} />
       </div>
+
+      {/* ── Filter Panel ── */}
+      <TableFilter
+        open={open}
+        onToggle={toggle}
+        onApply={() => apply(resetPage)}
+        onClear={() => clear(resetPage)}
+        activeCount={activeCount}
+      >
+        <FilterField label="Search">
+          <input
+            className={FILTER_INPUT_CLS}
+            placeholder="Attribute name…"
+            value={draft.search}
+            onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
+          />
+        </FilterField>
+
+        <FilterField label="Category">
+          <TreeSelect
+            name="category_id"
+            value={draft.category_id}
+            onChange={handleFilterCategoryChange}
+            items={categories}
+            parentField="parent_category_id"
+            labelField="category_name"
+            placeholder="All categories"
+            emptyText="No categories available."
+          />
+        </FilterField>
+
+        <FilterField label="Attribute Type">
+          <select
+            className={FILTER_SELECT_CLS}
+            value={draft.attribute_type_id}
+            onChange={(e) => setDraft((d) => ({ ...d, attribute_type_id: e.target.value }))}
+          >
+            <option value="">All attribute types</option>
+            {filterAttributeTypeOptions.map((t) => (
+              <option key={t.id} value={t.id}>{t.attribute_type_name}</option>
+            ))}
+          </select>
+        </FilterField>
+      </TableFilter>
 
       <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-3">
 
@@ -325,7 +411,9 @@ export default function AttributesPage() {
                     {rows.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-4 py-8 text-center text-sm text-slate-400">
-                          No attributes yet. Use the form to create the first one.
+                          {activeCount > 0
+                            ? 'No attributes match the current filters.'
+                            : 'No attributes yet. Use the form to create the first one.'}
                         </td>
                       </tr>
                     ) : (

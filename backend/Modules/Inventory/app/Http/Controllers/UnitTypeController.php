@@ -78,17 +78,23 @@ class UnitTypeController extends Controller
     }
 
     /**
-     * Flat list for dropdowns. Pass `unit_category_id` to scope to a specific category
-     * (e.g. cascading Unit Category → UOM selects); otherwise falls back to the default category.
+     * Flat list for dropdowns.
+     *   ?unit_category_id=X  → filter to that category (cascading selects)
+     *   ?scope=all           → every unit type across all categories, includes unit_category_name for <optgroup>
+     *   (no params)          → falls back to the default category (existing behaviour for GRN / PR / PO forms)
      */
     public function all(Request $request): JsonResponse
     {
         $categoryId = $request->query('unit_category_id');
+        $scope      = $request->query('scope');
 
-        $query = UnitType::orderBy('name')->select(['id', 'name', 'symbol', 'unit_category_id']);
+        $query = UnitType::orderBy('unit_category_id')->orderBy('name')
+            ->select(['id', 'name', 'symbol', 'unit_category_id']);
 
         if ($categoryId) {
             $query->where('unit_category_id', (int) $categoryId);
+        } elseif ($scope === 'all') {
+            $query->with('category:id,name');
         } else {
             $defaultCategory = UnitCategory::where('is_default', true)->value('id');
             if ($defaultCategory) {
@@ -98,10 +104,11 @@ class UnitTypeController extends Controller
 
         $items = $query->get()
             ->map(fn (UnitType $u) => [
-                'id'               => $u->id,
-                'unit_category_id' => $u->unit_category_id,
-                'name'             => $u->name,
-                'symbol'           => $u->symbol,
+                'id'                 => $u->id,
+                'unit_category_id'   => $u->unit_category_id,
+                'unit_category_name' => $u->relationLoaded('category') ? $u->category?->name : null,
+                'name'               => $u->name,
+                'symbol'             => $u->symbol,
             ])
             ->values()
             ->all();

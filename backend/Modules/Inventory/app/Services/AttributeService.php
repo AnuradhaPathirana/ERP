@@ -11,11 +11,28 @@ use Modules\Inventory\Models\Attribute;
 
 class AttributeService
 {
-    public function paginate(int $perPage = 50): LengthAwarePaginator
+    /** @param array<string, mixed> $filters */
+    public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
-        return Attribute::with('attributeType.category')
-            ->orderBy('attribute_name')
-            ->paginate($perPage);
+        $query = Attribute::with('attributeType.category')
+            ->orderBy('attribute_name');
+
+        if (!empty($filters['search'])) {
+            $query->where('attribute_name', 'like', '%' . $filters['search'] . '%');
+        }
+
+        if (!empty($filters['attribute_type_id'])) {
+            $query->where('attribute_type_id', (int) $filters['attribute_type_id']);
+        }
+
+        if (!empty($filters['category_id'])) {
+            $query->whereHas(
+                'attributeType',
+                fn ($q) => $q->where('category_id', (int) $filters['category_id']),
+            );
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function find(int $id): Attribute

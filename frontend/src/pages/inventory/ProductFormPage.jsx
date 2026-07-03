@@ -10,8 +10,7 @@ import { getAllLocations } from '../../api/locations'
 import { getAllSalesChannels } from '../../api/salesChannels'
 import { getAllStores } from '../../api/stores'
 import { getAllSuppliers } from '../../api/suppliers'
-import { getAllUnitCategories } from '../../api/unitCategories'
-import { getAllUnitTypes } from '../../api/unitTypes'
+import { getAllUnitTypesFlat } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
 import TreeSelect from '../../components/TreeSelect'
 import { showError, showSuccess } from '../../utils/alerts'
@@ -466,17 +465,18 @@ function MarginField({ row, handle, toggleMarginType }) {
   )
 }
 
-function CostDetailCard({ row, idx, salesChannels, unitCategories, usedChannelIds, onChange, onRemove, isSingle, rowErrors, rowTouched, onFieldBlur }) {
+function CostDetailCard({ row, idx, salesChannels, allUnitTypes, usedChannelIds, onChange, onRemove, isSingle, rowErrors, rowTouched, onFieldBlur }) {
   const avgPrice = computeAverage(row.cost_price, row.selling_price)
   const re = rowErrors  ?? {}
   const rt = rowTouched ?? {}
 
-  const { data: uomOptionsData } = useQuery({
-    queryKey: ['unit-types-by-category', row.unit_category_id],
-    queryFn:  () => getAllUnitTypes(row.unit_category_id),
-    enabled:  Boolean(row.unit_category_id),
-  })
-  const uomOptions = uomOptionsData ?? []
+  // Group unit types by category for <optgroup> rendering
+  const uomGroups = allUnitTypes.reduce((acc, u) => {
+    const key = String(u.unit_category_id)
+    if (!acc[key]) acc[key] = { name: u.unit_category_name ?? 'Other', items: [] }
+    acc[key].items.push(u)
+    return acc
+  }, {})
 
   const handle = (field) => (e) => {
     const value = e.target.value
@@ -489,8 +489,9 @@ function CostDetailCard({ row, idx, salesChannels, unitCategories, usedChannelId
     } else if (field === 'selling_price') {
       const m = calcMarginValue(row.cost_price, value, row.margin_type)
       onChange(idx, m !== '' ? { selling_price: value, margin: m } : { selling_price: value })
-    } else if (field === 'unit_category_id') {
-      onChange(idx, { unit_category_id: value, unit_type_id: '' })
+    } else if (field === 'unit_type_id') {
+      const unit = allUnitTypes.find((u) => String(u.id) === value)
+      onChange(idx, { unit_type_id: value, unit_category_id: unit ? String(unit.unit_category_id) : '' })
     } else {
       onChange(idx, field, value)
     }
@@ -525,30 +526,21 @@ function CostDetailCard({ row, idx, salesChannels, unitCategories, usedChannelId
     </Field>
   )
 
-  const unitCategorySelect = (
-    <Field label="Unit Category">
-      <CostSelect
-        value={row.unit_category_id}
-        onChange={handle('unit_category_id')}
-        placeholder="Category..."
-      >
-        {unitCategories.map((c) => (
-          <option key={c.id} value={c.id}>{c.name}</option>
-        ))}
-      </CostSelect>
-    </Field>
-  )
-
-  const uomField = (
-    <Field label="UOM">
+  const uomGroupedField = (
+    <Field label="Unit of Measure">
       <CostSelect
         value={row.unit_type_id}
         onChange={handle('unit_type_id')}
-        disabled={!row.unit_category_id}
-        placeholder={row.unit_category_id ? 'Unit...' : 'Select category first'}
+        placeholder="Select UOM..."
       >
-        {uomOptions.map((u) => (
-          <option key={u.id} value={u.id}>{u.symbol ? `${u.name} (${u.symbol})` : u.name}</option>
+        {Object.entries(uomGroups).map(([catId, group]) => (
+          <optgroup key={catId} label={group.name}>
+            {group.items.map((u) => (
+              <option key={u.id} value={u.id}>
+                {u.symbol ? `${u.name} (${u.symbol})` : u.name}
+              </option>
+            ))}
+          </optgroup>
         ))}
       </CostSelect>
     </Field>
@@ -645,11 +637,10 @@ function CostDetailCard({ row, idx, salesChannels, unitCategories, usedChannelId
 
       {isSingle ? (
         <>
-          {/* Single channel: 4 fields per row, full width */}
-          <div className="grid grid-cols-4 gap-2.5">
+          {/* Single channel: 3 fields per row */}
+          <div className="grid grid-cols-3 gap-2.5">
             {channelSelect}
-            {unitCategorySelect}
-            {uomField}
+            {uomGroupedField}
             {numUnitsField}
           </div>
           <div className="grid grid-cols-6 gap-2.5">
@@ -669,12 +660,9 @@ function CostDetailCard({ row, idx, salesChannels, unitCategories, usedChannelId
       ) : (
         <>
           {/* Multi-channel */}
-          <div className="grid grid-cols-2 gap-2.5">
+          <div className="grid grid-cols-3 gap-2.5">
             {channelSelect}
-            {unitCategorySelect}
-          </div>
-          <div className="grid grid-cols-2 gap-2.5">
-            {uomField}
+            {uomGroupedField}
             {numUnitsField}
           </div>
           <div className="grid grid-cols-3 gap-2.5">
@@ -739,9 +727,10 @@ export default function ProductFormPage() {
     queryKey: ['sales-channels-all'],
     queryFn:  getAllSalesChannels,
   })
-  const { data: unitCategoriesData } = useQuery({
-    queryKey: ['unit-categories-all'],
-    queryFn:  getAllUnitCategories,
+  const { data: allUnitTypesData } = useQuery({
+    queryKey: ['unit-types-flat'],
+    queryFn:  getAllUnitTypesFlat,
+    staleTime: 5 * 60 * 1000,
   })
   const { data: attributeTypesData } = useQuery({
     queryKey: ['attribute-types-all'],
@@ -756,9 +745,9 @@ export default function ProductFormPage() {
   const locations     = locationsData      ?? []
   const allStores     = storesData         ?? []
   const suppliers     = suppliersData      ?? []
-  const salesChannels = channelsData       ?? []
-  const unitCategories = unitCategoriesData?.data ?? []
-  const defaultUnitCategoryId = unitCategories.find((c) => c.is_default)?.id ?? null
+  const salesChannels  = channelsData      ?? []
+  const defaultChannelId = salesChannels[0]?.id ?? null
+  const allUnitTypes   = allUnitTypesData  ?? []
   const attributeTypes = attributeTypesData ?? []
   const allAttributes  = allAttributesData  ?? []
 
@@ -838,19 +827,19 @@ export default function ProductFormPage() {
     }
   }, [isEditing, nextCode])
 
-  // Pre-select the default Unit Category on the initial channel row (create mode only)
-  const defaultCategorySeeded = useRef(false)
+  // Pre-select the first created sales channel on the initial row (create mode only)
+  const defaultChannelSeeded = useRef(false)
   useLayoutEffect(() => {
-    if (!isEditing && defaultUnitCategoryId && !defaultCategorySeeded.current) {
+    if (!isEditing && defaultChannelId && !defaultChannelSeeded.current) {
       setForm((prev) => ({
         ...prev,
         cost_details: prev.cost_details.map((row, i) =>
-          i === 0 && !row.unit_category_id ? { ...row, unit_category_id: String(defaultUnitCategoryId) } : row
+          i === 0 && !row.sales_channel_id ? { ...row, sales_channel_id: String(defaultChannelId) } : row
         ),
       }))
-      defaultCategorySeeded.current = true
+      defaultChannelSeeded.current = true
     }
-  }, [isEditing, defaultUnitCategoryId])
+  }, [isEditing, defaultChannelId])
 
   const handleChange = (e) => {
     const { name, value } = e.target
@@ -884,7 +873,7 @@ export default function ProductFormPage() {
       ...prev,
       cost_details: [
         ...prev.cost_details,
-        { ...EMPTY_COST_ROW, unit_category_id: defaultUnitCategoryId ? String(defaultUnitCategoryId) : '' },
+        { ...EMPTY_COST_ROW },
       ],
     }))
     setChannelErrors((prev)  => [...prev, {}])
@@ -1385,7 +1374,7 @@ export default function ProductFormPage() {
                     row={row}
                     idx={idx}
                     salesChannels={salesChannels}
-                    unitCategories={unitCategories}
+                    allUnitTypes={allUnitTypes}
                     usedChannelIds={usedChannelIds}
                     onChange={handleCostChange}
                     onRemove={removeCostRow}

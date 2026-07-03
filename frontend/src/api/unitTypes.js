@@ -26,3 +26,11 @@ export const getAllUnitTypes = (unitCategoryId = null) =>
   api.get(`${BASE}/all`, {
     params: unitCategoryId ? { unit_category_id: unitCategoryId } : {},
   }).then((r) => r.data.data)
+
+/**
+ * All unit types across every category, with unit_category_name included.
+ * Returns { id, unit_category_id, unit_category_name, name, symbol }[].
+ * Used for the grouped UOM dropdown in the product form.
+ */
+export const getAllUnitTypesFlat = () =>
+  api.get(`${BASE}/all`, { params: { scope: 'all' } }).then((r) => r.data.data)
