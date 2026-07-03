@@ -105,11 +105,11 @@ class UnitCategoryController extends Controller
         return response()->json(['data' => (new UnitCategoryResource($category))->toArray(request())]);
     }
 
-    /** Flat list for <select> dropdowns — no pagination, id+name only. */
+    /** Flat list for <select> dropdowns — no pagination, includes the default-category flag. */
     public function all(): JsonResponse
     {
         $items = $this->service->all()
-            ->map(fn (UnitCategory $cat) => ['id' => $cat->id, 'name' => $cat->name])
+            ->map(fn (UnitCategory $cat) => ['id' => $cat->id, 'name' => $cat->name, 'is_default' => $cat->is_default])
             ->values()
             ->all();
 

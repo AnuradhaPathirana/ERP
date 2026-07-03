@@ -17,11 +17,8 @@ class UpdateProductRequest extends FormRequest
     /** @return array<string, array<int, mixed>> */
     public function rules(): array
     {
-        $productId = $this->route('product')?->getKey();
-
         return [
             // Required identifiers
-            'product_code'           => ['required', 'string', 'max:50', Rule::unique('inv_products', 'product_code')->ignore($productId)],
             'display_name'           => ['required', 'string', 'max:100'],
             'product_type'           => ['required', 'string', 'max:50'],
             'supplier_ids'           => ['required', 'array', 'min:1'],
@@ -74,6 +71,7 @@ class UpdateProductRequest extends FormRequest
             // Cost details per sales channel — at least one channel required
             'cost_details'                                  => ['required', 'array', 'min:1'],
             'cost_details.*.sales_channel_id'               => ['required', 'integer', 'exists:inv_sales_channels,id'],
+            'cost_details.*.unit_type_id'                   => ['nullable', 'integer', 'exists:inv_unit_types,id'],
             'cost_details.*.num_of_units'                   => ['required', 'numeric', 'min:0'],
             'cost_details.*.cost_price'                     => ['required', 'numeric', 'min:0'],
             'cost_details.*.margin'                         => ['nullable', 'numeric'],
@@ -103,7 +101,6 @@ class UpdateProductRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'product_code'                          => 'product code',
             'reference_no'                          => 'reference number',
             'ean_13'                                => 'EAN / barcode',
             'display_name'                          => 'display name',

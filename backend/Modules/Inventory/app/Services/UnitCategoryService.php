@@ -60,10 +60,10 @@ class UnitCategoryService
         );
     }
 
-    /** Lightweight list for dropdowns — returns only id + name. */
+    /** Lightweight list for dropdowns — returns id, name, and the default-category flag. */
     public function all(): \Illuminate\Database\Eloquent\Collection
     {
-        return UnitCategory::orderBy('name')->get(['id', 'name']);
+        return UnitCategory::orderBy('name')->get(['id', 'name', 'is_default']);
     }
 
     /** Set this category as the single system default; clears any previous default. */

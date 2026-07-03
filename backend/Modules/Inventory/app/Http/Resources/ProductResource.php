@@ -6,6 +6,7 @@ namespace Modules\Inventory\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Modules\Inventory\Models\UnitType;
 
 class ProductResource extends JsonResource
 {
@@ -81,24 +82,31 @@ class ProductResource extends JsonResource
                 ->all()
             ),
 
-            'cost_details' => $this->whenLoaded('salesChannels', fn () => $this->salesChannels
-                ->map(fn ($c) => [
-                    'sales_channel_id'               => $c->id,
-                    'sales_channel_name'             => $c->sales_channel_name,
-                    'num_of_units'                   => $c->pivot->num_of_units                   !== null ? (float) $c->pivot->num_of_units                   : null,
-                    'cost_price'                     => $c->pivot->cost_price                     !== null ? (float) $c->pivot->cost_price                     : null,
-                    'margin'                         => $c->pivot->margin                         !== null ? (float) $c->pivot->margin                         : null,
-                    'margin_type'                    => $c->pivot->margin_type                    ?? 'percentage',
-                    'selling_price'                  => $c->pivot->selling_price                  !== null ? (float) $c->pivot->selling_price                  : null,
-                    'max_price'                      => $c->pivot->max_price                      !== null ? (float) $c->pivot->max_price                      : null,
-                    'min_price'                      => $c->pivot->min_price                      !== null ? (float) $c->pivot->min_price                      : null,
-                    'wholesale_price'                => $c->pivot->wholesale_price                !== null ? (float) $c->pivot->wholesale_price                : null,
-                    'sale_privileges_discount'       => $c->pivot->sale_privileges_discount       !== null ? (float) $c->pivot->sale_privileges_discount       : null,
-                    'purchasing_privileges_discount' => $c->pivot->purchasing_privileges_discount !== null ? (float) $c->pivot->purchasing_privileges_discount : null,
-                ])
-                ->values()
-                ->all()
-            ),
+            'cost_details' => $this->whenLoaded('salesChannels', function () {
+                $unitTypes = UnitType::all(['id', 'unit_category_id'])->keyBy('id');
+
+                return $this->salesChannels
+                    ->map(fn ($c) => [
+                        'sales_channel_id'               => $c->id,
+                        'sales_channel_name'             => $c->sales_channel_name,
+                        'unit_type_id'                   => $c->pivot->unit_type_id,
+                        'unit_category_id'               => $c->pivot->unit_type_id
+                            ? $unitTypes->get($c->pivot->unit_type_id)?->unit_category_id
+                            : null,
+                        'num_of_units'                   => $c->pivot->num_of_units                   !== null ? (float) $c->pivot->num_of_units                   : null,
+                        'cost_price'                     => $c->pivot->cost_price                     !== null ? (float) $c->pivot->cost_price                     : null,
+                        'margin'                         => $c->pivot->margin                         !== null ? (float) $c->pivot->margin                         : null,
+                        'margin_type'                    => $c->pivot->margin_type                    ?? 'percentage',
+                        'selling_price'                  => $c->pivot->selling_price                  !== null ? (float) $c->pivot->selling_price                  : null,
+                        'max_price'                      => $c->pivot->max_price                      !== null ? (float) $c->pivot->max_price                      : null,
+                        'min_price'                      => $c->pivot->min_price                      !== null ? (float) $c->pivot->min_price                      : null,
+                        'wholesale_price'                => $c->pivot->wholesale_price                !== null ? (float) $c->pivot->wholesale_price                : null,
+                        'sale_privileges_discount'       => $c->pivot->sale_privileges_discount       !== null ? (float) $c->pivot->sale_privileges_discount       : null,
+                        'purchasing_privileges_discount' => $c->pivot->purchasing_privileges_discount !== null ? (float) $c->pivot->purchasing_privileges_discount : null,
+                    ])
+                    ->values()
+                    ->all();
+            }),
 
             'created_at' => $this->created_at->toISOString(),
             'updated_at' => $this->updated_at->toISOString(),

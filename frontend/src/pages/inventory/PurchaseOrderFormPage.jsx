@@ -135,7 +135,7 @@ export default function PurchaseOrderFormPage() {
   const { data: locations  = [] } = useQuery({ queryKey: ['locations-all'],  queryFn: getAllLocations })
   const { data: suppliers  = [] } = useQuery({ queryKey: ['suppliers-all'],  queryFn: getAllSuppliers })
   const { data: stores     = [] } = useQuery({ queryKey: ['stores-all'],     queryFn: getAllStores })
-  const { data: unitTypes  = [] } = useQuery({ queryKey: ['unit-types-all'], queryFn: getAllUnitTypes })
+  const { data: unitTypes  = [] } = useQuery({ queryKey: ['unit-types-all'], queryFn: () => getAllUnitTypes() })
 
   const filteredStores = form.location_id
     ? stores.filter((s) => String(s.location_id) === String(form.location_id))

@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Modules\Inventory\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Inventory\DTOs\SupplierMasterData;
 use Modules\Inventory\Http\Requests\SupplierMasterRequest;
@@ -17,7 +16,7 @@ class SupplierMasterController extends Controller
 {
     public function __construct(private readonly SupplierMasterService $service)
     {
-        $this->middleware('permission:view_supplier_masters')->only(['index', 'show', 'all', 'checkCode']);
+        $this->middleware('permission:view_supplier_masters')->only(['index', 'show', 'all', 'nextSupplierCode']);
         $this->middleware('permission:create_supplier_masters')->only(['store']);
         $this->middleware('permission:edit_supplier_masters')->only(['update']);
         $this->middleware('permission:delete_supplier_masters')->only(['destroy']);
@@ -75,21 +74,10 @@ class SupplierMasterController extends Controller
         return response()->json(null, 204);
     }
 
-    /** Check whether a supplier_code is available (unique). */
-    public function checkCode(Request $request): JsonResponse
+    /** Preview the next auto-generated supplier code (display only, non-locking). */
+    public function nextSupplierCode(): JsonResponse
     {
-        $code      = trim((string) $request->query('code', ''));
-        $excludeId = $request->query('exclude_id');
-
-        if ($code === '') {
-            return response()->json(['available' => false]);
-        }
-
-        $taken = SupplierMaster::where('supplier_code', $code)
-            ->when($excludeId, fn ($q) => $q->where('id', '!=', (int) $excludeId))
-            ->exists();
-
-        return response()->json(['available' => !$taken]);
+        return response()->json(['data' => ['supplier_code' => $this->service->nextSupplierCode()]]);
     }
 
     /** Flat list for <select> dropdowns — includes contact & address fields for PO auto-fill. */

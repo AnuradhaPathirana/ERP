@@ -17,6 +17,12 @@ export const updateUnitType = (id, payload) =>
 export const deleteUnitType = (id) =>
   api.delete(`${BASE}/${id}`)
 
-/** Flat list for dropdowns — { id, name, symbol }[] */
-export const getAllUnitTypes = () =>
-  api.get(`${BASE}/all`).then((r) => r.data.data)
+/**
+ * Flat list for dropdowns — { id, unit_category_id, name, symbol }[].
+ * Pass unitCategoryId to scope to a specific category (cascading Unit Category → UOM selects);
+ * otherwise falls back to the system default category.
+ */
+export const getAllUnitTypes = (unitCategoryId = null) =>
+  api.get(`${BASE}/all`, {
+    params: unitCategoryId ? { unit_category_id: unitCategoryId } : {},
+  }).then((r) => r.data.data)

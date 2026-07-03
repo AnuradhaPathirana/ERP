@@ -303,7 +303,7 @@ export default function GoodsReceivedNoteFormPage() {
   })
   const { data: unitTypes = [] } = useQuery({
     queryKey: ['unit-types-all'],
-    queryFn:  getAllUnitTypes,
+    queryFn:  () => getAllUnitTypes(),
   })
   const { data: locations = [] } = useQuery({
     queryKey: ['locations-all'],

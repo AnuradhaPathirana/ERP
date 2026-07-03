@@ -25,9 +25,5 @@ export const updateProduct = (id, payload) =>
 export const deleteProduct = (id) =>
   api.delete(`${BASE}/${id}`)
 
-/** Check if a product_code is available. Pass excludeId when editing. */
-export const checkProductCode = (code, excludeId = null) => {
-  const params = { code }
-  if (excludeId) params.exclude_id = excludeId
-  return api.get(`${BASE}/check-code`, { params }).then((r) => r.data)
-}
+export const getNextProductCode = () =>
+  api.get(`${BASE}/next-code`).then((r) => r.data.data.product_code)

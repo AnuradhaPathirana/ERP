@@ -68,8 +68,8 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
     // Products — per-action permission middleware applied in ProductController constructor
     Route::get('products/all', [ProductController::class, 'all'])
         ->name('inventory.products.all');
-    Route::get('products/check-code', [ProductController::class, 'checkCode'])
-        ->name('inventory.products.check-code');
+    Route::get('products/next-code', [ProductController::class, 'nextProductCode'])
+        ->name('inventory.products.next-code');
 
     Route::apiResource('products', ProductController::class)
         ->names('inventory.products');
@@ -77,8 +77,8 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
     Route::get('supplier-masters/all', [SupplierMasterController::class, 'all'])
         ->name('inventory.supplier-masters.all');
 
-    Route::get('supplier-masters/check-code', [SupplierMasterController::class, 'checkCode'])
-        ->name('inventory.supplier-masters.check-code');
+    Route::get('supplier-masters/next-code', [SupplierMasterController::class, 'nextSupplierCode'])
+        ->name('inventory.supplier-masters.next-code');
 
     Route::apiResource('supplier-masters', SupplierMasterController::class)
         ->names('inventory.supplier-masters');

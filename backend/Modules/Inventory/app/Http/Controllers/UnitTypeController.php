@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Inventory\Http\Controllers;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Modules\Inventory\DTOs\UnitTypeData;
 use Modules\Inventory\Http\Requests\UnitTypeRequest;
@@ -76,22 +77,31 @@ class UnitTypeController extends Controller
         return response()->json(null, 204);
     }
 
-    /** Flat list for dropdowns — filtered to the default category when one is set. */
-    public function all(): JsonResponse
+    /**
+     * Flat list for dropdowns. Pass `unit_category_id` to scope to a specific category
+     * (e.g. cascading Unit Category → UOM selects); otherwise falls back to the default category.
+     */
+    public function all(Request $request): JsonResponse
     {
-        $defaultCategory = UnitCategory::where('is_default', true)->value('id');
+        $categoryId = $request->query('unit_category_id');
 
         $query = UnitType::orderBy('name')->select(['id', 'name', 'symbol', 'unit_category_id']);
 
-        if ($defaultCategory) {
-            $query->where('unit_category_id', $defaultCategory);
+        if ($categoryId) {
+            $query->where('unit_category_id', (int) $categoryId);
+        } else {
+            $defaultCategory = UnitCategory::where('is_default', true)->value('id');
+            if ($defaultCategory) {
+                $query->where('unit_category_id', $defaultCategory);
+            }
         }
 
         $items = $query->get()
             ->map(fn (UnitType $u) => [
-                'id'     => $u->id,
-                'name'   => $u->name,
-                'symbol' => $u->symbol,
+                'id'               => $u->id,
+                'unit_category_id' => $u->unit_category_id,
+                'name'             => $u->name,
+                'symbol'           => $u->symbol,
             ])
             ->values()
             ->all();

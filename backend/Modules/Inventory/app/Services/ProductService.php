@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Modules\Inventory\Services;
 
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Modules\Inventory\DTOs\ProductData;
 use Modules\Inventory\Models\Product;
 use Modules\Inventory\Models\ProductAttribute;
@@ -49,18 +50,24 @@ class ProductService
 
     public function create(ProductData $data): Product
     {
-        $product = Product::create($this->toAttributes($data));
+        return DB::transaction(function () use ($data): Product {
+            $attributes = $this->toAttributes($data);
+            $attributes['product_code'] = $this->generateProductCode();
 
-        $this->syncSuppliers($product, $data->supplierIds);
-        $this->syncCostDetails($product, $data->costDetails);
-        $this->syncProductAttributes($product, $data->productAttributes);
-        $this->syncLocationStores($product, $data->locationStores);
+            $product = Product::create($attributes);
 
-        return $product->load(['suppliers', 'salesChannels', 'productAttributes', 'locationStores']);
+            $this->syncSuppliers($product, $data->supplierIds);
+            $this->syncCostDetails($product, $data->costDetails);
+            $this->syncProductAttributes($product, $data->productAttributes);
+            $this->syncLocationStores($product, $data->locationStores);
+
+            return $product->load(['suppliers', 'salesChannels', 'productAttributes', 'locationStores']);
+        });
     }
 
     public function update(Product $product, ProductData $data): Product
     {
+        // product_code is immutable once assigned — never overwritten on update.
         $product->update($this->toAttributes($data));
 
         $this->syncSuppliers($product, $data->supplierIds);
@@ -76,6 +83,39 @@ class ProductService
         $product->delete();
     }
 
+    /** Preview the next product code (non-locking, for display only) */
+    public function nextProductCode(): string
+    {
+        $prefix = 'PRD-';
+
+        $last = Product::where('product_code', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->value('product_code');
+
+        $next = $last
+            ? (int) substr($last, strlen($prefix)) + 1
+            : 1;
+
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    /** Atomically generate the next product code (must be called inside a DB transaction) */
+    private function generateProductCode(): string
+    {
+        $prefix = 'PRD-';
+
+        $last = Product::where('product_code', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->value('product_code');
+
+        $next = $last
+            ? (int) substr($last, strlen($prefix)) + 1
+            : 1;
+
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
     /** @param array<int> $supplierIds */
     private function syncSuppliers(Product $product, array $supplierIds): void
     {
@@ -84,7 +124,7 @@ class ProductService
 
     /**
      * @param array<array<string, mixed>> $costDetails
-     * Each item: { sales_channel_id, uom?, num_of_units?, cost_price?, margin?, selling_price?, sale_privileges_discount? }
+     * Each item: { sales_channel_id, unit_type_id?, num_of_units?, cost_price?, margin?, selling_price?, sale_privileges_discount? }
      */
     private function syncCostDetails(Product $product, array $costDetails): void
     {
@@ -97,6 +137,7 @@ class ProductService
             }
 
             $pivotData[$channelId] = [
+                'unit_type_id'                   => !empty($row['unit_type_id']) ? (int) $row['unit_type_id'] : null,
                 'num_of_units'                   => $row['num_of_units']                   ?? null,
                 'cost_price'                     => $row['cost_price']                     ?? null,
                 'margin'                         => $row['margin']                         ?? null,
@@ -189,7 +230,6 @@ class ProductService
     private function toAttributes(ProductData $data): array
     {
         return [
-            'product_code'             => $data->productCode,
             'reference_no'             => $data->referenceNo,
             'ean_13'                   => $data->ean13,
             'name'                     => $data->name,

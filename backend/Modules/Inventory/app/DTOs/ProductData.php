@@ -16,7 +16,6 @@ final class ProductData
      */
     public function __construct(
         public readonly string  $name,
-        public readonly string  $productCode,
         public readonly string  $displayName,
         public readonly string  $productType,
         public readonly ?string $referenceNo,
@@ -50,7 +49,6 @@ final class ProductData
     {
         return new self(
             name:                    $request->validated('name'),
-            productCode:             $request->validated('product_code'),
             displayName:             $request->validated('display_name'),
             productType:             $request->validated('product_type'),
             referenceNo:             $request->validated('reference_no'),

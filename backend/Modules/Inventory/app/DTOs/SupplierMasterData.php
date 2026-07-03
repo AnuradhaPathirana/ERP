@@ -10,7 +10,6 @@ final class SupplierMasterData
 {
     public function __construct(
         public readonly string $supplierName,
-        public readonly ?string $supplierCode,
         public readonly ?string $referenceNo,
         public readonly ?string $supplierType,
         public readonly ?string $checkWriterName,
@@ -49,7 +48,6 @@ final class SupplierMasterData
     {
         return new self(
             supplierName:             $request->validated('supplier_name'),
-            supplierCode:             $request->validated('supplier_code'),
             referenceNo:              $request->validated('reference_no'),
             supplierType:             $request->validated('supplier_type'),
             checkWriterName:          $request->validated('check_writer_name'),

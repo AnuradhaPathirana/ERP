@@ -99,6 +99,7 @@ class Product extends Model
     {
         return $this->belongsToMany(SalesChannel::class, 'inv_product_sales_channels')
             ->withPivot([
+                'unit_type_id',
                 'num_of_units',
                 'cost_price',
                 'margin',

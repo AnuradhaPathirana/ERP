@@ -6,6 +6,7 @@ namespace Modules\Inventory\Services;
 
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Facades\DB;
 use Modules\Inventory\DTOs\SupplierMasterData;
 use Modules\Inventory\Models\SupplierMaster;
 
@@ -15,7 +16,7 @@ class SupplierMasterService
     public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
         $query = SupplierMaster::withCount('products')
-            ->orderBy('supplier_name');
+            ->orderByDesc('id');
 
         if (!empty($filters['search'])) {
             $term = '%' . $filters['search'] . '%';
@@ -52,14 +53,53 @@ class SupplierMasterService
 
     public function create(SupplierMasterData $data): SupplierMaster
     {
-        return SupplierMaster::create($this->toAttributes($data));
+        return DB::transaction(function () use ($data): SupplierMaster {
+            $attributes = $this->toAttributes($data);
+            $attributes['supplier_code'] = $this->generateSupplierCode();
+
+            return SupplierMaster::create($attributes);
+        });
     }
 
     public function update(SupplierMaster $supplier, SupplierMasterData $data): SupplierMaster
     {
+        // supplier_code is immutable once assigned — never overwritten on update.
         $supplier->update($this->toAttributes($data));
 
         return $supplier->loadCount('products');
+    }
+
+    /** Preview the next supplier code (non-locking, for display only) */
+    public function nextSupplierCode(): string
+    {
+        $prefix = 'SUP-';
+
+        $last = SupplierMaster::where('supplier_code', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->value('supplier_code');
+
+        $next = $last
+            ? (int) substr($last, strlen($prefix)) + 1
+            : 1;
+
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
+    }
+
+    /** Atomically generate the next supplier code (must be called inside a DB transaction) */
+    private function generateSupplierCode(): string
+    {
+        $prefix = 'SUP-';
+
+        $last = SupplierMaster::where('supplier_code', 'like', $prefix . '%')
+            ->orderByDesc('id')
+            ->lockForUpdate()
+            ->value('supplier_code');
+
+        $next = $last
+            ? (int) substr($last, strlen($prefix)) + 1
+            : 1;
+
+        return $prefix . str_pad((string) $next, 4, '0', STR_PAD_LEFT);
     }
 
     public function delete(SupplierMaster $supplier): void
@@ -90,7 +130,6 @@ class SupplierMasterService
     {
         return [
             'supplier_name'              => $data->supplierName,
-            'supplier_code'              => $data->supplierCode,
             'reference_no'               => $data->referenceNo,
             'supplier_type'              => $data->supplierType,
             'check_writer_name'          => $data->checkWriterName,

@@ -1,8 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { BarChart2, Check, ChevronDown, HelpCircle, Package, Plus, RefreshCw, Save, Settings, ShoppingCart, Tag, Trash2, X } from 'lucide-react'
-import { checkProductCode, createProduct, getProduct, updateProduct } from '../../api/products'
+import { BarChart2, Check, ChevronDown, HelpCircle, Package, Plus, Save, Settings, ShoppingCart, Tag, Trash2, X } from 'lucide-react'
+import { createProduct, getNextProductCode, getProduct, updateProduct } from '../../api/products'
 import { getAllAttributes } from '../../api/attributes'
 import { getAllAttributeTypes } from '../../api/attributeTypes'
 import { getAllCategories } from '../../api/categories'
@@ -10,15 +10,11 @@ import { getAllLocations } from '../../api/locations'
 import { getAllSalesChannels } from '../../api/salesChannels'
 import { getAllStores } from '../../api/stores'
 import { getAllSuppliers } from '../../api/suppliers'
+import { getAllUnitCategories } from '../../api/unitCategories'
 import { getAllUnitTypes } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
 import TreeSelect from '../../components/TreeSelect'
 import { showError, showSuccess } from '../../utils/alerts'
-
-function generateProductCode() {
-  const num = Math.floor(Math.random() * 9999) + 1
-  return `PRD-${String(num).padStart(4, '0')}`
-}
 
 const PRODUCT_TYPES   = ['Inventory', 'Raw Material', 'Service']
 const STOCK_METHODS   = ['FIFO', 'LIFO', 'FEFO']
@@ -43,6 +39,8 @@ const EMPTY_LOCATION_STORE_ROW = { location_id: '', store_id: '' }
 
 const EMPTY_COST_ROW = {
   sales_channel_id:               '',
+  unit_category_id:               '',
+  unit_type_id:                   '',
   num_of_units:                   '',
   cost_price:                     '',
   margin:                         '',
@@ -221,14 +219,16 @@ function CostInput({ value, onChange, onBlur, disabled, placeholder, type = 'num
   )
 }
 
-function CostSelect({ value, onChange, onBlur, children, placeholder, error, touched }) {
+function CostSelect({ value, onChange, onBlur, children, placeholder, error, touched, disabled }) {
   return (
     <select
       value={value}
       onChange={onChange}
       onBlur={onBlur}
+      disabled={disabled}
       className={[
         'block w-full rounded-md border-2 px-2 py-1 text-xs text-slate-800 outline-none transition-all cursor-pointer',
+        'disabled:cursor-not-allowed disabled:border-slate-100 disabled:bg-slate-100 disabled:text-slate-400',
         error && touched
           ? 'border-red-300 bg-red-50/40 focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
           : 'border-slate-200 bg-slate-50 focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15',
@@ -448,10 +448,17 @@ function MarginField({ row, handle, toggleMarginType }) {
   )
 }
 
-function CostDetailCard({ row, idx, salesChannels, unitTypes, usedChannelIds, onChange, onRemove, isSingle, rowErrors, rowTouched, onFieldBlur }) {
+function CostDetailCard({ row, idx, salesChannels, unitCategories, usedChannelIds, onChange, onRemove, isSingle, rowErrors, rowTouched, onFieldBlur }) {
   const avgPrice = computeAverage(row.cost_price, row.selling_price)
   const re = rowErrors  ?? {}
   const rt = rowTouched ?? {}
+
+  const { data: uomOptionsData } = useQuery({
+    queryKey: ['unit-types-by-category', row.unit_category_id],
+    queryFn:  () => getAllUnitTypes(row.unit_category_id),
+    enabled:  Boolean(row.unit_category_id),
+  })
+  const uomOptions = uomOptionsData ?? []
 
   const handle = (field) => (e) => {
     const value = e.target.value
@@ -464,6 +471,8 @@ function CostDetailCard({ row, idx, salesChannels, unitTypes, usedChannelIds, on
     } else if (field === 'selling_price') {
       const m = calcMarginValue(row.cost_price, value, row.margin_type)
       onChange(idx, m !== '' ? { selling_price: value, margin: m } : { selling_price: value })
+    } else if (field === 'unit_category_id') {
+      onChange(idx, { unit_category_id: value, unit_type_id: '' })
     } else {
       onChange(idx, field, value)
     }
@@ -493,6 +502,35 @@ function CostDetailCard({ row, idx, salesChannels, unitTypes, usedChannelIds, on
           >
             {c.name}
           </option>
+        ))}
+      </CostSelect>
+    </Field>
+  )
+
+  const unitCategorySelect = (
+    <Field label="Unit Category">
+      <CostSelect
+        value={row.unit_category_id}
+        onChange={handle('unit_category_id')}
+        placeholder="Category..."
+      >
+        {unitCategories.map((c) => (
+          <option key={c.id} value={c.id}>{c.name}</option>
+        ))}
+      </CostSelect>
+    </Field>
+  )
+
+  const uomField = (
+    <Field label="UOM">
+      <CostSelect
+        value={row.unit_type_id}
+        onChange={handle('unit_type_id')}
+        disabled={!row.unit_category_id}
+        placeholder={row.unit_category_id ? 'Unit...' : 'Select category first'}
+      >
+        {uomOptions.map((u) => (
+          <option key={u.id} value={u.id}>{u.symbol ? `${u.name} (${u.symbol})` : u.name}</option>
         ))}
       </CostSelect>
     </Field>
@@ -589,18 +627,22 @@ function CostDetailCard({ row, idx, salesChannels, unitTypes, usedChannelIds, on
 
       {isSingle ? (
         <>
-          {/* Single channel: 6 fields per row, full width */}
-          <div className="grid grid-cols-6 gap-2.5">
+          {/* Single channel: 4 fields per row, full width */}
+          <div className="grid grid-cols-4 gap-2.5">
             {channelSelect}
+            {unitCategorySelect}
+            {uomField}
             {numUnitsField}
+          </div>
+          <div className="grid grid-cols-6 gap-2.5">
             {costPriceField}
             <MarginField row={row} handle={handle} toggleMarginType={toggleMarginType} />
             {sellingPriceField}
             {maxPriceField}
-          </div>
-          <div className="grid grid-cols-5 gap-2.5">
             {minPriceField}
             {wholesalePriceField}
+          </div>
+          <div className="grid grid-cols-3 gap-2.5">
             {saleDiscField}
             {purchaseDiscField}
             {avgPriceField}
@@ -611,6 +653,10 @@ function CostDetailCard({ row, idx, salesChannels, unitTypes, usedChannelIds, on
           {/* Multi-channel */}
           <div className="grid grid-cols-2 gap-2.5">
             {channelSelect}
+            {unitCategorySelect}
+          </div>
+          <div className="grid grid-cols-2 gap-2.5">
+            {uomField}
             {numUnitsField}
           </div>
           <div className="grid grid-cols-3 gap-2.5">
@@ -642,26 +688,18 @@ export default function ProductFormPage() {
 
   const [form,       setForm]       = useState(() => ({
     ...EMPTY_FORM,
-    product_code: isEditing ? '' : generateProductCode(),
     cost_details: isEditing ? [] : [{ ...EMPTY_COST_ROW }],
   }))
   const [errors,          setErrors]          = useState({})
   const [touched,         setTouched]         = useState({})
   const [channelErrors,   setChannelErrors]   = useState(() => isEditing ? [] : [{}])
   const [channelTouched,  setChannelTouched]  = useState(() => isEditing ? [] : [{}])
-  const [codeStatus, setCodeStatus] = useState('idle') // 'idle' | 'checking' | 'available' | 'taken'
 
-  const runCodeCheck = (code, excludeId) => {
-    setCodeStatus('checking')
-    checkProductCode(code, excludeId)
-      .then(({ available }) => setCodeStatus(available ? 'available' : 'taken'))
-      .catch(() => setCodeStatus('idle'))
-  }
-
-  // Auto-check the generated code on create mount
-  useEffect(() => {
-    if (!isEditing && form.product_code) runCodeCheck(form.product_code, null)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  const { data: nextCode } = useQuery({
+    queryKey: ['product-next-code'],
+    queryFn:  getNextProductCode,
+    enabled:  !isEditing,
+  })
 
   const { data: categoriesData } = useQuery({
     queryKey: ['categories-all'],
@@ -683,9 +721,9 @@ export default function ProductFormPage() {
     queryKey: ['sales-channels-all'],
     queryFn:  getAllSalesChannels,
   })
-  const { data: unitTypesData } = useQuery({
-    queryKey: ['unit-types-all'],
-    queryFn:  getAllUnitTypes,
+  const { data: unitCategoriesData } = useQuery({
+    queryKey: ['unit-categories-all'],
+    queryFn:  getAllUnitCategories,
   })
   const { data: attributeTypesData } = useQuery({
     queryKey: ['attribute-types-all'],
@@ -701,7 +739,8 @@ export default function ProductFormPage() {
   const allStores     = storesData         ?? []
   const suppliers     = suppliersData      ?? []
   const salesChannels = channelsData       ?? []
-  const unitTypes     = unitTypesData      ?? []
+  const unitCategories = unitCategoriesData?.data ?? []
+  const defaultUnitCategoryId = unitCategories.find((c) => c.is_default)?.id ?? null
   const attributeTypes = attributeTypesData ?? []
   const allAttributes  = allAttributesData  ?? []
 
@@ -752,6 +791,8 @@ export default function ProductFormPage() {
         })),
         cost_details:               (p.cost_details ?? []).map((c) => ({
           sales_channel_id:               String(c.sales_channel_id),
+          unit_category_id:              c.unit_category_id != null ? String(c.unit_category_id) : '',
+          unit_type_id:                   c.unit_type_id      != null ? String(c.unit_type_id)      : '',
           num_of_units:                   c.num_of_units                   != null ? String(c.num_of_units) : '',
           cost_price:                     c.cost_price                     != null ? String(c.cost_price) : '',
           margin:                         c.margin                         != null ? String(c.margin) : '',
@@ -770,6 +811,29 @@ export default function ProductFormPage() {
     }
   }, [fetchedData])
 
+  // Show the backend-generated preview code once it arrives (create mode only)
+  const codeSeeded = useRef(false)
+  useLayoutEffect(() => {
+    if (!isEditing && nextCode && !codeSeeded.current) {
+      setForm((prev) => ({ ...prev, product_code: nextCode }))
+      codeSeeded.current = true
+    }
+  }, [isEditing, nextCode])
+
+  // Pre-select the default Unit Category on the initial channel row (create mode only)
+  const defaultCategorySeeded = useRef(false)
+  useLayoutEffect(() => {
+    if (!isEditing && defaultUnitCategoryId && !defaultCategorySeeded.current) {
+      setForm((prev) => ({
+        ...prev,
+        cost_details: prev.cost_details.map((row, i) =>
+          i === 0 && !row.unit_category_id ? { ...row, unit_category_id: String(defaultUnitCategoryId) } : row
+        ),
+      }))
+      defaultCategorySeeded.current = true
+    }
+  }, [isEditing, defaultUnitCategoryId])
+
   const handleChange = (e) => {
     const { name, value } = e.target
     setForm((prev) => {
@@ -780,7 +844,6 @@ export default function ProductFormPage() {
       }
       return { ...prev, ...updates, ...(name === 'category_id' ? { product_attributes: [] } : {}) }
     })
-    if (name === 'product_code') setCodeStatus('idle')
     if (touched[name]) {
       setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }))
     }
@@ -794,15 +857,18 @@ export default function ProductFormPage() {
     const { name, value } = e.target
     setTouched((prev) => ({ ...prev, [name]: true }))
     setErrors((prev) => ({ ...prev, [name]: validateField(name, value) }))
-    if (name === 'product_code' && value.trim()) {
-      runCodeCheck(value, isEditing ? id : null)
-    }
   }
 
   const handleCheck = (key) => setForm((prev) => ({ ...prev, [key]: !prev[key] }))
 
   const addCostRow = () => {
-    setForm((prev) => ({ ...prev, cost_details: [...prev.cost_details, { ...EMPTY_COST_ROW }] }))
+    setForm((prev) => ({
+      ...prev,
+      cost_details: [
+        ...prev.cost_details,
+        { ...EMPTY_COST_ROW, unit_category_id: defaultUnitCategoryId ? String(defaultUnitCategoryId) : '' },
+      ],
+    }))
     setChannelErrors((prev)  => [...prev, {}])
     setChannelTouched((prev) => [...prev, {}])
   }
@@ -976,6 +1042,7 @@ export default function ProductFormPage() {
         .filter((r) => r.sales_channel_id)
         .map((r) => ({
           sales_channel_id:               Number(r.sales_channel_id),
+          unit_type_id:                   r.unit_type_id !== '' ? Number(r.unit_type_id) : null,
           num_of_units:                   toNum(r.num_of_units),
           cost_price:                     toNum(r.cost_price),
           margin:                         toNum(r.margin),
@@ -1042,34 +1109,12 @@ export default function ProductFormPage() {
             <div className="space-y-2 p-3">
               <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
                 <Field label="Product Code" required error={e.product_code} touched={t.product_code}>
-                  <div className="flex items-center gap-1">
-                    <Input name="product_code" value={f.product_code} onChange={handleChange} onBlur={handleBlur}
-                      error={e.product_code} touched={t.product_code} placeholder="PRD-0001" maxLength={50} />
-                    {!isEditing && (
-                      <button
-                        type="button"
-                        title="Generate new code"
-                        onClick={() => {
-                          const code = generateProductCode()
-                          setForm((prev) => ({ ...prev, product_code: code }))
-                          setErrors((prev) => ({ ...prev, product_code: '' }))
-                          runCodeCheck(code, null)
-                        }}
-                        className="shrink-0 rounded border border-slate-300 bg-white p-1 text-slate-500 transition hover:border-indigo-400 hover:text-indigo-600"
-                      >
-                        <RefreshCw size={13} />
-                      </button>
-                    )}
-                  </div>
-                  {f.product_code.trim() && codeStatus === 'checking' && (
-                    <p className="mt-0.5 text-[10px] text-slate-400">Checking availability…</p>
-                  )}
-                  {f.product_code.trim() && codeStatus === 'available' && (
-                    <p className="mt-0.5 text-[10px] text-emerald-600">Code is available.</p>
-                  )}
-                  {f.product_code.trim() && codeStatus === 'taken' && (
-                    <p className="mt-0.5 text-[10px] text-red-600">Code already in use.</p>
-                  )}
+                  <Input name="product_code" value={f.product_code} readOnly
+                    error={e.product_code} touched={t.product_code}
+                    placeholder={isEditing ? '' : 'Generating…'}
+                    maxLength={50}
+                    className="block w-full cursor-not-allowed rounded-md border-2 border-slate-200 bg-slate-100 px-2 py-1 text-xs text-slate-500 outline-none" />
+                  <p className="mt-0.5 text-[10px] text-slate-400">Auto-generated, sequential.</p>
                 </Field>
                 <Field label="Reference No" error={e.reference_no} touched={t.reference_no}>
                   <Input name="reference_no" value={f.reference_no} onChange={handleChange} onBlur={handleBlur}
@@ -1318,7 +1363,7 @@ export default function ProductFormPage() {
                     row={row}
                     idx={idx}
                     salesChannels={salesChannels}
-                    unitTypes={unitTypes}
+                    unitCategories={unitCategories}
                     usedChannelIds={usedChannelIds}
                     onChange={handleCostChange}
                     onRemove={removeCostRow}

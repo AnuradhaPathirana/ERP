@@ -95,7 +95,7 @@ export default function PurchaseRequestFormPage() {
   const { data: locations  = [] } = useQuery({ queryKey: ['locations-all'],   queryFn: getAllLocations })
   const { data: stores     = [] } = useQuery({ queryKey: ['stores-all'],      queryFn: getAllStores })
   const { data: customers  = [] } = useQuery({ queryKey: ['customers-all'],   queryFn: getAllCustomers })
-  const { data: unitTypes  = [] } = useQuery({ queryKey: ['unit-types-all'],  queryFn: getAllUnitTypes })
+  const { data: unitTypes  = [] } = useQuery({ queryKey: ['unit-types-all'],  queryFn: () => getAllUnitTypes() })
 
   const { data: nextRefNo } = useQuery({
     queryKey: ['purchase-requests-next-ref-no'],

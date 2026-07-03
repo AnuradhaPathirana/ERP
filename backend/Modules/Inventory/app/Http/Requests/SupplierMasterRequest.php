@@ -19,11 +19,6 @@ class SupplierMasterRequest extends FormRequest
         return [
             // General
             'supplier_name'             => ['required', 'string', 'max:100'],
-            'supplier_code'             => [
-                'required', 'string', 'max:50',
-                Rule::unique('inv_supplier_masters', 'supplier_code')
-                    ->ignore($this->route('supplier_master')),
-            ],
             'reference_no'              => ['nullable', 'string', 'max:50'],
             'supplier_type'             => ['required', 'string', Rule::in(['Trade', 'Service'])],
             'check_writer_name'         => ['nullable', 'string', 'max:100'],
@@ -75,7 +70,6 @@ class SupplierMasterRequest extends FormRequest
     {
         return [
             'supplier_name'             => 'supplier name',
-            'supplier_code'             => 'supplier code',
             'reference_no'              => 'reference number',
             'supplier_type'             => 'supplier type',
             'check_writer_name'         => 'check writer name',
