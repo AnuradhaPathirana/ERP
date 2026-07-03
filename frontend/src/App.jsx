@@ -49,6 +49,10 @@ const GoodsReceivedNoteFormPage = lazy(() => import('./pages/inventory/GoodsRece
 const PieceScanResultPage       = lazy(() => import('./pages/inventory/PieceScanResultPage'))
 const CostingsPage              = lazy(() => import('./pages/inventory/CostingsPage'))
 const CostingFormPage           = lazy(() => import('./pages/inventory/CostingFormPage'))
+const SupplierPaymentsPage      = lazy(() => import('./pages/inventory/SupplierPaymentsPage'))
+const SupplierPaymentFormPage   = lazy(() => import('./pages/inventory/SupplierPaymentFormPage'))
+const SupplierCreditNotesPage   = lazy(() => import('./pages/inventory/SupplierCreditNotesPage'))
+const PaymentModesPage          = lazy(() => import('./pages/inventory/PaymentModesPage'))
 // Inventory Reports
 const StockLevelsReport        = lazy(() => import('./pages/inventory/reports/StockLevelsReport'))
 const StockMovementsReport     = lazy(() => import('./pages/inventory/reports/StockMovementsReport'))
@@ -162,6 +166,11 @@ export default function App() {
         <Route path="/inventory/costings/create"               element={<Lazy component={CostingFormPage} />} />
         <Route path="/inventory/costings/:id"                  element={<Lazy component={CostingFormPage} />} />
         <Route path="/inventory/costings/:id/edit"             element={<Lazy component={CostingFormPage} />} />
+        <Route path="/inventory/supplier-payments"             element={<Lazy component={SupplierPaymentsPage} />} />
+        <Route path="/inventory/supplier-payments/create"      element={<Lazy component={SupplierPaymentFormPage} />} />
+        <Route path="/inventory/supplier-payments/:id/edit"    element={<Lazy component={SupplierPaymentFormPage} />} />
+        <Route path="/inventory/supplier-credit-notes"         element={<Lazy component={SupplierCreditNotesPage} />} />
+        <Route path="/inventory/payment-modes"                 element={<Lazy component={PaymentModesPage} />} />
 
         {/* ── Inventory Reports ── */}
         <Route path="/inventory/reports/stock-levels"      element={<Lazy component={StockLevelsReport} />} />

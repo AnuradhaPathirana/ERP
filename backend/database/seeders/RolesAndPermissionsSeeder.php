@@ -33,6 +33,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'purchase_requests',
         'purchase_orders',
         'costings',
+        'payment_modes',
     ];
 
     /** Purchasing permissions that don't follow the standard CRUD pattern. */
@@ -46,6 +47,12 @@ class RolesAndPermissionsSeeder extends Seeder
         'confirm_costings',
         'manage_costing_expense_types',
         'view_reports',
+        'view_supplier_payments',
+        'create_supplier_payments',
+        'edit_supplier_payments',
+        'confirm_supplier_payments',
+        'delete_supplier_payments',
+        'view_supplier_credit_notes',
     ];
 
     public function run(): void

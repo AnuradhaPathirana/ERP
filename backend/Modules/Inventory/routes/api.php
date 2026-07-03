@@ -34,6 +34,9 @@ use Modules\Inventory\Http\Controllers\StockController;
 use Modules\Inventory\Http\Controllers\CostingController;
 use Modules\Inventory\Http\Controllers\CostingExpenseTypeController;
 use Modules\Inventory\Http\Controllers\ReportController;
+use Modules\Inventory\Http\Controllers\SupplierPaymentController;
+use Modules\Inventory\Http\Controllers\SupplierCreditNoteController;
+use Modules\Inventory\Http\Controllers\PaymentModeController;
 
 Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(function (): void {
     // Named routes before apiResource so static segments are not swallowed by {unit_category}
@@ -241,6 +244,28 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.grns.piece-labels.pdf');
     Route::apiResource('goods-received-notes', GoodsReceivedNoteController::class)
         ->names('inventory.grns');
+
+    // ── Supplier Payments ────────────────────────────────────────────────────
+    Route::get('supplier-payments/next-payment-no', [SupplierPaymentController::class, 'nextPaymentNo'])
+        ->name('inventory.supplier-payments.next-payment-no');
+    Route::get('supplier-payments/outstanding-grns/{supplierId}', [SupplierPaymentController::class, 'outstandingGrns'])
+        ->name('inventory.supplier-payments.outstanding-grns');
+    Route::get('supplier-payments/open-credit-notes', [SupplierPaymentController::class, 'openCreditNotes'])
+        ->name('inventory.supplier-payments.open-credit-notes');
+    Route::post('supplier-payments/{supplier_payment}/confirm', [SupplierPaymentController::class, 'confirm'])
+        ->name('inventory.supplier-payments.confirm');
+    Route::apiResource('supplier-payments', SupplierPaymentController::class)
+        ->names('inventory.supplier-payments');
+
+    Route::apiResource('supplier-credit-notes', SupplierCreditNoteController::class)
+        ->only(['index', 'show'])
+        ->names('inventory.supplier-credit-notes');
+
+    // ── Payment Modes (master) ───────────────────────────────────────────────
+    Route::get('payment-modes/all', [PaymentModeController::class, 'all'])
+        ->name('inventory.payment-modes.all');
+    Route::apiResource('payment-modes', PaymentModeController::class)
+        ->names('inventory.payment-modes');
 
     // ── GRN Piece QR scan resolve ────────────────────────────────────────────
     Route::get('pieces/{pieceCode}', [GrnItemPieceController::class, 'show'])

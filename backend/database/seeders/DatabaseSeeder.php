@@ -31,5 +31,8 @@ class DatabaseSeeder extends Seeder
 
         // Seed all global settings (module toggles) via dedicated seeder
         $this->call(GlobalSettingSeeder::class);
+
+        // Seed default payment modes (Cash/Cheque/Card/Setoff)
+        $this->call(PaymentModeSeeder::class);
     }
 }
