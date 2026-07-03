@@ -108,6 +108,24 @@ function validateField(field, value) {
   return ''
 }
 
+// Walk parent_category_id up to the root, returning [selectedId, ...ancestorIds].
+// Guards against circular references by tracking visited ids.
+function getCategoryAncestorIds(categoryId, categories) {
+  const byId = new Map(categories.map((c) => [String(c.id), c]))
+  const ids = []
+  const visited = new Set()
+  let current = categoryId ? String(categoryId) : null
+
+  while (current && byId.has(current) && !visited.has(current)) {
+    visited.add(current)
+    ids.push(current)
+    const parentId = byId.get(current).parent_category_id
+    current = parentId != null ? String(parentId) : null
+  }
+
+  return ids
+}
+
 // Compute average price = (cost_price + selling_price) / 2
 function computeAverage(costPrice, sellingPrice) {
   const cp = parseFloat(costPrice)
@@ -1084,6 +1102,10 @@ export default function ProductFormPage() {
   const t = touched
   const usedChannelIds   = f.cost_details.map((r) => r.sales_channel_id).filter(Boolean)
   const usedAttributeIds = f.product_attributes.map((r) => r.attribute_id).filter(Boolean)
+  const categoryAncestorIds = getCategoryAncestorIds(f.category_id, categories)
+  const availableAttributeTypes = attributeTypes.filter(
+    (t) => !f.category_id || categoryAncestorIds.includes(String(t.category_id))
+  )
 
   return (
     <div className="w-full">
@@ -1189,7 +1211,7 @@ export default function ProductFormPage() {
                           key={idx}
                           row={row}
                           idx={idx}
-                          attributeTypes={attributeTypes.filter((t) => !f.category_id || String(t.category_id) === String(f.category_id))}
+                          attributeTypes={availableAttributeTypes}
                           allAttributes={allAttributes}
                           usedAttributeIds={usedAttributeIds}
                           onChange={handleAttributeChange}
