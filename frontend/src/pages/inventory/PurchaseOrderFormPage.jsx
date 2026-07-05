@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
-  Building2, CalendarDays, Package, Plus, RefreshCw, Save, Trash2,
+  Building2, CalendarDays, Package, Plus, RefreshCw, Save, Trash2, X,
 } from 'lucide-react'
 import {
   createPurchaseOrder,
@@ -11,6 +12,7 @@ import {
   loadPOFromPR,
   updatePurchaseOrder,
 } from '../../api/purchaseOrders'
+import { getProducts } from '../../api/products'
 import { getPurchaseRequests } from '../../api/purchaseRequests'
 import { getAllLocations } from '../../api/locations'
 import { getAllStores } from '../../api/stores'
@@ -18,7 +20,6 @@ import { getAllSuppliers } from '../../api/suppliers'
 import { getAllUnitTypes } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
 import { showError, showSuccess } from '../../utils/alerts'
-import api from '../../api/axios'
 
 const PAYMENT_TERMS = ['Net 15', 'Net 30', 'Net 45', 'Net 60', 'COD', 'Advance', 'LC']
 
@@ -56,12 +57,116 @@ const TABLE_SELECT =
   'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white cursor-pointer'
 const TABLE_SELECT_ERR =
   'block w-full rounded border border-red-400 bg-red-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white cursor-pointer'
+const TABLE_INPUT =
+  'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white'
 
 function SectionHeader({ icon: Icon, title, colorClass }) {
   return (
     <div className={`flex items-center gap-1.5 px-3 py-1.5 border-b rounded-t-lg ${colorClass}`}>
       {Icon && <Icon size={12} />}
       <h2 className="text-xs font-bold">{title}</h2>
+    </div>
+  )
+}
+
+/* ── Product search cell (searchable dropdown, same style as GRN's Product cell) ── */
+function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClear, onClose }) {
+  const [highlightIdx, setHighlightIdx] = useState(0)
+  const [dropPos, setDropPos]           = useState({ top: 0, left: 0, width: 280 })
+  const inputRef = useRef(null)
+
+  const results    = productSearch.key === row._key ? (productSearch.results ?? []) : []
+  const isOpen     = productSearch.key === row._key && productSearch.open && results.length > 0
+  const isSelected = Boolean(row.product_id)
+
+  // Reset highlight when a new result list arrives
+  useEffect(() => { setHighlightIdx(0) }, [results.length])
+
+  // Recalculate dropdown position whenever it opens
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect()
+      setDropPos({
+        top:   rect.bottom + 2,
+        left:  rect.left,
+        width: Math.max(rect.width, 280),
+      })
+    }
+  }, [isOpen])
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      if (!isOpen) return
+      e.preventDefault()
+      setHighlightIdx((i) => Math.min(i + 1, results.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      if (!isOpen) return
+      e.preventDefault()
+      setHighlightIdx((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (isOpen && results[highlightIdx]) onSelect(row._key, results[highlightIdx])
+    } else if (e.key === 'Escape') {
+      onClose?.()
+    }
+  }
+
+  if (isSelected) {
+    return (
+      <div className="flex items-center gap-1 min-w-0">
+        <span className="truncate text-xs font-medium text-slate-700">{row.product_name}</span>
+        <button
+          type="button"
+          title="Clear product"
+          onClick={() => onClear(row._key)}
+          className="shrink-0 text-slate-300 hover:text-red-500 transition-colors"
+        >
+          <X size={10} />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <input
+        ref={inputRef}
+        type="text"
+        placeholder="Search product…"
+        className={TABLE_INPUT}
+        value={productSearch.key === row._key ? productSearch.query : ''}
+        onChange={(e) => onQueryChange(row._key, e.target.value)}
+        onKeyDown={handleKeyDown}
+        onFocus={() => {
+          const currentQuery = productSearch.key === row._key ? productSearch.query : ''
+          onQueryChange(row._key, currentQuery)
+        }}
+        autoComplete="off"
+      />
+      {isOpen && createPortal(
+        <div
+          style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
+          className="rounded border border-slate-200 bg-white shadow-xl max-h-52 overflow-y-auto"
+        >
+          {results.map((p, i) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition-colors ${
+                i === highlightIdx
+                  ? 'bg-indigo-100 text-indigo-900'
+                  : 'hover:bg-slate-50 text-slate-700'
+              }`}
+              onMouseDown={(e) => { e.preventDefault(); onSelect(row._key, p) }}
+              onMouseEnter={() => setHighlightIdx(i)}
+            >
+              <span className="font-mono text-[10px] text-indigo-400 shrink-0 w-20 truncate">{p.product_code}</span>
+              <span className="truncate font-medium">{p.name}</span>
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
@@ -130,7 +235,10 @@ export default function PurchaseOrderFormPage() {
   const [items, setItems]             = useState([emptyItem()])
   const [errors, setErrors]           = useState({})
   const [itemTouched, setItemTouched] = useState({})
-  const [products, setProducts] = useState([])
+
+  /* ── Product search state (searchable dropdown for Order Items) ──── */
+  const [productSearch, setProductSearch] = useState({ key: null, query: '', results: [], open: false })
+  const searchTimerRef = useRef(null)
 
   const { data: locations  = [] } = useQuery({ queryKey: ['locations-all'],  queryFn: getAllLocations })
   const { data: suppliers  = [] } = useQuery({ queryKey: ['suppliers-all'],  queryFn: getAllSuppliers })
@@ -158,12 +266,6 @@ export default function PurchaseOrderFormPage() {
       setForm((f) => ({ ...f, po_no: f.po_no || nextPoNo }))
     }
   }, [nextPoNo, isEdit])
-
-  useEffect(() => {
-    api.get('/api/v1/products', { params: { per_page: 1000 } })
-      .then((r) => setProducts(r.data.data ?? []))
-      .catch(() => {})
-  }, [])
 
   const { data: existingPO, isLoading: loadingPO } = useQuery({
     queryKey: ['purchase-order', id],
@@ -284,13 +386,47 @@ export default function PurchaseOrderFormPage() {
     }
   }
 
-  const handleProductSelect = (idx, productId) => {
-    const product = products.find((p) => p.id === parseInt(productId))
-    setItems((prev) => prev.map((row, i) =>
-      i === idx
-        ? { ...row, product_id: productId, product_code: product?.product_code ?? '', product_name: product?.name ?? '' }
-        : row,
+  /* ── Product search for Order Items ───────────────────────── */
+  const handleProductQueryChange = (rowKey, query) => {
+    setProductSearch({ key: rowKey, query, results: [], open: false })
+    clearTimeout(searchTimerRef.current)
+
+    const doFetch = async (search) => {
+      try {
+        const params = search ? { search, per_page: 30 } : { per_page: 100 }
+        const res = await getProducts(1, params)
+        const usedIds = new Set(items.filter((r) => r._key !== rowKey).map((r) => r.product_id).filter(Boolean).map(Number))
+        setProductSearch((prev) =>
+          prev.key === rowKey
+            ? { ...prev, results: (res.data ?? []).filter((p) => !usedIds.has(p.id)), open: true }
+            : prev
+        )
+      } catch { /* silent */ }
+    }
+
+    if (query === '') {
+      doFetch('')              // immediate — show all on focus
+    } else {
+      searchTimerRef.current = setTimeout(() => doFetch(query), 300)
+    }
+  }
+
+  const selectProduct = (rowKey, product) => {
+    setItems((prev) => prev.map((row) =>
+      row._key === rowKey
+        ? { ...row, product_id: product.id, product_code: product.product_code ?? '', product_name: product.name ?? '' }
+        : row
     ))
+    setProductSearch({ key: null, query: '', results: [], open: false })
+  }
+
+  const clearProductSelection = (rowKey) => {
+    setItems((prev) => prev.map((row) =>
+      row._key === rowKey
+        ? { ...row, product_id: '', product_code: '', product_name: '' }
+        : row
+    ))
+    setProductSearch({ key: rowKey, query: '', results: [], open: false })
   }
 
   const clearFieldError = (field) => {
@@ -611,8 +747,6 @@ export default function PurchaseOrderFormPage() {
               <tbody className="divide-y divide-slate-100">
                 {items.map((row, idx) => {
                   const { gross, amount } = calcItem(row)
-                  const usedIds = new Set(items.filter((_, i) => i !== idx).map((r) => r.product_id).filter(Boolean).map(Number))
-                  const availableProducts = products.filter((p) => !usedIds.has(p.id))
                   return (
                     <tr key={row._key} className="group hover:bg-slate-50/60 transition-colors">
                       <td className="px-1.5 py-1 text-slate-400 font-medium tabular-nums">{idx + 1}</td>
@@ -620,10 +754,14 @@ export default function PurchaseOrderFormPage() {
                         <input readOnly value={row.product_code} placeholder="—" className="block w-full rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs font-mono text-slate-500 outline-none cursor-not-allowed" />
                       </td>
                       <td className="px-1.5 py-1 min-w-28">
-                        <select value={row.product_id} onChange={(e) => handleProductSelect(idx, e.target.value)} className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white cursor-pointer">
-                          <option value="">— Select product —</option>
-                          {availableProducts.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                        </select>
+                        <ProductSearchCell
+                          row={row}
+                          productSearch={productSearch}
+                          onQueryChange={handleProductQueryChange}
+                          onSelect={selectProduct}
+                          onClear={clearProductSelection}
+                          onClose={() => setProductSearch((prev) => ({ ...prev, open: false }))}
+                        />
                       </td>
                       <td className="px-1.5 py-1">
                         <input type="number" min="0" step="0.0001" placeholder="0" value={row.quantity_ordered} onChange={(e) => setRowField(idx, 'quantity_ordered', e.target.value)} className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white" />

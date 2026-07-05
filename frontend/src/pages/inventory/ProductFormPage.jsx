@@ -33,7 +33,7 @@ const BOOL_OPTIONS = [
   { key: 'is_serial',                 label: 'Serial Tracked' },
 ]
 
-const EMPTY_ATTRIBUTE_ROW      = { attribute_type_id: '', attribute_id: '' }
+const EMPTY_ATTRIBUTE_ROW      = { attribute_type_id: '', attribute_ids: [] }
 const EMPTY_LOCATION_STORE_ROW = { location_id: '', store_id: '' }
 
 const EMPTY_COST_ROW = {
@@ -257,7 +257,10 @@ function CostSelect({ value, onChange, onBlur, children, placeholder, error, tou
   )
 }
 
-function SupplierMultiSelect({ suppliers, selectedIds, onChange, error, touched }) {
+function MultiSelectDropdown({
+  items, selectedIds, onChange, getId = (i) => i.id, getLabel,
+  placeholder = 'Select...', searchPlaceholder = 'Search...', error, touched, disabled,
+}) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const ref = useRef(null)
@@ -270,8 +273,8 @@ function SupplierMultiSelect({ suppliers, selectedIds, onChange, error, touched 
     return () => document.removeEventListener('mousedown', handleOutside)
   }, [open])
 
-  const filtered = suppliers.filter((s) =>
-    s.name.toLowerCase().includes(search.toLowerCase())
+  const filtered = items.filter((i) =>
+    getLabel(i).toLowerCase().includes(search.toLowerCase())
   )
 
   const toggle = (id) => {
@@ -281,25 +284,26 @@ function SupplierMultiSelect({ suppliers, selectedIds, onChange, error, touched 
     onChange(next)
   }
 
-  const selectedNames = suppliers
-    .filter((s) => selectedIds.includes(s.id))
-    .map((s) => s.name)
+  const selectedLabels = items
+    .filter((i) => selectedIds.includes(getId(i)))
+    .map(getLabel)
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="relative min-w-0">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        disabled={disabled}
+        onClick={() => !disabled && setOpen((o) => !o)}
         className={[
-          'flex w-full items-center justify-between rounded-md border-2 px-2 py-1 text-left outline-none transition-all',
-          'focus:ring-2',
+          'flex w-full min-w-0 items-center justify-between rounded-md border-2 px-2 py-1 text-left outline-none transition-all',
+          'focus:ring-2 disabled:cursor-not-allowed disabled:border-slate-100 disabled:bg-slate-100 disabled:text-slate-400',
           error && touched
             ? 'border-red-300 bg-red-50/40 focus:border-red-500 focus:bg-white focus:ring-red-500/15'
             : 'border-slate-200 bg-slate-50 focus:border-indigo-500 focus:bg-white focus:ring-indigo-500/15',
         ].join(' ')}
       >
-        <span className={`flex-1 truncate text-xs ${selectedNames.length === 0 ? 'text-slate-400' : 'text-slate-800'}`}>
-          {selectedNames.length === 0 ? 'Select suppliers...' : selectedNames.join(', ')}
+        <span className={`min-w-0 flex-1 truncate text-xs ${selectedLabels.length === 0 ? 'text-slate-400' : 'text-slate-800'}`}>
+          {selectedLabels.length === 0 ? placeholder : selectedLabels.join(', ')}
         </span>
         <ChevronDown size={14} className={`ml-1 shrink-0 text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -311,22 +315,23 @@ function SupplierMultiSelect({ suppliers, selectedIds, onChange, error, touched 
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search suppliers..."
+              placeholder={searchPlaceholder}
               autoFocus
               className="block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15"
             />
           </div>
           <div className="max-h-48 overflow-y-auto">
             {filtered.length === 0 ? (
-              <p className="px-3 py-2 text-xs italic text-slate-400">No suppliers found.</p>
+              <p className="px-3 py-2 text-xs italic text-slate-400">No results found.</p>
             ) : (
-              filtered.map((s) => {
-                const checked = selectedIds.includes(s.id)
+              filtered.map((i) => {
+                const id = getId(i)
+                const checked = selectedIds.includes(id)
                 return (
                   <button
-                    key={s.id}
+                    key={id}
                     type="button"
-                    onClick={() => toggle(s.id)}
+                    onClick={() => toggle(id)}
                     className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-slate-50"
                   >
                     <span className={[
@@ -335,7 +340,7 @@ function SupplierMultiSelect({ suppliers, selectedIds, onChange, error, touched 
                     ].join(' ')}>
                       {checked && <Check size={10} className="text-white" strokeWidth={3} />}
                     </span>
-                    <span className="truncate text-xs text-slate-700" title={s.name}>{s.name}</span>
+                    <span className="truncate text-xs text-slate-700" title={getLabel(i)}>{getLabel(i)}</span>
                   </button>
                 )
               })
@@ -359,39 +364,41 @@ function SupplierMultiSelect({ suppliers, selectedIds, onChange, error, touched 
   )
 }
 
-function AttributeRow({ row, idx, attributeTypes, allAttributes, usedAttributeIds, onChange, onRemove }) {
-  const filteredAttrs = allAttributes
-    .filter((a) => String(a.attribute_type_id) === String(row.attribute_type_id))
-    .filter((a) => !usedAttributeIds.includes(String(a.id)) || String(a.id) === String(row.attribute_id))
+function AttributeTypeRow({ row, idx, attributeTypes, allAttributes, usedAttributeTypeIds, onTypeChange, onAttributesChange, onRemove }) {
+  const availableTypes = attributeTypes.filter(
+    (t) => !usedAttributeTypeIds.includes(String(t.id)) || String(t.id) === String(row.attribute_type_id)
+  )
+  const filteredAttrs = allAttributes.filter(
+    (a) => String(a.attribute_type_id) === String(row.attribute_type_id)
+  )
 
   return (
     <div className="flex items-end gap-1.5">
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         {idx === 0 && <label className={LABEL_CLS}>Attribute Type</label>}
         <select
           value={row.attribute_type_id}
-          onChange={(e) => onChange(idx, 'attribute_type_id', e.target.value)}
+          onChange={(e) => onTypeChange(idx, e.target.value)}
           className="w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer"
         >
           <option value="">— Type —</option>
-          {attributeTypes.map((t) => (
+          {availableTypes.map((t) => (
             <option key={t.id} value={t.id}>{t.attribute_type_name}</option>
           ))}
         </select>
       </div>
-      <div className="flex-1">
-        {idx === 0 && <label className={LABEL_CLS}>Attribute</label>}
-        <select
-          value={row.attribute_id}
-          onChange={(e) => onChange(idx, 'attribute_id', e.target.value)}
+      <div className="min-w-0 flex-1">
+        {idx === 0 && <label className={LABEL_CLS}>Attributes</label>}
+        <MultiSelectDropdown
+          items={filteredAttrs}
+          selectedIds={row.attribute_ids}
+          onChange={(ids) => onAttributesChange(idx, ids)}
+          getId={(a) => String(a.id)}
+          getLabel={(a) => a.attribute_name}
+          placeholder="Select attributes..."
+          searchPlaceholder="Search attributes..."
           disabled={!row.attribute_type_id}
-          className="w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 disabled:border-slate-100 disabled:bg-slate-100 disabled:text-slate-400 cursor-pointer"
-        >
-          <option value="">— Attribute —</option>
-          {filteredAttrs.map((a) => (
-            <option key={a.id} value={a.id}>{a.attribute_name}</option>
-          ))}
-        </select>
+        />
       </div>
       <button
         type="button"
@@ -792,10 +799,14 @@ export default function ProductFormPage() {
         is_batch:                   Boolean(p.is_batch),
         is_serial:                  Boolean(p.is_serial),
         supplier_ids:               (p.suppliers ?? []).map((s) => s.id),
-        product_attributes:         (p.product_attributes ?? []).map((pa) => ({
-          attribute_type_id: pa.attribute_type_id != null ? String(pa.attribute_type_id) : '',
-          attribute_id:      pa.attribute_id      != null ? String(pa.attribute_id)      : '',
-        })),
+        product_attributes:         Object.values(
+          (p.product_attributes ?? []).reduce((acc, pa) => {
+            const typeId = pa.attribute_type_id != null ? String(pa.attribute_type_id) : ''
+            if (!acc[typeId]) acc[typeId] = { attribute_type_id: typeId, attribute_ids: [] }
+            if (pa.attribute_id != null) acc[typeId].attribute_ids.push(String(pa.attribute_id))
+            return acc
+          }, {})
+        ),
         cost_details:               (p.cost_details ?? []).map((c) => ({
           sales_channel_id:               String(c.sales_channel_id),
           unit_category_id:              c.unit_category_id != null ? String(c.unit_category_id) : '',
@@ -948,13 +959,20 @@ export default function ProductFormPage() {
     setForm((prev) => ({ ...prev, product_attributes: prev.product_attributes.filter((_, i) => i !== idx) }))
   }
 
-  const handleAttributeChange = (idx, field, value) => {
+  const handleAttributeTypeChange = (idx, value) => {
     setForm((prev) => ({
       ...prev,
       product_attributes: prev.product_attributes.map((row, i) =>
-        i === idx
-          ? { ...row, [field]: value, ...(field === 'attribute_type_id' ? { attribute_id: '' } : {}) }
-          : row
+        i === idx ? { ...row, attribute_type_id: value, attribute_ids: [] } : row
+      ),
+    }))
+  }
+
+  const handleAttributeIdsChange = (idx, ids) => {
+    setForm((prev) => ({
+      ...prev,
+      product_attributes: prev.product_attributes.map((row, i) =>
+        i === idx ? { ...row, attribute_ids: ids } : row
       ),
     }))
   }
@@ -1040,11 +1058,11 @@ export default function ProductFormPage() {
       is_batch:                    form.is_batch,
       is_serial:                   form.is_serial,
       product_attributes:          form.product_attributes
-        .filter((r) => r.attribute_type_id && r.attribute_id)
-        .map((r) => ({
+        .filter((r) => r.attribute_type_id && r.attribute_ids.length > 0)
+        .flatMap((r) => r.attribute_ids.map((attributeId) => ({
           attribute_type_id: Number(r.attribute_type_id),
-          attribute_id:      Number(r.attribute_id),
-        })),
+          attribute_id:      Number(attributeId),
+        }))),
       cost_details:                form.cost_details
         .filter((r) => r.sales_channel_id)
         .map((r) => ({
@@ -1090,11 +1108,12 @@ export default function ProductFormPage() {
   const e = errors
   const t = touched
   const usedChannelIds   = f.cost_details.map((r) => r.sales_channel_id).filter(Boolean)
-  const usedAttributeIds = f.product_attributes.map((r) => r.attribute_id).filter(Boolean)
+  const usedAttributeTypeIds = f.product_attributes.map((r) => r.attribute_type_id).filter(Boolean)
   const categoryAncestorIds = getCategoryAncestorIds(f.category_id, categories)
   const availableAttributeTypes = attributeTypes.filter(
     (t) => !f.category_id || categoryAncestorIds.includes(String(t.category_id))
   )
+  const canAddAttributeRow = f.category_id && usedAttributeTypeIds.length < availableAttributeTypes.length
 
   return (
     <div className="w-full">
@@ -1182,8 +1201,8 @@ export default function ProductFormPage() {
                     <button
                       type="button"
                       onClick={addAttributeRow}
-                      disabled={!f.category_id}
-                      title={f.category_id ? 'Add attribute' : 'Select a category first'}
+                      disabled={!canAddAttributeRow}
+                      title={f.category_id ? 'Add attribute type' : 'Select a category first'}
                       className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-600 text-white shadow-sm hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-40 transition-colors"
                     >
                       <Plus size={11} strokeWidth={2.5} />
@@ -1196,14 +1215,15 @@ export default function ProductFormPage() {
                   ) : (
                     <div className="space-y-1.5">
                       {f.product_attributes.map((row, idx) => (
-                        <AttributeRow
+                        <AttributeTypeRow
                           key={idx}
                           row={row}
                           idx={idx}
                           attributeTypes={availableAttributeTypes}
                           allAttributes={allAttributes}
-                          usedAttributeIds={usedAttributeIds}
-                          onChange={handleAttributeChange}
+                          usedAttributeTypeIds={usedAttributeTypeIds}
+                          onTypeChange={handleAttributeTypeChange}
+                          onAttributesChange={handleAttributeIdsChange}
                           onRemove={removeAttributeRow}
                         />
                       ))}
@@ -1289,8 +1309,11 @@ export default function ProductFormPage() {
                 <h2 className="text-xs font-bold">Supplier <span className="text-red-500">*</span></h2>
               </div>
               <div className="p-2.5">
-                <SupplierMultiSelect
-                  suppliers={suppliers}
+                <MultiSelectDropdown
+                  items={suppliers}
+                  getLabel={(s) => s.name}
+                  placeholder="Select suppliers..."
+                  searchPlaceholder="Search suppliers..."
                   selectedIds={f.supplier_ids}
                   onChange={(ids) => {
                     setForm((prev) => ({ ...prev, supplier_ids: ids }))

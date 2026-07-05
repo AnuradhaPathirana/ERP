@@ -95,7 +95,12 @@ function NestedCategorySelect({ value, onChange, onBlur, categories, hasError })
 
   useEffect(() => {
     if (!open) return
-    const handler = () => setOpen(false)
+    // Close on page/ancestor scroll (keeps the fixed-position panel aligned with
+    // the trigger), but ignore scrolling inside the dropdown's own option list.
+    const handler = (e) => {
+      if (panelRef.current?.contains(e.target)) return
+      setOpen(false)
+    }
     window.addEventListener('scroll', handler, true)
     return () => window.removeEventListener('scroll', handler, true)
   }, [open])
