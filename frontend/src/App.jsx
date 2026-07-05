@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react'
-import { Navigate, Route, Routes } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import Layout from './components/Layout/Layout'
 import LoginPage from './pages/LoginPage'
 
@@ -79,9 +79,12 @@ function PageLoader() {
 }
 
 function Lazy({ component: C }) {
+  // Key by path so routes sharing one component (e.g. .../create and .../:id/edit)
+  // remount instead of reusing state across navigation — see product_code bug.
+  const { pathname } = useLocation()
   return (
     <Suspense fallback={<PageLoader />}>
-      <C />
+      <C key={pathname} />
     </Suspense>
   )
 }

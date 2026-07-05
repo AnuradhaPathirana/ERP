@@ -40,7 +40,7 @@ const EMPTY_COST_ROW = {
   sales_channel_id:               '',
   unit_category_id:               '',
   unit_type_id:                   '',
-  num_of_units:                   '',
+  num_of_units:                   '1',
   cost_price:                     '',
   margin:                         '',
   margin_type:                    'percentage',
@@ -58,14 +58,14 @@ const EMPTY_FORM = {
   ean_13:                    '',
   name:                      '',
   display_name:              '',
-  product_type:              '',
+  product_type:              'Inventory',
   description:               '',
   category_id:               '',
   location_stores:           [],
   reorder_level:             '',
   reorder_qty:               '',
   reorder_period:            '',
-  stock_releasing_method:    '',
+  stock_releasing_method:    'FIFO',
   tracking_type:             '',
   lock_purchase:              false,
   allow_complimentary_items:  false,
@@ -138,9 +138,9 @@ function computeAverage(costPrice, sellingPrice) {
 const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
 const ERR_CLS   = 'mt-0.5 text-[10px] text-red-500'
 
-function Field({ label, required, helpText, error, touched, children }) {
+function Field({ label, required, helpText, error, touched, className, children }) {
   return (
-    <div>
+    <div className={className}>
       <label className={`${LABEL_CLS} flex items-center gap-1`}>
         {label}
         {required && <span className="text-red-500">*</span>}
@@ -174,6 +174,33 @@ function Input({ name, value, onChange, onBlur, error, touched, ...props }) {
       ].join(' ')}
       {...props}
     />
+  )
+}
+
+// Default width for a short/empty value — matches the field's old fixed-column look.
+const AUTO_WIDTH_MIN = 200
+// Padding (px-2 = 8px * 2) + border (border-2 = 2px * 2) + a little caret breathing room.
+const AUTO_WIDTH_EXTRA = 28
+
+// An Input that grows to fit its typed content (min: AUTO_WIDTH_MIN, max: 100% of its row),
+// so the row's other fields wrap to the next line once it runs out of space.
+function AutoWidthInput({ value, minWidth = AUTO_WIDTH_MIN, ...props }) {
+  const measureRef = useRef(null)
+  const [width, setWidth] = useState(minWidth)
+
+  useLayoutEffect(() => {
+    if (measureRef.current) {
+      setWidth(Math.max(minWidth, measureRef.current.scrollWidth + AUTO_WIDTH_EXTRA))
+    }
+  }, [value, minWidth])
+
+  return (
+    <>
+      <Input value={value} style={{ width, maxWidth: '100%' }} {...props} />
+      <span ref={measureRef} aria-hidden="true" className="invisible absolute left-0 top-0 whitespace-pre text-xs">
+        {value}
+      </span>
+    </>
   )
 }
 
@@ -829,12 +856,15 @@ export default function ProductFormPage() {
     }
   }, [fetchedData])
 
-  // Show the backend-generated preview code once it arrives (create mode only)
-  const codeSeeded = useRef(false)
+  // Mirror the backend-generated preview code (read-only field, create mode only).
+  // Re-syncs whenever nextCode changes value — not just once — so a stale
+  // cached value from an earlier visit gets corrected once the background
+  // refetch resolves, instead of being seeded once and left stale forever.
+  const appliedCode = useRef(null)
   useLayoutEffect(() => {
-    if (!isEditing && nextCode && !codeSeeded.current) {
+    if (!isEditing && nextCode && appliedCode.current !== nextCode) {
       setForm((prev) => ({ ...prev, product_code: nextCode }))
-      codeSeeded.current = true
+      appliedCode.current = nextCode
     }
   }, [isEditing, nextCode])
 
@@ -1160,16 +1190,16 @@ export default function ProductFormPage() {
                 </Field>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
-                <Field label="Product Name" required error={e.name} touched={t.name}>
-                  <Input name="name" value={f.name} onChange={handleChange} onBlur={handleBlur}
+              <div className="flex flex-wrap gap-2">
+                <Field label="Product Name" required error={e.name} touched={t.name} className="shrink-0">
+                  <AutoWidthInput name="name" value={f.name} onChange={handleChange} onBlur={handleBlur}
                     error={e.name} touched={t.name} placeholder="Full product name" maxLength={100} />
                 </Field>
-                <Field label="Display Name" required error={e.display_name} touched={t.display_name}>
-                  <Input name="display_name" value={f.display_name} onChange={handleChange} onBlur={handleBlur}
+                <Field label="Display Name" required error={e.display_name} touched={t.display_name} className="shrink-0">
+                  <AutoWidthInput name="display_name" value={f.display_name} onChange={handleChange} onBlur={handleBlur}
                     error={e.display_name} touched={t.display_name} placeholder="Short / POS name" maxLength={100} />
                 </Field>
-                <Field label="Category" required error={e.category_id} touched={t.category_id}>
+                <Field label="Category" required error={e.category_id} touched={t.category_id} className="min-w-[200px] flex-1 shrink-0">
                   <TreeSelect
                     name="category_id"
                     value={f.category_id}
