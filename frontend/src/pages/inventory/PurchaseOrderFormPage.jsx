@@ -17,7 +17,7 @@ import { getPurchaseRequests } from '../../api/purchaseRequests'
 import { getAllLocations } from '../../api/locations'
 import { getAllStores } from '../../api/stores'
 import { getAllSuppliers } from '../../api/suppliers'
-import { getAllUnitTypes } from '../../api/unitTypes'
+import { getAllUnitTypesFlat } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
 import { showError, showSuccess } from '../../utils/alerts'
 
@@ -243,7 +243,15 @@ export default function PurchaseOrderFormPage() {
   const { data: locations  = [] } = useQuery({ queryKey: ['locations-all'],  queryFn: getAllLocations })
   const { data: suppliers  = [] } = useQuery({ queryKey: ['suppliers-all'],  queryFn: getAllSuppliers })
   const { data: stores     = [] } = useQuery({ queryKey: ['stores-all'],     queryFn: getAllStores })
-  const { data: unitTypes  = [] } = useQuery({ queryKey: ['unit-types-all'], queryFn: () => getAllUnitTypes() })
+  // Flat, cross-category list — a product's UOM (from its sales channel) may belong
+  // to any unit category, not just the system default one.
+  const { data: unitTypes  = [] } = useQuery({ queryKey: ['unit-types-flat'], queryFn: getAllUnitTypesFlat, staleTime: 5 * 60 * 1000 })
+  const uomGroups = unitTypes.reduce((acc, u) => {
+    const key = String(u.unit_category_id)
+    if (!acc[key]) acc[key] = { name: u.unit_category_name ?? 'Other', items: [] }
+    acc[key].items.push(u)
+    return acc
+  }, {})
 
   const filteredStores = form.location_id
     ? stores.filter((s) => String(s.location_id) === String(form.location_id))
@@ -412,9 +420,18 @@ export default function PurchaseOrderFormPage() {
   }
 
   const selectProduct = (rowKey, product) => {
+    // Default UOM from the product's first sales channel (Product creation's "Unit of Measure").
+    // Editable afterward — this is just a starting guess, not a lock.
+    const defaultUnitTypeId = product.cost_details?.[0]?.unit_type_id
     setItems((prev) => prev.map((row) =>
       row._key === rowKey
-        ? { ...row, product_id: product.id, product_code: product.product_code ?? '', product_name: product.name ?? '' }
+        ? {
+            ...row,
+            product_id:   product.id,
+            product_code: product.product_code ?? '',
+            product_name: product.name ?? '',
+            unit_id:      defaultUnitTypeId != null ? String(defaultUnitTypeId) : '',
+          }
         : row
     ))
     setProductSearch({ key: null, query: '', results: [], open: false })
@@ -775,7 +792,11 @@ export default function PurchaseOrderFormPage() {
                             className={getItemErr(row._key, 'uom') ? TABLE_SELECT_ERR : TABLE_SELECT}
                           >
                             <option value="">—</option>
-                            {unitTypes.map((u) => <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>)}
+                            {Object.entries(uomGroups).map(([catId, group]) => (
+                              <optgroup key={catId} label={group.name}>
+                                {group.items.map((u) => <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>)}
+                              </optgroup>
+                            ))}
                           </select>
                           {getItemErr(row._key, 'uom') && (
                             <span className="text-[9px] text-red-500 leading-none">Required</span>

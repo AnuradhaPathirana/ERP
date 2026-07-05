@@ -21,7 +21,7 @@ import { getAllSuppliers } from '../../api/suppliers'
 import { getAllLocations } from '../../api/locations'
 import { getAllStores } from '../../api/stores'
 import { getProducts } from '../../api/products'
-import { getAllUnitTypes } from '../../api/unitTypes'
+import { getAllUnitTypesFlat } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
 import BatchAssignModal from '../../components/inventory/BatchAssignModal'
 import { showError, showSuccess } from '../../utils/alerts'
@@ -301,10 +301,19 @@ export default function GoodsReceivedNoteFormPage() {
     queryKey: ['suppliers-all'],
     queryFn:  getAllSuppliers,
   })
+  // Flat, cross-category list — a product's UOM (from its sales channel) may belong
+  // to any unit category, not just the system default one.
   const { data: unitTypes = [] } = useQuery({
-    queryKey: ['unit-types-all'],
-    queryFn:  () => getAllUnitTypes(),
+    queryKey: ['unit-types-flat'],
+    queryFn:  getAllUnitTypesFlat,
+    staleTime: 5 * 60 * 1000,
   })
+  const uomGroups = unitTypes.reduce((acc, u) => {
+    const key = String(u.unit_category_id)
+    if (!acc[key]) acc[key] = { name: u.unit_category_name ?? 'Other', items: [] }
+    acc[key].items.push(u)
+    return acc
+  }, {})
   const { data: locations = [] } = useQuery({
     queryKey: ['locations-all'],
     queryFn:  getAllLocations,
@@ -318,6 +327,24 @@ export default function GoodsReceivedNoteFormPage() {
   const storesForLocation = form.location_id
     ? allStores.filter((s) => String(s.location_id) === String(form.location_id))
     : allStores
+
+  // Default Location & Store to the first available option (create mode only —
+  // editing an existing GRN keeps its saved values via the hydration effect below).
+  const locationSeeded = useRef(false)
+  useEffect(() => {
+    if (!isEdit && !locationSeeded.current && locations.length > 0) {
+      setForm((f) => (f.location_id ? f : { ...f, location_id: String(locations[0].id) }))
+      locationSeeded.current = true
+    }
+  }, [isEdit, locations])
+
+  const storeSeeded = useRef(false)
+  useEffect(() => {
+    if (!isEdit && !storeSeeded.current && form.location_id && storesForLocation.length > 0) {
+      setForm((f) => (f.store_id ? f : { ...f, store_id: String(storesForLocation[0].id) }))
+      storeSeeded.current = true
+    }
+  }, [isEdit, form.location_id, storesForLocation])
 
   const { data: supplierConfirmedPOs, isLoading: loadingConfirmed } = useQuery({
     queryKey: ['pos-supplier-confirmed', form.supplier_id],
@@ -616,6 +643,9 @@ export default function GoodsReceivedNoteFormPage() {
   }
 
   const selectProduct = async (rowKey, product) => {
+    // Default UOM from the product's first sales channel (Product creation's "Unit of Measure").
+    // Editable afterward — this is just a starting guess, not a lock.
+    const defaultUnitTypeId = product.cost_details?.[0]?.unit_type_id
     setItems((prev) => prev.map((row) =>
       row._key === rowKey
         ? {
@@ -623,6 +653,7 @@ export default function GoodsReceivedNoteFormPage() {
             product_id:   product.id,
             product_code: product.product_code ?? '',
             product_name: product.name ?? '',
+            unit_id:      defaultUnitTypeId != null ? String(defaultUnitTypeId) : '',
             is_batch:     product.is_batch ?? false,
             batches:      [],
             batch_no:     '',
@@ -1294,7 +1325,7 @@ export default function GoodsReceivedNoteFormPage() {
                     <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Code</th>
                     <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Product</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">PO Qty</th>
-                    <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-right">Available</th>
+                    <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-right">Pending Qty</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">UOM</th>
                     <th className="w-28 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty Received</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">No Of Pieces</th>
@@ -1343,7 +1374,7 @@ export default function GoodsReceivedNoteFormPage() {
                           {isManual ? <span className="text-slate-300">—</span> : Number(row.quantity_ordered).toLocaleString()}
                         </td>
 
-                        {/* Available */}
+                        {/* Pending Qty */}
                         <td className="px-2 py-1 text-right">
                           {isManual ? (
                             <span className="text-slate-300">—</span>
@@ -1375,8 +1406,12 @@ export default function GoodsReceivedNoteFormPage() {
                               className={getItemErr(row._key, 'uom') ? TABLE_SEL_ERR : TABLE_SEL}
                             >
                               <option value="">—</option>
-                              {unitTypes.map((u) => (
-                                <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>
+                              {Object.entries(uomGroups).map(([catId, group]) => (
+                                <optgroup key={catId} label={group.name}>
+                                  {group.items.map((u) => (
+                                    <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>
+                                  ))}
+                                </optgroup>
                               ))}
                             </select>
                             {getItemErr(row._key, 'uom') && (
