@@ -166,10 +166,9 @@ export default function GoodsReceivedNotesPage() {
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
                     <th className="w-8 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">#</th>
                     <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">GRN No</th>
-                    <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">PO No</th>
                     <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Supplier</th>
                     <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">GRN Date</th>
-                    <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Store</th>
+                    <th className="w-44 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Store</th>
                     <th className="w-24 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Total</th>
                     <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Status</th>
                     <th className="w-28 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Actions</th>
@@ -178,7 +177,7 @@ export default function GoodsReceivedNotesPage() {
                 <tbody className="divide-y divide-slate-100">
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">
+                      <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
                         {activeCount > 0 ? 'No GRNs match the current filters.' : 'No goods received notes yet.'}
                       </td>
                     </tr>
@@ -189,16 +188,11 @@ export default function GoodsReceivedNotesPage() {
                         <td className="px-3 py-2 font-mono font-medium text-indigo-600">
                           <Link to={`/inventory/goods-received-notes/${grn.id}`} className="hover:underline">{grn.grn_no}</Link>
                         </td>
-                        <td className="px-3 py-2 font-mono text-slate-600">
-                          {grn.purchase_order ? (
-                            <Link to={`/inventory/purchase-orders/${grn.po_id}`} className="hover:underline hover:text-indigo-600">
-                              {grn.purchase_order.po_no}
-                            </Link>
-                          ) : <span className="italic text-slate-300">—</span>}
-                        </td>
                         <td className="px-3 py-2 font-medium text-slate-700">{grn.supplier?.name || <span className="italic text-slate-300">—</span>}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{grn.grn_date}</td>
-                        <td className="px-3 py-2 text-slate-500">{grn.store?.name || <span className="italic text-slate-300">—</span>}</td>
+                        <td className="max-w-44 truncate px-3 py-2 text-slate-500" title={grn.store?.name || ''}>
+                          {grn.store?.name || <span className="italic text-slate-300">—</span>}
+                        </td>
                         <td className="px-3 py-2 text-right font-medium text-slate-700">
                           {Number(grn.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </td>

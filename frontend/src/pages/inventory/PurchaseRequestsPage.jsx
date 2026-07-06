@@ -173,10 +173,8 @@ export default function PurchaseRequestsPage() {
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
                     <th className="w-8 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">#</th>
                     <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">PR No</th>
-                    <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Ref No</th>
                     <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Request Date</th>
-                    <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Target Location</th>
-                    <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Target Store</th>
+                    <th className="w-44 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Target Store</th>
                     <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Required Date</th>
                     <th className="w-16 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Total Qty</th>
                     <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Status</th>
@@ -186,7 +184,7 @@ export default function PurchaseRequestsPage() {
                 <tbody className="divide-y divide-slate-100">
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-400">
+                      <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
                         {activeCount > 0 ? 'No purchase requests match the current filters.' : (
                           <>No purchase requests yet.{' '}<Link to="/inventory/purchase-requests/create" className="font-medium text-indigo-600 hover:underline">Create the first one.</Link></>
                         )}
@@ -198,11 +196,17 @@ export default function PurchaseRequestsPage() {
                         <td className="px-3 py-2 text-slate-400">{(page - 1) * (meta?.per_page ?? 25) + i + 1}</td>
                         <td className="px-3 py-2 font-mono font-medium text-indigo-600">
                           <Link to={`/inventory/purchase-requests/${pr.id}`} className="hover:underline">{pr.pr_no}</Link>
+                          {pr.reference_no && (
+                            <div className="text-[9px] font-normal text-slate-400">Ref: {pr.reference_no}</div>
+                          )}
                         </td>
-                        <td className="px-3 py-2 text-slate-500">{pr.reference_no || <span className="italic text-slate-300">—</span>}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{pr.request_date}</td>
-                        <td className="px-3 py-2 text-slate-700">{pr.target_location?.name || pr.source_location?.name || <span className="italic text-slate-300">—</span>}</td>
-                        <td className="px-3 py-2 text-slate-700">{pr.target_store?.name || pr.source_store?.name || <span className="italic text-slate-300">—</span>}</td>
+                        <td
+                          className="max-w-44 truncate px-3 py-2 text-slate-700"
+                          title={pr.target_store?.name || pr.source_store?.name || ''}
+                        >
+                          {pr.target_store?.name || pr.source_store?.name || <span className="italic text-slate-300">—</span>}
+                        </td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{pr.required_date || <span className="italic text-slate-300">—</span>}</td>
                         <td className="px-3 py-2 text-right font-medium text-slate-700">
                           {pr.total_quantity != null ? Number(pr.total_quantity).toLocaleString() : '—'}
