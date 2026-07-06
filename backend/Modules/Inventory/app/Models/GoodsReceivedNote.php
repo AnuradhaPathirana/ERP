@@ -19,6 +19,7 @@ class GoodsReceivedNote extends Model
     protected $fillable = [
         'grn_no',
         'reference_no',
+        'shipping_code',
         'po_id',
         'supplier_id',
         'grn_date',

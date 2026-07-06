@@ -17,6 +17,7 @@ class PurchaseOrderItemResource extends JsonResource
             'po_id'             => $this->po_id,
             'product_id'        => $this->product_id,
             'unit_id'           => $this->unit_id,
+            'attribute_id'      => $this->attribute_id,
             'pr_item_id'        => $this->pr_item_id,
             'quantity_ordered'  => (float) $this->quantity_ordered,
             'quantity_received' => (float) $this->quantity_received,
@@ -38,6 +39,10 @@ class PurchaseOrderItemResource extends JsonResource
                 'id'   => $this->unit->id,
                 'name' => $this->unit->name,
             ]),
+            'attribute' => $this->whenLoaded('attribute', fn () => $this->attribute ? [
+                'id'   => $this->attribute->id,
+                'name' => $this->attribute->attribute_name,
+            ] : null),
         ];
     }
 }

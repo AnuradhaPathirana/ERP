@@ -40,6 +40,8 @@ class GrnPieceLabelPdfController extends Controller
             'piece_code'  => $piece->piece_code,
             'product'     => $piece->product,
             'batch_no'    => $piece->batch?->batch_no,
+            'weight'      => $piece->weight,
+            'roll_no'     => $piece->roll_no,
             'qr_data_uri' => $writer->write(
                 new QrCode(
                     data:   "{$frontendUrl}/inventory/pieces/{$piece->piece_code}",

@@ -16,6 +16,7 @@ class PurchaseOrderItem extends Model
         'po_id',
         'product_id',
         'unit_id',
+        'attribute_id',
         'pr_item_id',
         'quantity_ordered',
         'quantity_received',
@@ -30,6 +31,7 @@ class PurchaseOrderItem extends Model
         'po_id'             => 'integer',
         'product_id'        => 'integer',
         'unit_id'           => 'integer',
+        'attribute_id'      => 'integer',
         'pr_item_id'        => 'integer',
         'quantity_ordered'  => 'decimal:4',
         'quantity_received' => 'decimal:4',
@@ -57,6 +59,11 @@ class PurchaseOrderItem extends Model
     public function prItem(): BelongsTo
     {
         return $this->belongsTo(PurchaseRequestItem::class, 'pr_item_id');
+    }
+
+    public function attribute(): BelongsTo
+    {
+        return $this->belongsTo(Attribute::class, 'attribute_id');
     }
 
     public function grnItems(): HasMany

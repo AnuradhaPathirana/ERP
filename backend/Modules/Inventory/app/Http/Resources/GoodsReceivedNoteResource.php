@@ -16,6 +16,7 @@ class GoodsReceivedNoteResource extends JsonResource
             'id'               => $this->id,
             'grn_no'           => $this->grn_no,
             'reference_no'     => $this->reference_no,
+            'shipping_code'    => $this->shipping_code,
             'po_id'            => $this->po_id,
             'supplier_id'      => $this->supplier_id,
             'grn_date'         => $this->grn_date?->toDateString(),

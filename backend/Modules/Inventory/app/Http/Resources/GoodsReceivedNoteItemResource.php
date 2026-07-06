@@ -18,6 +18,7 @@ class GoodsReceivedNoteItemResource extends JsonResource
             'po_item_id'        => $this->po_item_id,
             'product_id'        => $this->product_id,
             'unit_id'           => $this->unit_id,
+            'attribute_id'      => $this->attribute_id,
             'quantity_ordered'  => (float) $this->quantity_ordered,
             'quantity_received' => (float) $this->quantity_received,
             'no_of_pieces'      => (int) $this->no_of_pieces,
@@ -39,6 +40,10 @@ class GoodsReceivedNoteItemResource extends JsonResource
                 'id'   => $this->unit->id,
                 'name' => $this->unit->name,
             ]),
+            'attribute' => $this->whenLoaded('attribute', fn () => $this->attribute ? [
+                'id'   => $this->attribute->id,
+                'name' => $this->attribute->attribute_name,
+            ] : null),
             'batch_assignments' => $this->whenLoaded('batchAssignments', fn () =>
                 $this->batchAssignments->map(fn ($a) => [
                     'id'                 => $a->id,
@@ -52,6 +57,14 @@ class GoodsReceivedNoteItemResource extends JsonResource
                     'status'             => $a->batch?->status?->value,
                     'status_label'       => $a->batch?->status?->label(),
                     'notes'              => $a->batch?->notes,
+                ])
+            ),
+            'pieces' => $this->whenLoaded('pieces', fn () =>
+                $this->pieces->sortBy('piece_no')->values()->map(fn ($p) => [
+                    'id'      => $p->id,
+                    'piece_no' => $p->piece_no,
+                    'roll_no'  => $p->roll_no,
+                    'weight'   => $p->weight !== null ? (float) $p->weight : null,
                 ])
             ),
         ];

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
@@ -12,12 +12,14 @@ import {
   loadPOFromPR,
   updatePurchaseOrder,
 } from '../../api/purchaseOrders'
-import { getProducts } from '../../api/products'
+import { getProducts, getProduct } from '../../api/products'
 import { getPurchaseRequests } from '../../api/purchaseRequests'
 import { getAllLocations } from '../../api/locations'
 import { getAllStores } from '../../api/stores'
 import { getAllSuppliers } from '../../api/suppliers'
 import { getAllUnitTypesFlat } from '../../api/unitTypes'
+import { getAllAttributeTypes } from '../../api/attributeTypes'
+import { getAllAttributes } from '../../api/attributes'
 import Breadcrumb from '../../components/Breadcrumb'
 import { showError, showSuccess } from '../../utils/alerts'
 
@@ -70,7 +72,7 @@ function SectionHeader({ icon: Icon, title, colorClass }) {
 }
 
 /* ── Product search cell (searchable dropdown, same style as GRN's Product cell) ── */
-function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClear, onClose }) {
+function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClear, onClose, onInputRef }) {
   const [highlightIdx, setHighlightIdx] = useState(0)
   const [dropPos, setDropPos]           = useState({ top: 0, left: 0, width: 280 })
   const inputRef = useRef(null)
@@ -130,7 +132,7 @@ function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClea
   return (
     <div className="relative">
       <input
-        ref={inputRef}
+        ref={(el) => { inputRef.current = el; onInputRef?.(el) }}
         type="text"
         placeholder="Search product…"
         className={TABLE_INPUT}
@@ -180,10 +182,18 @@ function emptyItem() {
     pr_item_id:       null,
     quantity_ordered: '',
     unit_id:          '',
+    attribute_id:     '',
+    color_options:    [],
     unit_price:       '',
     discount:         '',
     tax:              '',
   }
+}
+
+// "Color" or "Colour" — attribute-type spelling varies by who entered the master data.
+function isColorAttributeTypeName(name) {
+  const n = (name || '').trim().toLowerCase()
+  return n === 'color' || n === 'colour'
 }
 
 function calcItem(row) {
@@ -240,6 +250,18 @@ export default function PurchaseOrderFormPage() {
   const [productSearch, setProductSearch] = useState({ key: null, query: '', results: [], open: false })
   const searchTimerRef = useRef(null)
 
+  /* ── Cell refs for Enter-key row navigation ───────────────── */
+  const cellRefs = useRef({}) // { [rowKey]: { product, color, qty, unit, price, disc, tax } }
+
+  const setCellRef = (rowKey, field) => (el) => {
+    if (!cellRefs.current[rowKey]) cellRefs.current[rowKey] = {}
+    cellRefs.current[rowKey][field] = el
+  }
+
+  const focusCell = (rowKey, field) => {
+    cellRefs.current[rowKey]?.[field]?.focus()
+  }
+
   const { data: locations  = [] } = useQuery({ queryKey: ['locations-all'],  queryFn: getAllLocations })
   const { data: suppliers  = [] } = useQuery({ queryKey: ['suppliers-all'],  queryFn: getAllSuppliers })
   const { data: stores     = [] } = useQuery({ queryKey: ['stores-all'],     queryFn: getAllStores })
@@ -253,9 +275,68 @@ export default function PurchaseOrderFormPage() {
     return acc
   }, {})
 
-  const filteredStores = form.location_id
-    ? stores.filter((s) => String(s.location_id) === String(form.location_id))
-    : []
+  // Color options are scoped to the SELECTED PRODUCT's own "Product Attributes"
+  // (set at product creation), not just its category — a product may only come in
+  // a subset of the colors its category's Color attribute type defines.
+  const { data: attributeTypes = [] } = useQuery({ queryKey: ['attribute-types-all'], queryFn: getAllAttributeTypes })
+  const { data: allAttributes  = [] } = useQuery({ queryKey: ['attributes-all'],      queryFn: getAllAttributes })
+  const colorOptionsCache = useRef({})
+
+  const loadColorOptions = (productId) => {
+    if (!productId) return Promise.resolve([])
+    if (colorOptionsCache.current[productId]) return colorOptionsCache.current[productId]
+
+    const promise = getProduct(productId)
+      .then((res) => {
+        const colorTypeIds = new Set(
+          attributeTypes.filter((t) => isColorAttributeTypeName(t.attribute_type_name)).map((t) => String(t.id))
+        )
+        return (res.data.product_attributes ?? [])
+          .filter((pa) => colorTypeIds.has(String(pa.attribute_type_id)))
+          .map((pa) => allAttributes.find((a) => String(a.id) === String(pa.attribute_id)))
+          .filter(Boolean)
+          .map((a) => ({ id: a.id, name: a.attribute_name }))
+      })
+      .catch(() => [])
+
+    colorOptionsCache.current[productId] = promise
+    return promise
+  }
+
+  // Fetch color options for a batch of rows (edit/PR hydration) and patch them in once resolved.
+  const hydrateColorOptions = (rows) => {
+    rows.forEach((row) => {
+      if (!row.product_id) return
+      loadColorOptions(row.product_id).then((options) => {
+        setItems((prev) => prev.map((r) => r._key === row._key ? { ...r, color_options: options } : r))
+      })
+    })
+  }
+
+  const filteredStores = useMemo(
+    () => form.location_id
+      ? stores.filter((s) => String(s.location_id) === String(form.location_id))
+      : [],
+    [stores, form.location_id]
+  )
+
+  // Default Location & Store to the first available option (create mode only —
+  // editing an existing PO keeps its saved values via the hydration effect below).
+  const locationSeeded = useRef(false)
+  useEffect(() => {
+    if (!isEdit && !locationSeeded.current && locations.length > 0) {
+      setForm((f) => (f.location_id ? f : { ...f, location_id: String(locations[0].id) }))
+      locationSeeded.current = true
+    }
+  }, [isEdit, locations])
+
+  const storeSeeded = useRef(false)
+  useEffect(() => {
+    if (!isEdit && !storeSeeded.current && form.location_id && filteredStores.length > 0) {
+      setForm((f) => (f.store_id ? f : { ...f, store_id: String(filteredStores[0].id) }))
+      storeSeeded.current = true
+    }
+  }, [isEdit, form.location_id, filteredStores])
 
   const { data: approvedPRs } = useQuery({
     queryKey: ['prs-approved'],
@@ -303,7 +384,7 @@ export default function PurchaseOrderFormPage() {
       status:                 po.status                 ?? '',
     })
     if (po.items?.length) {
-      setItems(po.items.map((it) => ({
+      const newItems = po.items.map((it) => ({
         _key:             it.id,
         product_id:       it.product_id,
         product_code:     it.product?.product_code ?? '',
@@ -311,10 +392,14 @@ export default function PurchaseOrderFormPage() {
         pr_item_id:       it.pr_item_id            ?? null,
         quantity_ordered: it.quantity_ordered,
         unit_id:          it.unit_id               ?? '',
+        attribute_id:     it.attribute_id != null ? String(it.attribute_id) : '',
+        color_options:    [],
         unit_price:       it.unit_price,
         discount:         it.discount              ?? '',
         tax:              it.tax                   ?? '',
-      })))
+      }))
+      setItems(newItems)
+      hydrateColorOptions(newItems)
     }
   }, [existingPO])
 
@@ -323,7 +408,7 @@ export default function PurchaseOrderFormPage() {
     onSuccess: (result) => {
       const data = result.data
       if (data?.items?.length) {
-        setItems(data.items.map((it) => ({
+        const newItems = data.items.map((it) => ({
           _key:             Date.now() + Math.random(),
           product_id:       it.product_id,
           product_code:     it.product?.product_code ?? '',
@@ -331,10 +416,14 @@ export default function PurchaseOrderFormPage() {
           pr_item_id:       it.pr_item_id,
           quantity_ordered: it.quantity_ordered,
           unit_id:          it.unit_id ?? '',
+          attribute_id:     '',
+          color_options:    [],
           unit_price:       it.unit_price,
           discount:         '',
           tax:              '',
-        })))
+        }))
+        setItems(newItems)
+        hydrateColorOptions(newItems)
       }
       if (data?.pr?.target_store_id) {
         setForm((f) => ({ ...f, store_id: data.pr.target_store_id }))
@@ -431,16 +520,25 @@ export default function PurchaseOrderFormPage() {
             product_code: product.product_code ?? '',
             product_name: product.name ?? '',
             unit_id:      defaultUnitTypeId != null ? String(defaultUnitTypeId) : '',
+            attribute_id: '',
+            color_options: [],
           }
         : row
     ))
     setProductSearch({ key: null, query: '', results: [], open: false })
+
+    loadColorOptions(product.id).then((options) => {
+      setItems((prev) => prev.map((row) => row._key === rowKey ? { ...row, color_options: options } : row))
+      // Auto-focus Color once its options are ready — skip straight to Qty if this
+      // product has none, since a disabled Color select can't receive focus.
+      setTimeout(() => focusCell(rowKey, options.length > 0 ? 'color' : 'qty'), 50)
+    })
   }
 
   const clearProductSelection = (rowKey) => {
     setItems((prev) => prev.map((row) =>
       row._key === rowKey
-        ? { ...row, product_id: '', product_code: '', product_name: '' }
+        ? { ...row, product_id: '', product_code: '', product_name: '', attribute_id: '', color_options: [] }
         : row
     ))
     setProductSearch({ key: rowKey, query: '', results: [], open: false })
@@ -450,9 +548,29 @@ export default function PurchaseOrderFormPage() {
     if (errors[field]) setErrors((prev) => ({ ...prev, [field]: undefined }))
   }
 
-  const addRows     = (n = 1) => setItems((prev) => [...prev, ...Array.from({ length: n }, emptyItem)])
+  const addRows = (n = 1) => setItems((prev) => [...prev, ...Array.from({ length: n }, emptyItem)])
+
+  const addManualRow = useCallback(() => {
+    const row = emptyItem()
+    setItems((prev) => [...prev, row])
+    // Auto-focus the product search input on the new row
+    setTimeout(() => cellRefs.current[row._key]?.product?.focus(), 50)
+  }, [])
+
   const removeRow   = (idx)   => setItems((prev) => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
   const setRowField = (idx, field, value) => setItems((prev) => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row))
+
+  /* ── Alt+N shortcut to add a new item row ─────────────────── */
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.altKey && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault()
+        addManualRow()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [addManualRow])
   const setField    = (field) => (e) => {
     setForm((f) => ({ ...f, [field]: e.target.value }))
     clearFieldError(field)
@@ -556,6 +674,7 @@ export default function PurchaseOrderFormPage() {
         product_id:       parseInt(r.product_id),
         pr_item_id:       r.pr_item_id ?? null,
         unit_id:          r.unit_id ? parseInt(r.unit_id) : null,
+        attribute_id:     r.attribute_id ? parseInt(r.attribute_id) : null,
         quantity_ordered: parseFloat(r.quantity_ordered),
         unit_price:       parseFloat(r.unit_price)  || 0,
         discount:         parseFloat(r.discount)    || 0,
@@ -751,6 +870,7 @@ export default function PurchaseOrderFormPage() {
                   <th className="w-7 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">#</th>
                   <th className="w-16 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Code</th>
                   <th className="px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Product</th>
+                  <th className="w-24 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Color</th>
                   <th className="w-24 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty</th>
                   <th className="w-16 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit</th>
                   <th className="w-28 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
@@ -778,17 +898,48 @@ export default function PurchaseOrderFormPage() {
                           onSelect={selectProduct}
                           onClear={clearProductSelection}
                           onClose={() => setProductSearch((prev) => ({ ...prev, open: false }))}
+                          onInputRef={setCellRef(row._key, 'product')}
                         />
                       </td>
                       <td className="px-1.5 py-1">
-                        <input type="number" min="0" step="0.0001" placeholder="0" value={row.quantity_ordered} onChange={(e) => setRowField(idx, 'quantity_ordered', e.target.value)} className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white" />
+                        <select
+                          ref={setCellRef(row._key, 'color')}
+                          value={row.attribute_id}
+                          onChange={(e) => setRowField(idx, 'attribute_id', e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'qty') }
+                          }}
+                          disabled={!row.product_id || row.color_options.length === 0}
+                          className={TABLE_SELECT}
+                        >
+                          <option value="">
+                            {!row.product_id ? '—' : row.color_options.length === 0 ? 'No colors' : '—'}
+                          </option>
+                          {row.color_options.map((c) => (
+                            <option key={c.id} value={c.id}>{c.name}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <input
+                          ref={setCellRef(row._key, 'qty')}
+                          type="number" min="0" step="0.0001" placeholder="0" value={row.quantity_ordered}
+                          onChange={(e) => setRowField(idx, 'quantity_ordered', e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'unit') }
+                          }}
+                          className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white" />
                       </td>
                       <td className="px-1.5 py-1">
                         <div className="flex flex-col gap-0.5">
                           <select
+                            ref={setCellRef(row._key, 'unit')}
                             value={row.unit_id}
                             onChange={(e) => setRowField(idx, 'unit_id', e.target.value)}
                             onBlur={() => touchItemField(row._key, 'uom')}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
+                            }}
                             className={getItemErr(row._key, 'uom') ? TABLE_SELECT_ERR : TABLE_SELECT}
                           >
                             <option value="">—</option>
@@ -804,16 +955,34 @@ export default function PurchaseOrderFormPage() {
                         </div>
                       </td>
                       <td className="px-1.5 py-1">
-                        <input type="number" min="0" step="0.01" placeholder="0.00" value={row.unit_price} onChange={(e) => setRowField(idx, 'unit_price', e.target.value)} className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white" />
+                        <input
+                          ref={setCellRef(row._key, 'price')}
+                          type="number" min="0" step="0.01" placeholder="0.00" value={row.unit_price}
+                          onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'disc') }
+                          }}
+                          className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white" />
                       </td>
                       <td className="px-1.5 py-1 text-right font-medium text-slate-600 tabular-nums">
                         {gross > 0 ? gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-slate-300">—</span>}
                       </td>
                       <td className="px-1.5 py-1">
-                        <input type="number" min="0" max="100" step="0.01" placeholder="0" value={row.discount} onChange={(e) => setRowField(idx, 'discount', e.target.value)} className="block w-full rounded border border-amber-200 bg-amber-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-amber-400 focus:bg-white" />
+                        <input
+                          ref={setCellRef(row._key, 'disc')}
+                          type="number" min="0" max="100" step="0.01" placeholder="0" value={row.discount}
+                          onChange={(e) => setRowField(idx, 'discount', e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'tax') }
+                          }}
+                          className="block w-full rounded border border-amber-200 bg-amber-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-amber-400 focus:bg-white" />
                       </td>
                       <td className="px-1.5 py-1">
-                        <input type="number" min="0" max="100" step="0.01" placeholder="0" value={row.tax} onChange={(e) => setRowField(idx, 'tax', e.target.value)} className="block w-full rounded border border-emerald-200 bg-emerald-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-emerald-400 focus:bg-white" />
+                        <input
+                          ref={setCellRef(row._key, 'tax')}
+                          type="number" min="0" max="100" step="0.01" placeholder="0" value={row.tax}
+                          onChange={(e) => setRowField(idx, 'tax', e.target.value)}
+                          className="block w-full rounded border border-emerald-200 bg-emerald-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-emerald-400 focus:bg-white" />
                       </td>
                       <td className="px-1.5 py-1 text-right font-bold text-slate-800 tabular-nums">
                         {amount > 0 ? amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-slate-300 font-normal">—</span>}
@@ -832,7 +1001,7 @@ export default function PurchaseOrderFormPage() {
                 <tr className="border-t border-slate-200 bg-slate-50/50">
                   <td colSpan={6} className="px-2 py-1.5">
                     <div className="flex gap-1.5">
-                      <button type="button" onClick={() => addRows(1)} className="flex items-center gap-1 rounded border border-indigo-200 bg-white px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 transition-colors">
+                      <button type="button" onClick={addManualRow} title="Add new item (Alt+N)" className="flex items-center gap-1 rounded border border-indigo-200 bg-white px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 transition-colors">
                         <Plus size={10} /> Add Row
                       </button>
                       <button type="button" onClick={() => addRows(5)} className="flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors">
@@ -900,6 +1069,30 @@ export default function PurchaseOrderFormPage() {
 
         </div>
 
+      </div>
+
+      {/* Keyboard Shortcuts Reference */}
+      <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Keyboard Shortcuts</p>
+        <div className="flex flex-wrap gap-x-5 gap-y-1">
+          {[
+            { keys: ['Alt', 'N'],   desc: 'Add new item row' },
+            { keys: ['Enter'],      desc: 'Move to next field in row (Color → Qty → Unit → Price → Disc → Tax)' },
+            { keys: ['↑', '↓'],    desc: 'Navigate product search results' },
+            { keys: ['Esc'],        desc: 'Close product search dropdown' },
+          ].map(({ keys, desc }) => (
+            <div key={desc} className="flex items-center gap-1.5">
+              <div className="flex items-center gap-0.5">
+                {keys.map((k, i) => (
+                  <span key={i} className="inline-flex items-center justify-center rounded border border-slate-300 bg-white px-1 py-px text-[10px] font-mono font-semibold text-slate-600 shadow-sm">
+                    {k}
+                  </span>
+                ))}
+              </div>
+              <span className="text-[10px] text-slate-500">{desc}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )

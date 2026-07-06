@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Modules\Inventory\Http\Requests;
 
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Modules\Inventory\Models\UnitType;
 
 class StoreGoodsReceivedNoteRequest extends FormRequest
 {
@@ -22,6 +24,7 @@ class StoreGoodsReceivedNoteRequest extends FormRequest
             'grn_date'         => ['required', 'date'],
             'transaction_date' => ['nullable', 'date'],
             'reference_no'     => ['nullable', 'string', 'max:100'],
+            'shipping_code'    => ['required', 'string', 'max:100'],
             'store_id'         => ['required', 'integer', 'exists:inv_stores,id'],
             'location_id'      => ['required', 'integer', 'exists:inv_locations,id'],
             'remarks'          => ['nullable', 'string'],
@@ -34,7 +37,6 @@ class StoreGoodsReceivedNoteRequest extends FormRequest
             'items.*.product_id'          => ['required', 'integer', 'exists:inv_products,id'],
             'items.*.unit_id'             => ['required', 'integer', 'exists:inv_unit_types,id'],
             'items.*.quantity_received'   => ['required', 'numeric', 'min:0.0001'],
-            'items.*.no_of_pieces'        => ['required', 'integer', 'min:0'],
             'items.*.unit_price'          => ['required', 'numeric', 'min:0'],
             'items.*.discount'            => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.tax'                 => ['nullable', 'numeric', 'min:0', 'max:100'],
@@ -50,6 +52,10 @@ class StoreGoodsReceivedNoteRequest extends FormRequest
             'items.*.batches.*.status'                => ['nullable', 'string', 'in:active,quarantine,on_hold'],
             'items.*.batches.*.country_of_origin'     => ['nullable', 'string', 'max:100'],
             'items.*.batches.*.notes'                 => ['nullable', 'string', 'max:500'],
+
+            'items.*.rolls'              => ['nullable', 'array'],
+            'items.*.rolls.*.roll_no'    => ['required_with:items.*.rolls', 'string', 'max:100'],
+            'items.*.rolls.*.weight'     => ['required_with:items.*.rolls', 'numeric', 'min:0.0001'],
         ];
     }
 
@@ -61,12 +67,46 @@ class StoreGoodsReceivedNoteRequest extends FormRequest
             'supplier_id'               => 'supplier',
             'grn_date'                  => 'GRN date',
             'transaction_date'          => 'transaction date',
+            'shipping_code'             => 'shipping code',
             'items.*.po_item_id'        => 'PO item',
             'items.*.product_id'        => 'product',
             'items.*.unit_id'           => 'unit of measure',
             'items.*.quantity_received' => 'quantity received',
-            'items.*.no_of_pieces'      => 'no. of pieces',
             'items.*.unit_price'        => 'unit price',
+            'items.*.rolls.*.roll_no'   => 'roll no',
+            'items.*.rolls.*.weight'    => 'roll weight',
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $items = (array) $this->input('items', []);
+
+            $unitIds = collect($items)->pluck('unit_id')->filter()->unique()->values();
+            $weightUnitIds = UnitType::with('category:id,name')
+                ->whereIn('id', $unitIds)
+                ->get()
+                ->filter(fn (UnitType $unit) => $unit->category?->name === 'Weight')
+                ->pluck('id')
+                ->all();
+
+            foreach ($items as $index => $item) {
+                $rolls = $item['rolls'] ?? [];
+                if (empty($rolls) || !in_array((int) ($item['unit_id'] ?? 0), $weightUnitIds, true)) {
+                    continue;
+                }
+
+                $required = (float) ($item['quantity_received'] ?? 0);
+                $entered  = array_sum(array_map(fn ($roll) => (float) ($roll['weight'] ?? 0), $rolls));
+
+                if (abs($required - $entered) > 0.0001) {
+                    $validator->errors()->add(
+                        "items.{$index}.rolls",
+                        "Sum of roll weights ({$entered}) must equal quantity received ({$required})."
+                    );
+                }
+            }
+        });
     }
 }

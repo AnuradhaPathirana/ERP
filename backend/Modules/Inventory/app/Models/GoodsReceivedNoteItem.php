@@ -17,6 +17,7 @@ class GoodsReceivedNoteItem extends Model
         'po_item_id',
         'product_id',
         'unit_id',
+        'attribute_id',
         'quantity_ordered',
         'quantity_received',
         'no_of_pieces',
@@ -33,6 +34,7 @@ class GoodsReceivedNoteItem extends Model
         'po_item_id'        => 'integer',
         'product_id'        => 'integer',
         'unit_id'           => 'integer',
+        'attribute_id'      => 'integer',
         'quantity_ordered'  => 'decimal:4',
         'quantity_received' => 'decimal:4',
         'no_of_pieces'      => 'integer',
@@ -61,6 +63,11 @@ class GoodsReceivedNoteItem extends Model
     public function unit(): BelongsTo
     {
         return $this->belongsTo(UnitType::class, 'unit_id');
+    }
+
+    public function attribute(): BelongsTo
+    {
+        return $this->belongsTo(Attribute::class, 'attribute_id');
     }
 
     public function batchAssignments(): HasMany

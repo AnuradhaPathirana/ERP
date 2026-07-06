@@ -65,6 +65,7 @@ class PurchaseOrderService
         return PurchaseOrder::with([
             'items.product',
             'items.unit',
+            'items.attribute',
             'items.prItem',
             'supplier',
             'store',
@@ -138,7 +139,7 @@ class PurchaseOrderService
                     ->update(['status' => PurchaseRequestStatus::Completed->value]);
             }
 
-            return $po->load(['items.product', 'items.unit', 'supplier', 'store', 'purchaseRequest']);
+            return $po->load(['items.product', 'items.unit', 'items.attribute', 'supplier', 'store', 'purchaseRequest']);
         });
     }
 
@@ -178,7 +179,7 @@ class PurchaseOrderService
                 $this->recalculateTotals($po);
             }
 
-            return $po->load(['items.product', 'items.unit', 'supplier', 'store', 'purchaseRequest']);
+            return $po->load(['items.product', 'items.unit', 'items.attribute', 'supplier', 'store', 'purchaseRequest']);
         });
     }
 
@@ -248,6 +249,7 @@ class PurchaseOrderService
                     'po_id'             => $po->id,
                     'product_id'        => (int) $row['product_id'],
                     'unit_id'           => !empty($row['unit_id']) ? (int) $row['unit_id'] : null,
+                    'attribute_id'      => !empty($row['attribute_id']) ? (int) $row['attribute_id'] : null,
                     'pr_item_id'        => !empty($row['pr_item_id']) ? (int) $row['pr_item_id'] : null,
                     'quantity_ordered'  => $qty,
                     'quantity_received' => 0,

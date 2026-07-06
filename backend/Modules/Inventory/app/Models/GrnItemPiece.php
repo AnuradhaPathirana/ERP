@@ -16,9 +16,12 @@ class GrnItemPiece extends Model
         'grn_id',
         'product_id',
         'batch_id',
+        'stock_transaction_id',
         'store_id',
         'location_id',
         'piece_no',
+        'weight',
+        'roll_no',
         'piece_code',
         'status',
         'printed_at',
@@ -26,15 +29,17 @@ class GrnItemPiece extends Model
     ];
 
     protected $casts = [
-        'grn_item_id' => 'integer',
-        'grn_id'      => 'integer',
-        'product_id'  => 'integer',
-        'batch_id'    => 'integer',
-        'store_id'    => 'integer',
-        'location_id' => 'integer',
-        'piece_no'    => 'integer',
-        'printed_at'  => 'datetime',
-        'created_by'  => 'integer',
+        'grn_item_id'           => 'integer',
+        'grn_id'                => 'integer',
+        'product_id'            => 'integer',
+        'batch_id'              => 'integer',
+        'stock_transaction_id'  => 'integer',
+        'store_id'              => 'integer',
+        'location_id'           => 'integer',
+        'piece_no'              => 'integer',
+        'weight'                => 'decimal:4',
+        'printed_at'            => 'datetime',
+        'created_by'            => 'integer',
     ];
 
     public function grnItem(): BelongsTo
@@ -55,6 +60,11 @@ class GrnItemPiece extends Model
     public function batch(): BelongsTo
     {
         return $this->belongsTo(Batch::class, 'batch_id');
+    }
+
+    public function stockTransaction(): BelongsTo
+    {
+        return $this->belongsTo(StockTransaction::class, 'stock_transaction_id');
     }
 
     public function store(): BelongsTo

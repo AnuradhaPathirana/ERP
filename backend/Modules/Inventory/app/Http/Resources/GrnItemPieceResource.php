@@ -16,6 +16,8 @@ class GrnItemPieceResource extends JsonResource
             'id'         => $this->id,
             'piece_code' => $this->piece_code,
             'piece_no'   => $this->piece_no,
+            'weight'     => $this->weight !== null ? (float) $this->weight : null,
+            'roll_no'    => $this->roll_no,
             'status'     => $this->status,
             'printed_at' => $this->printed_at?->toDateTimeString(),
             'created_at' => $this->created_at?->toDateTimeString(),

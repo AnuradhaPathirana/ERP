@@ -28,6 +28,12 @@
         <img class="qr-img" src="{{ $label['qr_data_uri'] }}">
         <div class="piece-code">{{ $label['piece_code'] }}</div>
         <div class="product-name">{{ Str::limit($label['product']->name ?? '', 24) }}</div>
+        @if($label['roll_no'])
+        <div class="product-name">Roll: {{ $label['roll_no'] }}</div>
+        @endif
+        @if($label['weight'] !== null)
+        <div class="product-name">Wt: {{ number_format((float) $label['weight'], 2) }}</div>
+        @endif
         @if($label['batch_no'])
         <div class="product-name">Batch: {{ $label['batch_no'] }}</div>
         @endif

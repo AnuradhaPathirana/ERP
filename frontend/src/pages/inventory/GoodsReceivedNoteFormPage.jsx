@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ClipboardList, Download, FileText, Layers, PackageCheck, Plus, QrCode, ShoppingCart, Trash2, X } from 'lucide-react'
+import { ClipboardList, Download, FileText, Layers, PackageCheck, Plus, QrCode, ShoppingCart, Trash2, Weight, X } from 'lucide-react'
 import {
   confirmGoodsReceivedNote,
   createGoodsReceivedNote,
@@ -24,6 +24,7 @@ import { getProducts } from '../../api/products'
 import { getAllUnitTypesFlat } from '../../api/unitTypes'
 import Breadcrumb from '../../components/Breadcrumb'
 import BatchAssignModal from '../../components/inventory/BatchAssignModal'
+import RollAssignModal from '../../components/inventory/RollAssignModal'
 import { showError, showSuccess } from '../../utils/alerts'
 
 /* ── Style tokens ─────────────────────────────────────────────── */
@@ -46,6 +47,7 @@ const HEADER_RULES = {
   transaction_date: (v) => v ? null : 'Transaction date is required',
   location_id:      (v) => v ? null : 'Location is required',
   store_id:         (v) => v ? null : 'Store is required',
+  shipping_code:    (v) => v && v.trim() ? null : 'Shipping code is required',
 }
 
 const ALLOWED_ATTACHMENT_TYPES = /^(image\/.+|application\/pdf)$/
@@ -85,10 +87,9 @@ function calcItem(row) {
   const qty      = parseFloat(row.quantity_received) || 0
   const price    = parseFloat(row.unit_price)        || 0
   const discPct  = parseFloat(row.discount)          || 0
-  const taxPct   = parseFloat(row.tax)               || 0
   const gross    = qty * price
   const discAmt  = gross * (discPct / 100)
-  const taxAmt   = gross * (taxPct  / 100)
+  const taxAmt   = 0 // item-wise tax feature hidden — always inert
   const amount   = gross - discAmt + taxAmt
   return { gross, discAmt, taxAmt, amount }
 }
@@ -240,6 +241,7 @@ export default function GoodsReceivedNoteFormPage() {
     grn_date:         today,
     transaction_date: today,
     reference_no:     '',
+    shipping_code:    '',
     remarks:          '',
     payment_terms:    '',
     location_id:      '',
@@ -267,6 +269,7 @@ export default function GoodsReceivedNoteFormPage() {
   const [errors,             setErrors]            = useState({})
   const [batchModalIdx,      setBatchModalIdx]     = useState(null)
   const [batchConfirmModal,  setBatchConfirmModal] = useState({ open: false, firstIdx: null })
+  const [rollModalIdx,       setRollModalIdx]      = useState(null)
 
   /* ── Real-time validation state ───────────────────────────── */
   const [touched,     setTouched]     = useState({})
@@ -394,6 +397,7 @@ export default function GoodsReceivedNoteFormPage() {
       grn_date:         grn.grn_date             ?? today,
       transaction_date: grn.transaction_date     ?? today,
       reference_no:     grn.reference_no         ?? '',
+      shipping_code:    grn.shipping_code        ?? '',
       remarks:          grn.remarks              ?? '',
       payment_terms:    grn.payment_terms        ?? '',
       location_id:      String(grn.location_id   ?? ''),
@@ -409,11 +413,11 @@ export default function GoodsReceivedNoteFormPage() {
         product_code:       it.product?.product_code ?? '',
         product_name:       it.product?.name ?? '',
         unit_id:            it.unit_id ?? '',
+        attribute_name:     it.attribute?.name ?? '',
         quantity_ordered:   it.quantity_ordered,
         already_received:   null,
         remaining_qty:      null,
         quantity_received:  it.quantity_received,
-        no_of_pieces:       it.no_of_pieces ?? '',
         unit_price:         toPrice(it.unit_price),
         discount:           it.discount ?? '',
         tax:                it.tax      ?? '',
@@ -429,6 +433,10 @@ export default function GoodsReceivedNoteFormPage() {
           supplier_batch_no: a.supplier_batch_no  ?? '',
           status:            a.status             ?? 'active',
           notes:             a.notes              ?? '',
+        })),
+        rolls:              (it.pieces ?? []).map((p) => ({
+          roll_no: p.roll_no ?? '',
+          weight:  p.weight  ?? '',
         })),
       })))
     }
@@ -468,11 +476,11 @@ export default function GoodsReceivedNoteFormPage() {
     product_code:      it.product?.product_code ?? '',
     product_name:      it.product?.name ?? '',
     unit_id:           it.unit_id ?? '',
+    attribute_name:    it.attribute_name ?? '',
     quantity_ordered:  it.quantity_ordered,
     already_received:  it.quantity_received,
     remaining_qty:     it.remaining_qty,
     quantity_received: it.remaining_qty,
-    no_of_pieces:      '',
     unit_price:        toPrice(it.unit_price),
     discount:          it.discount ?? '',
     tax:               it.tax      ?? '',
@@ -480,6 +488,7 @@ export default function GoodsReceivedNoteFormPage() {
     batch_no:          '',
     expiry_date:       '',
     batches:           [],
+    rolls:             [],
   })
 
   const loadItemsForPOs = useCallback(async (poIdSet) => {
@@ -592,7 +601,6 @@ export default function GoodsReceivedNoteFormPage() {
       already_received:  null,
       remaining_qty:     null,
       quantity_received: '',
-      no_of_pieces:      '',
       unit_price:        '',
       discount:          '',
       tax:               '',
@@ -601,6 +609,7 @@ export default function GoodsReceivedNoteFormPage() {
       expiry_date:       '',
       batch_assignments: [],
       batches:           [],
+      rolls:             [],
     }])
     // Auto-focus the product search input on the new row
     setTimeout(() => cellRefs.current[key]?.product?.focus(), 50)
@@ -853,22 +862,12 @@ export default function GoodsReceivedNoteFormPage() {
       return
     }
 
-    const itemsMissingPieces = validItems.filter((r) => r.no_of_pieces === '' || parseInt(r.no_of_pieces, 10) < 0)
-    if (itemsMissingPieces.length) {
-      setItemTouched((t) => {
-        const next = { ...t }
-        itemsMissingPieces.forEach((r) => { next[r._key] = { ...next[r._key], pieces: true } })
-        return next
-      })
-      showError('No. of pieces is required for all line items.')
-      return
-    }
-
     const payload = {
       supplier_id:      form.supplier_id      || null,
       grn_date:         form.grn_date,
       transaction_date: form.transaction_date  || null,
       reference_no:     form.reference_no     || null,
+      shipping_code:    form.shipping_code.trim(),
       remarks:          form.remarks          || null,
       payment_terms:    form.payment_terms    || null,
       location_id:      parseInt(form.location_id) || null,
@@ -878,10 +877,9 @@ export default function GoodsReceivedNoteFormPage() {
         product_id:        parseInt(r.product_id),
         unit_id:           r.unit_id ? parseInt(r.unit_id) : null,
         quantity_received: parseFloat(r.quantity_received),
-        no_of_pieces:      parseInt(r.no_of_pieces, 10),
         unit_price:        parseFloat(r.unit_price) || 0,
         discount:          parseFloat(r.discount)   || 0,
-        tax:               parseFloat(r.tax)        || 0,
+        tax:               0, // item-wise tax feature hidden
         batch_no:          r.batch_no    || null,
         expiry_date:       r.expiry_date || null,
         batches:           r.is_batch && r.batches?.length
@@ -893,6 +891,12 @@ export default function GoodsReceivedNoteFormPage() {
               supplier_batch_no: b.supplier_batch_no  || null,
               status:            b.status             || 'active',
               notes:             b.notes              || null,
+            }))
+          : [],
+        rolls: r.rolls?.length
+          ? r.rolls.map((roll) => ({
+              roll_no: roll.roll_no,
+              weight:  parseFloat(roll.weight) || 0,
             }))
           : [],
       })),
@@ -947,7 +951,6 @@ export default function GoodsReceivedNoteFormPage() {
     if (!row) return null
     if (field === 'uom')   return row.unit_id ? null : 'Required'
     if (field === 'qty')   return parseFloat(row.quantity_received) > 0 ? null : 'Required'
-    if (field === 'pieces') return row.no_of_pieces !== '' && parseInt(row.no_of_pieces, 10) >= 0 ? null : 'Required'
     if (field === 'price') return row.unit_price !== '' && parseFloat(row.unit_price) >= 0 ? null : 'Required'
     return null
   }
@@ -1093,6 +1096,15 @@ export default function GoodsReceivedNoteFormPage() {
                 placeholder="Optional notes"
                 value={form.remarks}
                 onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))}
+              />
+            </FieldRow>
+            <FieldRow label="Shipping Code" required error={getErr('shipping_code')}>
+              <input
+                className={inpCls('shipping_code')}
+                placeholder="e.g. SHP-0001"
+                value={form.shipping_code}
+                onChange={(e) => setForm((f) => ({ ...f, shipping_code: e.target.value }))}
+                onBlur={() => touch('shipping_code')}
               />
             </FieldRow>
 
@@ -1324,14 +1336,14 @@ export default function GoodsReceivedNoteFormPage() {
                     <th className="w-8 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">#</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Code</th>
                     <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Product</th>
+                    <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Color</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">PO Qty</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-right">Pending Qty</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">UOM</th>
                     <th className="w-28 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty Received</th>
-                    <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">No Of Pieces</th>
+                    <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Rolls</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-center">Disc %</th>
-                    <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-emerald-600 text-center">Tax %</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Batch</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] text-right font-bold uppercase tracking-wider text-slate-500">Total</th>
                     <th className="w-8 px-2 py-1.5"></th>
@@ -1367,6 +1379,11 @@ export default function GoodsReceivedNoteFormPage() {
                           ) : (
                             <span className="font-medium text-slate-700">{row.product_name || '—'}</span>
                           )}
+                        </td>
+
+                        {/* Color — read-only reference copied from the linked PO line, no independent input here */}
+                        <td className="px-2 py-1 text-slate-600">
+                          {row.attribute_name || <span className="text-slate-300">—</span>}
                         </td>
 
                         {/* PO Qty */}
@@ -1432,7 +1449,7 @@ export default function GoodsReceivedNoteFormPage() {
                               onChange={(e) => setRowField(idx, 'quantity_received', e.target.value)}
                               onBlur={() => touchItemField(row._key, 'qty')}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'pieces') }
+                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'rolls') }
                               }}
                             />
                             {getItemErr(row._key, 'qty') && (
@@ -1441,24 +1458,26 @@ export default function GoodsReceivedNoteFormPage() {
                           </div>
                         </td>
 
-                        {/* No Of Pieces */}
+                        {/* Rolls */}
                         <td className="px-2 py-1">
-                          <div className="flex flex-col gap-0.5">
-                            <input
-                              ref={setCellRef(row._key, 'pieces')}
-                              type="number" min="0" step="1" placeholder="0"
-                              className={(getItemErr(row._key, 'pieces') ? TABLE_ERR : TABLE_INPUT) + ' w-20'}
-                              value={row.no_of_pieces}
-                              onChange={(e) => setRowField(idx, 'no_of_pieces', e.target.value)}
-                              onBlur={() => touchItemField(row._key, 'pieces')}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
-                              }}
-                            />
-                            {getItemErr(row._key, 'pieces') && (
-                              <span className="text-[9px] text-red-500 leading-none">{getItemErr(row._key, 'pieces')}</span>
-                            )}
-                          </div>
+                          <button
+                            ref={setCellRef(row._key, 'rolls')}
+                            type="button"
+                            onClick={() => setRollModalIdx(idx)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
+                            }}
+                            className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                              row.rolls?.length
+                                ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                                : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                            }`}
+                          >
+                            <Weight size={10} />
+                            {row.rolls?.length
+                              ? `${row.rolls.length} roll${row.rolls.length !== 1 ? 's' : ''}`
+                              : 'Add Rolls'}
+                          </button>
                         </td>
 
                         {/* Unit Price */}
@@ -1489,20 +1508,6 @@ export default function GoodsReceivedNoteFormPage() {
                             className="block w-full rounded border border-amber-200 bg-amber-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-amber-400 focus:bg-white"
                             value={row.discount}
                             onChange={(e) => setRowField(idx, 'discount', e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'tax') }
-                            }}
-                          />
-                        </td>
-
-                        {/* Tax% */}
-                        <td className="px-2 py-1">
-                          <input
-                            ref={setCellRef(row._key, 'tax')}
-                            type="number" min="0" max="100" step="0.01" placeholder="0"
-                            className="block w-full rounded border border-emerald-200 bg-emerald-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-emerald-400 focus:bg-white"
-                            value={row.tax}
-                            onChange={(e) => setRowField(idx, 'tax', e.target.value)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') {
                                 e.preventDefault()
@@ -1554,12 +1559,9 @@ export default function GoodsReceivedNoteFormPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-slate-200 bg-slate-50/50">
-                    <td colSpan={9} />
+                    <td colSpan={10} />
                     <td className="px-1.5 py-1.5 text-center text-xs font-bold text-amber-600 tabular-nums">
                       -{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td className="px-1.5 py-1.5 text-center text-xs font-bold text-emerald-600 tabular-nums">
-                      +{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td colSpan={1} />
                     <td className="px-2 py-1.5 text-right text-sm font-black text-slate-800 tabular-nums">
@@ -1568,15 +1570,14 @@ export default function GoodsReceivedNoteFormPage() {
                     <td />
                   </tr>
                   <tr className="bg-indigo-50 border-t border-indigo-100">
-                    <td colSpan={9} className="px-3 py-1.5">
+                    <td colSpan={12} className="px-3 py-1.5">
                       <div className="flex items-center gap-4 text-xs">
                         <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
                         <span className="text-slate-500">Gross: <span className="font-bold text-slate-700">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
                         <span className="text-amber-600">Disc: <span className="font-bold">-{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
-                        <span className="text-emerald-600">Tax: <span className="font-bold">+{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
                       </div>
                     </td>
-                    <td colSpan={4} className="px-3 py-1.5 text-right">
+                    <td className="px-3 py-1.5 text-right">
                       <div className="flex flex-col items-end leading-tight">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Net Total</span>
                         <span className="text-base font-black text-indigo-700 tabular-nums">
@@ -1671,7 +1672,7 @@ export default function GoodsReceivedNoteFormPage() {
         <div className="flex flex-wrap gap-x-5 gap-y-1">
           {[
             { keys: ['Alt', 'N'],   desc: 'Add new item row' },
-            { keys: ['Enter'],      desc: 'Move to next field in row (UOM → Qty → Price → Disc → Tax → Batch)' },
+            { keys: ['Enter'],      desc: 'Move to next field in row (UOM → Qty → Rolls → Price → Disc → Batch)' },
             { keys: ['↑', '↓'],    desc: 'Navigate product search results' },
             { keys: ['Esc'],        desc: 'Close product search dropdown' },
           ].map(({ keys, desc }) => (
@@ -1749,6 +1750,19 @@ export default function GoodsReceivedNoteFormPage() {
             setBatchModalIdx(null)
           }}
           onClose={() => setBatchModalIdx(null)}
+        />
+      )}
+
+      {/* Roll Assignment Modal */}
+      {rollModalIdx !== null && items[rollModalIdx] && (
+        <RollAssignModal
+          item={items[rollModalIdx]}
+          isWeightUnit={unitTypes.find((u) => u.id === Number(items[rollModalIdx].unit_id))?.unit_category_name === 'Weight'}
+          onApply={(rolls) => {
+            setItems((prev) => prev.map((row, i) => i === rollModalIdx ? { ...row, rolls } : row))
+            setRollModalIdx(null)
+          }}
+          onClose={() => setRollModalIdx(null)}
         />
       )}
     </div>

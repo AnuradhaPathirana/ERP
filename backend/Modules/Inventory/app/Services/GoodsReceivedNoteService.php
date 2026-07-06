@@ -65,8 +65,10 @@ class GoodsReceivedNoteService
         return GoodsReceivedNote::with([
             'items.product',
             'items.unit',
+            'items.attribute',
             'items.poItem',
             'items.batchAssignments.batch',
+            'items.pieces',
             'purchaseOrder.items.product',
             'supplier',
             'store',
@@ -80,7 +82,7 @@ class GoodsReceivedNoteService
      */
     public function getPoOutstandingItems(int $poId): array
     {
-        $po = PurchaseOrder::with(['items.product', 'items.unit', 'supplier'])->findOrFail($poId);
+        $po = PurchaseOrder::with(['items.product', 'items.unit', 'items.attribute', 'supplier'])->findOrFail($poId);
 
         if (!$po->status->canReceiveGoods()) {
             abort(422, 'Purchase order must be confirmed before creating a GRN.');
@@ -94,6 +96,8 @@ class GoodsReceivedNoteService
                 'po_item_id'       => $item->id,
                 'product_id'       => $item->product_id,
                 'unit_id'          => $item->unit_id,
+                'attribute_id'     => $item->attribute_id,
+                'attribute_name'   => $item->attribute?->attribute_name,
                 'quantity_ordered'  => (float) $item->quantity_ordered,
                 'quantity_received' => (float) $item->quantity_received,
                 'remaining_qty'    => $item->remaining_qty,
@@ -123,7 +127,7 @@ class GoodsReceivedNoteService
             return [];
         }
 
-        $pos = PurchaseOrder::with(['items.product', 'items.unit'])
+        $pos = PurchaseOrder::with(['items.product', 'items.unit', 'items.attribute'])
             ->whereIn('id', $poIds)
             ->get();
 
@@ -141,6 +145,8 @@ class GoodsReceivedNoteService
                     'po_item_id'       => $item->id,
                     'product_id'       => $item->product_id,
                     'unit_id'          => $item->unit_id,
+                    'attribute_id'     => $item->attribute_id,
+                    'attribute_name'   => $item->attribute?->attribute_name,
                     'quantity_ordered'  => (float) $item->quantity_ordered,
                     'quantity_received' => (float) $item->quantity_received,
                     'remaining_qty'    => $item->remaining_qty,
@@ -230,6 +236,7 @@ class GoodsReceivedNoteService
             $grn = GoodsReceivedNote::create([
                 'grn_no'           => $this->generateGrnNo(),
                 'reference_no'     => $data->referenceNo,
+                'shipping_code'    => $data->shippingCode,
                 'po_id'            => $data->poId,
                 'supplier_id'      => $supplierId,
                 'grn_date'         => $data->grnDate,
@@ -247,7 +254,7 @@ class GoodsReceivedNoteService
             $this->syncItems($grn, $data->items);
             $this->recalculateTotal($grn);
 
-            return $grn->load(['items.product', 'items.unit', 'purchaseOrder', 'supplier', 'store', 'location']);
+            return $grn->load(['items.product', 'items.unit', 'items.attribute', 'purchaseOrder', 'supplier', 'store', 'location']);
         });
     }
 
@@ -262,6 +269,7 @@ class GoodsReceivedNoteService
                 'grn_date'         => $data->grnDate,
                 'transaction_date' => $data->transactionDate,
                 'reference_no'     => $data->referenceNo,
+                'shipping_code'    => $data->shippingCode,
                 'supplier_id'      => $data->supplierId ?? $grn->supplier_id,
                 'store_id'         => $data->storeId,
                 'location_id'      => $data->locationId,
@@ -273,7 +281,7 @@ class GoodsReceivedNoteService
             $this->syncItems($grn, $data->items);
             $this->recalculateTotal($grn);
 
-            return $grn->load(['items.product', 'items.unit', 'purchaseOrder', 'supplier', 'store', 'location']);
+            return $grn->load(['items.product', 'items.unit', 'items.attribute', 'purchaseOrder', 'supplier', 'store', 'location']);
         });
     }
 
@@ -283,12 +291,14 @@ class GoodsReceivedNoteService
      */
     public function confirm(GoodsReceivedNote $grn): GoodsReceivedNote
     {
-        if ($grn->status !== GrnStatus::Draft) {
-            abort(422, 'Only draft GRNs can be confirmed.');
-        }
-
         return DB::transaction(function () use ($grn): GoodsReceivedNote {
-            $grn->load(['items.product', 'items.batchAssignments.batch']);
+            $grn = GoodsReceivedNote::whereKey($grn->id)->lockForUpdate()->firstOrFail();
+
+            if ($grn->status !== GrnStatus::Draft) {
+                abort(422, 'Only draft GRNs can be confirmed.');
+            }
+
+            $grn->load(['items.product', 'items.batchAssignments.batch', 'items.pieces']);
 
             // Collect affected PO IDs from items (supports multi-PO GRNs)
             $poItemIds     = $grn->items->pluck('po_item_id')->filter()->unique()->values();
@@ -298,7 +308,9 @@ class GoodsReceivedNoteService
                 ->values();
 
             foreach ($grn->items as $itemSeq => $item) {
-                $batchAssignments = $item->batchAssignments;
+                $batchAssignments        = $item->batchAssignments;
+                $stockTransactionIdByBatch = [];
+                $nonBatchStockTransactionId = null;
 
                 if ($batchAssignments->isNotEmpty()) {
                     // Batch-tracked product: one stock transaction + batch record per assignment
@@ -306,7 +318,7 @@ class GoodsReceivedNoteService
                         $batch = $assignment->batch;
 
                         // Create stock transaction per batch slice
-                        StockTransaction::create([
+                        $stockTransaction = StockTransaction::create([
                             'transaction_date' => now(),
                             'reference_type'   => 'grn',
                             'reference_id'     => $grn->id,
@@ -322,6 +334,7 @@ class GoodsReceivedNoteService
                             'unit_price'       => $item->unit_price,
                             'created_by'       => auth()->id(),
                         ]);
+                        $stockTransactionIdByBatch[$batch->id] = $stockTransaction->id;
 
                         // Update batch current_qty (set to initial_qty on first confirmation)
                         $batch->update(['current_qty' => $batch->initial_qty]);
@@ -339,7 +352,7 @@ class GoodsReceivedNoteService
                     }
                 } else {
                     // Non-batch product: single stock transaction as before
-                    StockTransaction::create([
+                    $stockTransaction = StockTransaction::create([
                         'transaction_date' => now(),
                         'reference_type'   => 'grn',
                         'reference_id'     => $grn->id,
@@ -355,6 +368,7 @@ class GoodsReceivedNoteService
                         'unit_price'       => $item->unit_price,
                         'created_by'       => auth()->id(),
                     ]);
+                    $nonBatchStockTransactionId = $stockTransaction->id;
 
                     $pivot = ProductLocationStore::firstOrCreate(
                         [
@@ -367,7 +381,7 @@ class GoodsReceivedNoteService
                     $pivot->increment('current_stock', (float) $item->quantity_received);
                 }
 
-                $this->generatePiecesForItem($grn, $item, $itemSeq + 1);
+                $this->sealPiecesForItem($grn, $item, $itemSeq + 1, $stockTransactionIdByBatch, $nonBatchStockTransactionId);
 
                 // Update quantity_received on the linked PO item (skip for manual GRN items)
                 if ($item->po_item_id) {
@@ -387,7 +401,7 @@ class GoodsReceivedNoteService
                 $this->syncPoStatusAfterGrn($poId);
             }
 
-            return $grn->fresh(['items.product', 'items.unit', 'purchaseOrder', 'supplier', 'store', 'location']);
+            return $grn->fresh(['items.product', 'items.unit', 'items.attribute', 'purchaseOrder', 'supplier', 'store', 'location']);
         });
     }
 
@@ -437,67 +451,35 @@ class GoodsReceivedNoteService
     }
 
     /**
-     * Generate one QR-coded piece record per physical piece received for this item.
-     * Runs only at confirmation time, since GRN items become immutable once confirmed.
+     * Seal the piece rows already created for this item at draft time (see syncItems()) —
+     * assigns the final piece_code, flips status to in_stock, and links each piece to the
+     * stock transaction that posted its quantity. Runs only at confirmation time, since GRN
+     * items become immutable once confirmed (piece_code depends on a stable item sequence).
+     *
+     * @param array<int, int> $stockTransactionIdByBatch keyed by batch_id
      */
-    private function generatePiecesForItem(GoodsReceivedNote $grn, GoodsReceivedNoteItem $item, int $itemSeq): void
-    {
-        if ($item->no_of_pieces <= 0 || !$grn->store_id) {
-            return;
+    private function sealPiecesForItem(
+        GoodsReceivedNote $grn,
+        GoodsReceivedNoteItem $item,
+        int $itemSeq,
+        array $stockTransactionIdByBatch,
+        ?int $nonBatchStockTransactionId,
+    ): void {
+        foreach ($item->pieces as $piece) {
+            $stockTransactionId = $piece->batch_id
+                ? ($stockTransactionIdByBatch[$piece->batch_id] ?? null)
+                : $nonBatchStockTransactionId;
+
+            $piece->update([
+                'piece_code'           => sprintf('%s-I%03d-P%03d', $grn->grn_no, $itemSeq, $piece->piece_no),
+                'status'               => 'in_stock',
+                'stock_transaction_id' => $stockTransactionId,
+            ]);
         }
-
-        $batchAssignments = $item->batchAssignments;
-        $pieceRows         = [];
-        $pieceNo           = 1;
-
-        if ($batchAssignments->isNotEmpty()) {
-            $totalQty         = (float) $item->quantity_received;
-            $allocated        = 0;
-            $assignmentsCount = $batchAssignments->count();
-
-            foreach ($batchAssignments as $index => $assignment) {
-                $isLast = $index === $assignmentsCount - 1;
-                $share  = $isLast
-                    ? $item->no_of_pieces - $allocated
-                    : (int) round(((float) $assignment->quantity / $totalQty) * $item->no_of_pieces);
-                $allocated += $share;
-
-                for ($i = 0; $i < $share; $i++) {
-                    $pieceRows[] = $this->buildPieceRow($grn, $item, $itemSeq, $pieceNo, (int) $assignment->batch_id);
-                    $pieceNo++;
-                }
-            }
-        } else {
-            for ($i = 0; $i < $item->no_of_pieces; $i++) {
-                $pieceRows[] = $this->buildPieceRow($grn, $item, $itemSeq, $pieceNo, null);
-                $pieceNo++;
-            }
-        }
-
-        GrnItemPiece::insert($pieceRows);
-    }
-
-    /** @return array<string, mixed> */
-    private function buildPieceRow(GoodsReceivedNote $grn, GoodsReceivedNoteItem $item, int $itemSeq, int $pieceNo, ?int $batchId): array
-    {
-        return [
-            'grn_item_id' => $item->id,
-            'grn_id'      => $grn->id,
-            'product_id'  => $item->product_id,
-            'batch_id'    => $batchId,
-            'store_id'    => $grn->store_id,
-            'location_id' => $grn->location_id,
-            'piece_no'    => $pieceNo,
-            'piece_code'  => sprintf('%s-I%03d-P%03d', $grn->grn_no, $itemSeq, $pieceNo),
-            'status'      => 'in_stock',
-            'created_by'  => auth()->id(),
-            'created_at'  => now(),
-            'updated_at'  => now(),
-        ];
     }
 
     /**
-     * @param array<array{po_item_id:int, product_id:int, unit_id:?int, quantity_received:float, no_of_pieces:?int, unit_price:float, discount:?float, tax:?float, batch_no:?string, expiry_date:?string, batches:?array}> $items
+     * @param array<array{po_item_id:int, product_id:int, unit_id:?int, quantity_received:float, rolls:?array, unit_price:float, discount:?float, tax:?float, batch_no:?string, expiry_date:?string, batches:?array}> $items
      */
     private function syncItems(GoodsReceivedNote $grn, array $items): void
     {
@@ -505,6 +487,7 @@ class GoodsReceivedNoteService
         $oldItemIds = $grn->items()->pluck('id');
         if ($oldItemIds->isNotEmpty()) {
             GrnItemBatch::whereIn('grn_item_id', $oldItemIds)->delete();
+            GrnItemPiece::whereIn('grn_item_id', $oldItemIds)->delete();
         }
         $grn->items()->delete();
 
@@ -521,7 +504,8 @@ class GoodsReceivedNoteService
             $hasPoItem   = !empty($row['po_item_id']);
             $ordered     = $hasPoItem ? (float) ($poItem[$row['po_item_id']]?->quantity_ordered ?? 0) : 0;
             $qtyRcv      = (float) $row['quantity_received'];
-            $noOfPieces  = (int) ($row['no_of_pieces'] ?? 0);
+            $rolls       = $row['rolls'] ?? [];
+            $noOfPieces  = count($rolls);
             $unitPrice   = (float) ($row['unit_price'] ?? 0);
             $discountPct = (float) ($row['discount'] ?? 0);
             $taxPct      = (float) ($row['tax'] ?? 0);
@@ -537,11 +521,16 @@ class GoodsReceivedNoteService
             $batchNoSnap   = $firstBatch['batch_no']    ?? ($row['batch_no']    ?? null);
             $expirySnap    = $firstBatch['expiry_date'] ?? ($row['expiry_date'] ?? null);
 
+            // Color/attribute is a reference copied from the linked PO item — it has no
+            // independent input on the GRN form, manual (non-PO) rows simply have none.
+            $attributeId = $hasPoItem ? ($poItem[$row['po_item_id']]?->attribute_id ?? null) : null;
+
             $grnItem = GoodsReceivedNoteItem::create([
                 'grn_id'            => $grn->id,
                 'po_item_id'        => $hasPoItem ? (int) $row['po_item_id'] : null,
                 'product_id'        => (int) $row['product_id'],
                 'unit_id'           => !empty($row['unit_id']) ? (int) $row['unit_id'] : null,
+                'attribute_id'      => $attributeId,
                 'quantity_ordered'  => $ordered,
                 'quantity_received' => $qtyRcv,
                 'no_of_pieces'      => $noOfPieces,
@@ -590,7 +579,64 @@ class GoodsReceivedNoteService
                     ]);
                 }
             }
+
+            // Create piece rows for each roll captured at draft time (weight + roll_no).
+            // These stay "unsealed" (piece_code null, status draft) until GRN confirmation,
+            // since GRN items get deleted and recreated on every draft save/edit.
+            if (!empty($rolls)) {
+                $batchIdsForRolls = $this->distributeBatchIdsAcrossRolls($grnItem, count($rolls));
+
+                foreach ($rolls as $i => $rollRow) {
+                    GrnItemPiece::create([
+                        'grn_item_id' => $grnItem->id,
+                        'grn_id'      => $grn->id,
+                        'product_id'  => (int) $row['product_id'],
+                        'batch_id'    => $batchIdsForRolls[$i] ?? null,
+                        'store_id'    => $grn->store_id,
+                        'location_id' => $grn->location_id,
+                        'piece_no'    => $i + 1,
+                        'weight'      => (float) $rollRow['weight'],
+                        'roll_no'     => $rollRow['roll_no'],
+                        'piece_code'  => null,
+                        'status'      => 'draft',
+                        'created_by'  => auth()->id(),
+                    ]);
+                }
+            }
         }
+    }
+
+    /**
+     * Distribute rolls proportionally across a GRN item's batch assignments by quantity
+     * share, so each roll/piece can be linked to the batch it physically belongs to.
+     *
+     * @return array<int, ?int> batch_id per roll index (0..$rollCount-1), or all null if unbatched
+     */
+    private function distributeBatchIdsAcrossRolls(GoodsReceivedNoteItem $grnItem, int $rollCount): array
+    {
+        $assignments = $grnItem->batchAssignments()->get();
+        if ($assignments->isEmpty() || $rollCount === 0) {
+            return array_fill(0, $rollCount, null);
+        }
+
+        $totalQty  = (float) $grnItem->quantity_received;
+        $allocated = 0;
+        $count     = $assignments->count();
+        $result    = [];
+
+        foreach ($assignments as $index => $assignment) {
+            $isLast = $index === $count - 1;
+            $share  = $isLast
+                ? $rollCount - $allocated
+                : (int) round(((float) $assignment->quantity / $totalQty) * $rollCount);
+
+            for ($i = 0; $i < $share; $i++) {
+                $result[] = (int) $assignment->batch_id;
+            }
+            $allocated += $share;
+        }
+
+        return $result;
     }
 
     private function recalculateTotal(GoodsReceivedNote $grn): void
