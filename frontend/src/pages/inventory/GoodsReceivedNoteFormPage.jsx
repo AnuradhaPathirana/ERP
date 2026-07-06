@@ -256,7 +256,7 @@ function formatFileSize(bytes) {
 /* ── Product search cell (for manual rows) ────────────────────── */
 function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClear, onClose, onInputRef }) {
   const [highlightIdx, setHighlightIdx] = useState(0)
-  const [dropPos, setDropPos]           = useState({ top: 0, left: 0, width: 280 })
+  const [dropPos, setDropPos]           = useState({ top: 0, left: 0, width: 420 })
   const inputRef = useRef(null)
 
   const results    = productSearch.key === row._key ? (productSearch.results ?? []) : []
@@ -273,7 +273,7 @@ function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClea
       setDropPos({
         top:   rect.bottom + 2,
         left:  rect.left,
-        width: Math.max(rect.width, 280),
+        width: Math.max(rect.width, 420),
       })
     }
   }, [isOpen])
@@ -345,7 +345,7 @@ function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClea
               onMouseEnter={() => setHighlightIdx(i)}
             >
               <span className="font-mono text-[10px] text-indigo-400 shrink-0 w-20 truncate">{p.product_code}</span>
-              <span className="truncate font-medium">{p.name}</span>
+              <span className="font-medium whitespace-normal break-words">{p.name}</span>
             </button>
           ))}
         </div>,
