@@ -20,8 +20,10 @@ import { getPurchaseOrders } from '../../api/purchaseOrders'
 import { getAllSuppliers } from '../../api/suppliers'
 import { getAllLocations } from '../../api/locations'
 import { getAllStores } from '../../api/stores'
-import { getProducts } from '../../api/products'
+import { getProducts, getProduct } from '../../api/products'
 import { getAllUnitTypesFlat } from '../../api/unitTypes'
+import { getAllAttributeTypes } from '../../api/attributeTypes'
+import { getAllAttributes } from '../../api/attributes'
 import Breadcrumb from '../../components/Breadcrumb'
 import BatchAssignModal from '../../components/inventory/BatchAssignModal'
 import RollAssignModal from '../../components/inventory/RollAssignModal'
@@ -81,6 +83,12 @@ function FieldRow({ label, required, error, children }) {
 /* ── Helpers ──────────────────────────────────────────────────── */
 const toPrice = (v) =>
   v != null && v !== '' && !isNaN(parseFloat(v)) ? parseFloat(v).toFixed(2) : ''
+
+// "Color" or "Colour" — attribute-type spelling varies by who entered the master data.
+function isColorAttributeTypeName(name) {
+  const n = (name || '').trim().toLowerCase()
+  return n === 'color' || n === 'colour'
+}
 
 /* ── Line item calculator ─────────────────────────────────────── */
 function calcItem(row) {
@@ -317,6 +325,45 @@ export default function GoodsReceivedNoteFormPage() {
     acc[key].items.push(u)
     return acc
   }, {})
+
+  // Color options are scoped to the SELECTED PRODUCT's own "Product Attributes"
+  // (set at product creation), not just its category — only relevant for manual
+  // (non-PO) rows, since PO-linked rows inherit their color from the PO item.
+  const { data: attributeTypes = [] } = useQuery({ queryKey: ['attribute-types-all'], queryFn: getAllAttributeTypes })
+  const { data: allAttributes  = [] } = useQuery({ queryKey: ['attributes-all'],      queryFn: getAllAttributes })
+  const colorOptionsCache = useRef({})
+
+  const loadColorOptions = (productId) => {
+    if (!productId) return Promise.resolve([])
+    if (colorOptionsCache.current[productId]) return colorOptionsCache.current[productId]
+
+    const promise = getProduct(productId)
+      .then((res) => {
+        const colorTypeIds = new Set(
+          attributeTypes.filter((t) => isColorAttributeTypeName(t.attribute_type_name)).map((t) => String(t.id))
+        )
+        return (res.data.product_attributes ?? [])
+          .filter((pa) => colorTypeIds.has(String(pa.attribute_type_id)))
+          .map((pa) => allAttributes.find((a) => String(a.id) === String(pa.attribute_id)))
+          .filter(Boolean)
+          .map((a) => ({ id: a.id, name: a.attribute_name }))
+      })
+      .catch(() => [])
+
+    colorOptionsCache.current[productId] = promise
+    return promise
+  }
+
+  // Fetch color options for a batch of manual rows (edit-mode hydration) and patch them in once resolved.
+  const hydrateColorOptions = (rows) => {
+    rows.forEach((row) => {
+      if (!row.product_id || row.po_item_id) return
+      loadColorOptions(row.product_id).then((options) => {
+        setItems((prev) => prev.map((r) => r._key === row._key ? { ...r, color_options: options } : r))
+      })
+    })
+  }
+
   const { data: locations = [] } = useQuery({
     queryKey: ['locations-all'],
     queryFn:  getAllLocations,
@@ -404,7 +451,7 @@ export default function GoodsReceivedNoteFormPage() {
       store_id:         String(grn.store_id      ?? ''),
     })
     if (grn.items?.length) {
-      setItems(grn.items.map((it) => ({
+      const mappedItems = grn.items.map((it) => ({
         _key:               it.id,
         po_id:              grn.po_id ?? null,
         po_no:              grn.purchase_order?.po_no ?? '',
@@ -414,6 +461,8 @@ export default function GoodsReceivedNoteFormPage() {
         product_name:       it.product?.name ?? '',
         unit_id:            it.unit_id ?? '',
         attribute_name:     it.attribute?.name ?? '',
+        attribute_id:       it.attribute_id != null ? String(it.attribute_id) : '',
+        color_options:      [],
         quantity_ordered:   it.quantity_ordered,
         already_received:   null,
         remaining_qty:      null,
@@ -438,7 +487,9 @@ export default function GoodsReceivedNoteFormPage() {
           roll_no: p.roll_no ?? '',
           weight:  p.weight  ?? '',
         })),
-      })))
+      }))
+      setItems(mappedItems)
+      hydrateColorOptions(mappedItems)
     }
   }, [existingGRN])
 
@@ -477,6 +528,8 @@ export default function GoodsReceivedNoteFormPage() {
     product_name:      it.product?.name ?? '',
     unit_id:           it.unit_id ?? '',
     attribute_name:    it.attribute_name ?? '',
+    attribute_id:      '',
+    color_options:     [],
     quantity_ordered:  it.quantity_ordered,
     already_received:  it.quantity_received,
     remaining_qty:     it.remaining_qty,
@@ -610,6 +663,8 @@ export default function GoodsReceivedNoteFormPage() {
       batch_assignments: [],
       batches:           [],
       rolls:             [],
+      attribute_id:      '',
+      color_options:     [],
     }])
     // Auto-focus the product search input on the new row
     setTimeout(() => cellRefs.current[key]?.product?.focus(), 50)
@@ -667,12 +722,12 @@ export default function GoodsReceivedNoteFormPage() {
             batches:      [],
             batch_no:     '',
             expiry_date:  '',
+            attribute_id: '',
+            color_options: [],
           }
         : row
     ))
     setProductSearch({ key: null, query: '', results: [], open: false })
-    // Auto-focus UOM after product selection
-    setTimeout(() => focusCell(rowKey, 'uom'), 50)
 
     // Pre-fill unit_price from the last GRN that received this product
     try {
@@ -684,12 +739,19 @@ export default function GoodsReceivedNoteFormPage() {
         ))
       }
     } catch { /* silent — price field stays empty */ }
+
+    loadColorOptions(product.id).then((options) => {
+      setItems((prev) => prev.map((row) => row._key === rowKey ? { ...row, color_options: options } : row))
+      // Auto-focus Color once its options are ready — skip straight to UOM if this
+      // product has none, since a disabled Color select can't receive focus.
+      setTimeout(() => focusCell(rowKey, options.length > 0 ? 'color' : 'uom'), 50)
+    })
   }
 
   const clearProductSelection = (rowKey) => {
     setItems((prev) => prev.map((row) =>
       row._key === rowKey
-        ? { ...row, product_id: null, product_code: '', product_name: '', is_batch: false, batches: [] }
+        ? { ...row, product_id: null, product_code: '', product_name: '', is_batch: false, batches: [], attribute_id: '', color_options: [] }
         : row
     ))
     setProductSearch({ key: rowKey, query: '', results: [], open: false })
@@ -875,6 +937,7 @@ export default function GoodsReceivedNoteFormPage() {
       items: validItems.map((r) => ({
         po_item_id:        r.po_item_id ? parseInt(r.po_item_id) : null,
         product_id:        parseInt(r.product_id),
+        attribute_id:      r.attribute_id ? parseInt(r.attribute_id) : null,
         unit_id:           r.unit_id ? parseInt(r.unit_id) : null,
         quantity_received: parseFloat(r.quantity_received),
         unit_price:        parseFloat(r.unit_price) || 0,
@@ -1381,9 +1444,30 @@ export default function GoodsReceivedNoteFormPage() {
                           )}
                         </td>
 
-                        {/* Color — read-only reference copied from the linked PO line, no independent input here */}
-                        <td className="px-2 py-1 text-slate-600">
-                          {row.attribute_name || <span className="text-slate-300">—</span>}
+                        {/* Color — PO-linked rows inherit it read-only from the linked PO line;
+                            manual rows have no PO item to inherit from, so pick it directly here. */}
+                        <td className="px-2 py-1">
+                          {isManual ? (
+                            <select
+                              ref={setCellRef(row._key, 'color')}
+                              value={row.attribute_id}
+                              onChange={(e) => setRowField(idx, 'attribute_id', e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'uom') }
+                              }}
+                              disabled={!row.product_id || row.color_options.length === 0}
+                              className={TABLE_SEL}
+                            >
+                              <option value="">
+                                {!row.product_id ? '—' : row.color_options.length === 0 ? 'No colors' : '—'}
+                              </option>
+                              {row.color_options.map((c) => (
+                                <option key={c.id} value={c.id}>{c.name}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-slate-600">{row.attribute_name || <span className="text-slate-300">—</span>}</span>
+                          )}
                         </td>
 
                         {/* PO Qty */}

@@ -521,9 +521,12 @@ class GoodsReceivedNoteService
             $batchNoSnap   = $firstBatch['batch_no']    ?? ($row['batch_no']    ?? null);
             $expirySnap    = $firstBatch['expiry_date'] ?? ($row['expiry_date'] ?? null);
 
-            // Color/attribute is a reference copied from the linked PO item — it has no
-            // independent input on the GRN form, manual (non-PO) rows simply have none.
-            $attributeId = $hasPoItem ? ($poItem[$row['po_item_id']]?->attribute_id ?? null) : null;
+            // Color/attribute: for PO-linked rows this is a reference copied from the linked
+            // PO item (no independent input on the GRN form); manual (non-PO) rows have no PO
+            // item to inherit from, so the user picks it directly on the GRN form instead.
+            $attributeId = $hasPoItem
+                ? ($poItem[$row['po_item_id']]?->attribute_id ?? null)
+                : (!empty($row['attribute_id']) ? (int) $row['attribute_id'] : null);
 
             $grnItem = GoodsReceivedNoteItem::create([
                 'grn_id'            => $grn->id,

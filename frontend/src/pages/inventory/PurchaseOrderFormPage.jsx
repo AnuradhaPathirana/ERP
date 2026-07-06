@@ -200,10 +200,9 @@ function calcItem(row) {
   const qty     = parseFloat(row.quantity_ordered) || 0
   const price   = parseFloat(row.unit_price)       || 0
   const discPct = parseFloat(row.discount)         || 0
-  const taxPct  = parseFloat(row.tax)              || 0
   const gross    = qty * price
   const discAmt  = gross * (discPct / 100)
-  const taxAmt   = gross * (taxPct  / 100)
+  const taxAmt   = 0 // item-wise tax feature hidden — always inert
   const amount   = gross - discAmt + taxAmt
   return { gross, discAmt, taxAmt, amount }
 }
@@ -492,10 +491,9 @@ export default function PurchaseOrderFormPage() {
       try {
         const params = search ? { search, per_page: 30 } : { per_page: 100 }
         const res = await getProducts(1, params)
-        const usedIds = new Set(items.filter((r) => r._key !== rowKey).map((r) => r.product_id).filter(Boolean).map(Number))
         setProductSearch((prev) =>
           prev.key === rowKey
-            ? { ...prev, results: (res.data ?? []).filter((p) => !usedIds.has(p.id)), open: true }
+            ? { ...prev, results: res.data ?? [], open: true }
             : prev
         )
       } catch { /* silent */ }
@@ -678,7 +676,7 @@ export default function PurchaseOrderFormPage() {
         quantity_ordered: parseFloat(r.quantity_ordered),
         unit_price:       parseFloat(r.unit_price)  || 0,
         discount:         parseFloat(r.discount)    || 0,
-        tax:              parseFloat(r.tax)         || 0,
+        tax:              0, // item-wise tax feature hidden
       })),
     })
   }
@@ -876,7 +874,6 @@ export default function PurchaseOrderFormPage() {
                   <th className="w-28 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
                   <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Gross</th>
                   <th className="w-20 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-amber-500">Disc%</th>
-                  <th className="w-16 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-emerald-600">Tax%</th>
                   <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-700">Amount</th>
                   <th className="w-8"></th>
                 </tr>
@@ -972,17 +969,7 @@ export default function PurchaseOrderFormPage() {
                           ref={setCellRef(row._key, 'disc')}
                           type="number" min="0" max="100" step="0.01" placeholder="0" value={row.discount}
                           onChange={(e) => setRowField(idx, 'discount', e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'tax') }
-                          }}
                           className="block w-full rounded border border-amber-200 bg-amber-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-amber-400 focus:bg-white" />
-                      </td>
-                      <td className="px-1.5 py-1">
-                        <input
-                          ref={setCellRef(row._key, 'tax')}
-                          type="number" min="0" max="100" step="0.01" placeholder="0" value={row.tax}
-                          onChange={(e) => setRowField(idx, 'tax', e.target.value)}
-                          className="block w-full rounded border border-emerald-200 bg-emerald-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-emerald-400 focus:bg-white" />
                       </td>
                       <td className="px-1.5 py-1 text-right font-bold text-slate-800 tabular-nums">
                         {amount > 0 ? amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-slate-300 font-normal">—</span>}
@@ -999,7 +986,7 @@ export default function PurchaseOrderFormPage() {
 
               <tfoot>
                 <tr className="border-t border-slate-200 bg-slate-50/50">
-                  <td colSpan={6} className="px-2 py-1.5">
+                  <td colSpan={7} className="px-2 py-1.5">
                     <div className="flex gap-1.5">
                       <button type="button" onClick={addManualRow} title="Add new item (Alt+N)" className="flex items-center gap-1 rounded border border-indigo-200 bg-white px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 transition-colors">
                         <Plus size={10} /> Add Row
@@ -1011,20 +998,18 @@ export default function PurchaseOrderFormPage() {
                   </td>
                   <td className="px-1.5 py-1.5 text-right text-xs font-semibold text-slate-600 tabular-nums">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td className="px-1.5 py-1.5 text-center text-xs font-bold text-amber-600 tabular-nums">-{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td className="px-1.5 py-1.5 text-center text-xs font-bold text-emerald-600 tabular-nums">+{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td className="px-1.5 py-1.5 text-right text-sm font-black text-slate-800 tabular-nums">{totals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td></td>
                 </tr>
                 <tr className="bg-indigo-50 border-t border-indigo-100">
-                  <td colSpan={6} className="px-3 py-1.5">
+                  <td colSpan={9} className="px-3 py-1.5">
                     <div className="flex items-center gap-4 text-xs">
                       <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
                       <span className="text-slate-500">Gross: <span className="font-bold text-slate-700">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
                       <span className="text-amber-600">Disc: <span className="font-bold">-{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
-                      <span className="text-emerald-600">Tax: <span className="font-bold">+{totals.tax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
                     </div>
                   </td>
-                  <td colSpan={4} className="px-3 py-1.5 text-right">
+                  <td className="px-3 py-1.5 text-right">
                     <div className="flex flex-col items-end leading-tight">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Net Total</span>
                       <span className="text-base font-black text-indigo-700 tabular-nums">{totals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
@@ -1077,7 +1062,7 @@ export default function PurchaseOrderFormPage() {
         <div className="flex flex-wrap gap-x-5 gap-y-1">
           {[
             { keys: ['Alt', 'N'],   desc: 'Add new item row' },
-            { keys: ['Enter'],      desc: 'Move to next field in row (Color → Qty → Unit → Price → Disc → Tax)' },
+            { keys: ['Enter'],      desc: 'Move to next field in row (Color → Qty → Unit → Price → Disc)' },
             { keys: ['↑', '↓'],    desc: 'Navigate product search results' },
             { keys: ['Esc'],        desc: 'Close product search dropdown' },
           ].map(({ keys, desc }) => (
