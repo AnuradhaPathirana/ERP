@@ -7,9 +7,15 @@ import { createCategory, deleteCategory, getAllCategories, getCategories, getCat
 import { getAllIndustries } from '../../api/industries'
 import { getAllCompanies } from '../../api/companies'
 import Breadcrumb from '../../components/Breadcrumb'
+import TableFilter, { FilterField } from '../../components/TableFilter'
+import TreeSelect from '../../components/TreeSelect'
+import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
 import { usePermissions } from '../../hooks/usePermissions'
+import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 import Pagination from '../../components/ui/Pagination'
+
+const INITIAL_FILTERS = { search: '', product_service_type: '', parent_category_id: '', industry_id: '', company_id: '' }
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -497,13 +503,36 @@ export default function CategoriesPage() {
   const queryClient = useQueryClient()
   const { can } = usePermissions()
 
+  const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
+    useTableFilter(INITIAL_FILTERS)
+
+  const resetPage = () => setPage(1)
+
   const handleView = (id) => { setViewId(id); setEditId(null) }
   const handleEdit = (id) => { setEditId(id); setViewId(null) }
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['categories', page],
-    queryFn:  () => getCategories(page),
+    queryKey: ['categories', page, applied],
+    queryFn:  () => getCategories(page, applied),
     placeholderData: (prev) => prev,
+  })
+
+  const { data: allCategoriesFlat = [] } = useQuery({
+    queryKey: ['categories-all'],
+    queryFn:  getAllCategories,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: allIndustries = [] } = useQuery({
+    queryKey: ['industries-all'],
+    queryFn:  getAllIndustries,
+    staleTime: 5 * 60 * 1000,
+  })
+
+  const { data: allCompanies = [] } = useQuery({
+    queryKey: ['companies-all'],
+    queryFn:  getAllCompanies,
+    staleTime: 5 * 60 * 1000,
   })
 
   const deleteMutation = useMutation({
@@ -537,6 +566,71 @@ export default function CategoriesPage() {
         <Breadcrumb crumbs={CRUMBS} />
       </div>
 
+      {/* ── Filter Panel ── */}
+      <TableFilter
+        open={open}
+        onToggle={toggle}
+        onApply={() => apply(resetPage)}
+        onClear={() => clear(resetPage)}
+        activeCount={activeCount}
+      >
+        <FilterField label="Search">
+          <input
+            className={FILTER_INPUT_CLS}
+            placeholder="Category or reference name…"
+            value={draft.search}
+            onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))}
+          />
+        </FilterField>
+
+        <FilterField label="Type">
+          <select
+            className={FILTER_SELECT_CLS}
+            value={draft.product_service_type}
+            onChange={(e) => setDraft((d) => ({ ...d, product_service_type: e.target.value }))}
+          >
+            <option value="">All types</option>
+            <option value="product">Product</option>
+            <option value="service">Service</option>
+          </select>
+        </FilterField>
+
+        <FilterField label="Parent Category">
+          <TreeSelect
+            name="parent_category_id"
+            value={draft.parent_category_id}
+            onChange={(e) => setDraft((d) => ({ ...d, parent_category_id: e.target.value }))}
+            items={allCategoriesFlat}
+            parentField="parent_category_id"
+            labelField="category_name"
+            placeholder="All categories"
+            emptyText="No categories available."
+          />
+        </FilterField>
+
+        <FilterField label="Industry">
+          <select
+            className={FILTER_SELECT_CLS}
+            value={draft.industry_id}
+            onChange={(e) => setDraft((d) => ({ ...d, industry_id: e.target.value }))}
+          >
+            <option value="">All industries</option>
+            {allIndustries.map((ind) => <option key={ind.id} value={ind.id}>{ind.name}</option>)}
+          </select>
+        </FilterField>
+
+        <FilterField label="Company">
+          <select
+            className={FILTER_SELECT_CLS}
+            value={draft.company_id}
+            onChange={(e) => setDraft((d) => ({ ...d, company_id: e.target.value }))}
+          >
+            <option value="">All companies</option>
+            {allCompanies.map((co) => <option key={co.id} value={co.id}>{co.name}</option>)}
+          </select>
+        </FilterField>
+      </TableFilter>
+
       <div className="mt-2 grid grid-cols-1 gap-2 lg:grid-cols-3">
 
         {/* ── LEFT: Table ─────────────────────────────────────────────── */}
@@ -569,7 +663,9 @@ export default function CategoriesPage() {
                     {rows.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="px-4 py-8 text-center text-sm text-slate-400">
-                          No categories yet. Use the form to create the first one.
+                          {activeCount > 0
+                            ? 'No categories match the current filters.'
+                            : 'No categories yet. Use the form to create the first one.'}
                         </td>
                       </tr>
                     ) : (

@@ -35,6 +35,7 @@ class StorePurchaseRequestRequest extends FormRequest
             'items'                        => ['required', 'array', 'min:1'],
             'items.*.product_id'           => ['required', 'integer', 'exists:inv_products,id'],
             'items.*.unit_id'              => ['required', 'integer', 'exists:inv_unit_types,id'],
+            'items.*.attribute_id'         => ['nullable', 'integer', 'exists:inv_attributes,id'],
             'items.*.quantity'             => ['required', 'numeric', 'min:0.0001'],
             'items.*.estimated_unit_price' => ['nullable', 'numeric', 'min:0'],
             'items.*.remarks'              => ['nullable', 'string', 'max:255'],

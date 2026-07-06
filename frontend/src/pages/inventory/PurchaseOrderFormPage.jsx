@@ -3,10 +3,11 @@ import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
-  Building2, CalendarDays, Package, Plus, RefreshCw, Save, Trash2, X,
+  AlertTriangle, Building2, CalendarDays, ChevronDown, Download, Package, Plus, Printer, RefreshCw, Save, Trash2, X,
 } from 'lucide-react'
 import {
   createPurchaseOrder,
+  downloadPoPdf,
   getNextPoNo,
   getPurchaseOrder,
   loadPOFromPR,
@@ -22,6 +23,7 @@ import { getAllAttributeTypes } from '../../api/attributeTypes'
 import { getAllAttributes } from '../../api/attributes'
 import Breadcrumb from '../../components/Breadcrumb'
 import { showError, showSuccess } from '../../utils/alerts'
+import { printPdfBlob } from '../../utils/pdf'
 
 const PAYMENT_TERMS = ['Net 15', 'Net 30', 'Net 45', 'Net 60', 'COD', 'Advance', 'LC']
 
@@ -55,18 +57,23 @@ const SELECT_DISABLED_CLS =
   'block w-full rounded border border-slate-200 bg-slate-100 px-2 py-1 text-xs text-slate-400 outline-none cursor-not-allowed'
 const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
 const ERR_CLS        = 'text-[10px] text-red-500 leading-tight'
-const TABLE_SELECT =
-  'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white cursor-pointer'
-const TABLE_SELECT_ERR =
-  'block w-full rounded border border-red-400 bg-red-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white cursor-pointer'
 const TABLE_INPUT =
   'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white'
+const TABLE_DROPDOWN_BTN =
+  'flex w-full items-center justify-between gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white cursor-pointer'
+const TABLE_DROPDOWN_BTN_ERR =
+  'flex w-full items-center justify-between gap-1 rounded border border-red-400 bg-red-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white cursor-pointer'
+const TABLE_DROPDOWN_BTN_DISABLED =
+  'flex w-full items-center justify-between gap-1 rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs text-slate-400 outline-none cursor-not-allowed'
 
-function SectionHeader({ icon: Icon, title, colorClass }) {
+function SectionHeader({ icon: Icon, title, colorClass, extra }) {
   return (
-    <div className={`flex items-center gap-1.5 px-3 py-1.5 border-b rounded-t-lg ${colorClass}`}>
-      {Icon && <Icon size={12} />}
-      <h2 className="text-xs font-bold">{title}</h2>
+    <div className={`flex items-center justify-between gap-1.5 px-3 py-1.5 border-b rounded-t-lg ${colorClass}`}>
+      <div className="flex items-center gap-1.5">
+        {Icon && <Icon size={12} />}
+        <h2 className="text-xs font-bold">{title}</h2>
+      </div>
+      {extra}
     </div>
   )
 }
@@ -173,6 +180,131 @@ function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClea
   )
 }
 
+/* ── Custom dropdown cell (Color / Unit) — opens automatically on focus so the
+   Enter-key row-navigation chain can "show the option pad" the way a native
+   <select> can't (browsers block scripts from opening a native select's popup). ── */
+function DropdownSelectCell({ groups, value, onChange, onNext, onBlur, placeholder = '—', disabled, error, cellRef }) {
+  const [open, setOpen] = useState(false)
+  const [highlightIdx, setHighlightIdx] = useState(0)
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 120 })
+  const btnRef = useRef(null)
+  const containerRef = useRef(null)
+
+  const flatItems = useMemo(() => groups.flatMap((g) => g.items), [groups])
+  const selected = flatItems.find((it) => String(it.value) === String(value))
+
+  const openDropdown = () => {
+    if (disabled) return
+    const idx = flatItems.findIndex((it) => String(it.value) === String(value))
+    setHighlightIdx(idx >= 0 ? idx : 0)
+    setOpen(true)
+  }
+
+  useEffect(() => {
+    if (open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setDropPos({ top: rect.bottom + 2, left: rect.left, width: Math.max(rect.width, 140) })
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const selectItem = (item) => {
+    onChange(item.value)
+    setOpen(false)
+    setTimeout(() => onNext?.(), 0)
+  }
+
+  const handleKeyDown = (e) => {
+    if (disabled) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (!open) { openDropdown(); return }
+      setHighlightIdx((i) => Math.min(i + 1, flatItems.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (!open) { openDropdown(); return }
+      setHighlightIdx((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (open && flatItems[highlightIdx]) {
+        selectItem(flatItems[highlightIdx])
+      } else {
+        setOpen(false)
+        onNext?.()
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setOpen(false)
+    } else if (e.key === ' ') {
+      e.preventDefault()
+      if (open) setOpen(false)
+      else openDropdown()
+    }
+  }
+
+  const btnClass = disabled ? TABLE_DROPDOWN_BTN_DISABLED : error ? TABLE_DROPDOWN_BTN_ERR : TABLE_DROPDOWN_BTN
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        ref={(el) => { btnRef.current = el; cellRef?.(el) }}
+        disabled={disabled}
+        onFocus={openDropdown}
+        onClick={() => { if (!disabled) { if (open) setOpen(false); else openDropdown() } }}
+        onKeyDown={handleKeyDown}
+        onBlur={onBlur}
+        className={btnClass}
+      >
+        <span className={`truncate text-left ${selected ? '' : 'text-slate-400'}`}>{selected ? selected.label : placeholder}</span>
+        <ChevronDown size={10} className="shrink-0 text-slate-400" />
+      </button>
+      {open && !disabled && createPortal(
+        <div
+          style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
+          className="rounded border border-slate-200 bg-white shadow-xl max-h-52 overflow-y-auto"
+        >
+          {flatItems.length === 0 && <div className="px-2 py-1.5 text-xs text-slate-400">No options</div>}
+          {groups.map((g, gi) => (
+            g.items.length === 0 ? null : (
+              <div key={gi}>
+                {g.label && (
+                  <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50">{g.label}</div>
+                )}
+                {g.items.map((it) => {
+                  const flatIdx = flatItems.indexOf(it)
+                  return (
+                    <button
+                      key={it.value}
+                      type="button"
+                      className={`block w-full px-2 py-1 text-left text-xs transition-colors ${
+                        flatIdx === highlightIdx ? 'bg-indigo-100 text-indigo-900' : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                      onMouseDown={(e) => { e.preventDefault(); selectItem(it) }}
+                      onMouseEnter={() => setHighlightIdx(flatIdx)}
+                    >
+                      {it.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          ))}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
 function emptyItem() {
   return {
     _key:             Date.now() + Math.random(),
@@ -244,6 +376,8 @@ export default function PurchaseOrderFormPage() {
   const [items, setItems]             = useState([emptyItem()])
   const [errors, setErrors]           = useState({})
   const [itemTouched, setItemTouched] = useState({})
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [isPrinting,    setIsPrinting]    = useState(false)
 
   /* ── Product search state (searchable dropdown for Order Items) ──── */
   const [productSearch, setProductSearch] = useState({ key: null, query: '', results: [], open: false })
@@ -415,7 +549,7 @@ export default function PurchaseOrderFormPage() {
           pr_item_id:       it.pr_item_id,
           quantity_ordered: it.quantity_ordered,
           unit_id:          it.unit_id ?? '',
-          attribute_id:     '',
+          attribute_id:     it.attribute_id != null ? String(it.attribute_id) : '',
           color_options:    [],
           unit_price:       it.unit_price,
           discount:         '',
@@ -595,6 +729,38 @@ export default function PurchaseOrderFormPage() {
     },
   })
 
+  /* ── PDF download / print ─────────────────────────────────── */
+  const handleDownloadPdf = async () => {
+    if (!isEdit) { showError('Save the purchase order first before downloading the PDF.'); return }
+    setIsDownloading(true)
+    try {
+      const blob = await downloadPoPdf(id)
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `PO_${form.po_no || id}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      showError('Failed to download PDF.')
+    } finally {
+      setIsDownloading(false)
+    }
+  }
+
+  const handlePrintPdf = async () => {
+    if (!isEdit) { showError('Save the purchase order first before printing.'); return }
+    setIsPrinting(true)
+    try {
+      const blob = await downloadPoPdf(id)
+      printPdfBlob(blob)
+    } catch {
+      showError('Failed to print PDF.')
+    } finally {
+      setIsPrinting(false)
+    }
+  }
+
   const handleSubmit = () => {
     const clientErrors = {}
 
@@ -700,6 +866,24 @@ export default function PurchaseOrderFormPage() {
     if (field === 'uom') return row.unit_id ? null : 'Required'
     return null
   }
+
+  // Rows sharing the same product + color — nudge the user to merge them instead of blocking save
+  const duplicateRowNumbers = useMemo(() => {
+    const groups = {}
+    items.forEach((row, idx) => {
+      if (!row.product_id) return
+      const key = `${row.product_id}|${row.attribute_id || ''}`
+      ;(groups[key] ??= []).push(idx + 1)
+    })
+    const result = {}
+    items.forEach((row) => {
+      if (!row.product_id) return
+      const key = `${row.product_id}|${row.attribute_id || ''}`
+      const rowNumbers = groups[key]
+      if (rowNumbers.length > 1) result[row._key] = rowNumbers
+    })
+    return result
+  }, [items])
 
   if (isEdit && loadingPO) {
     return (
@@ -859,7 +1043,34 @@ export default function PurchaseOrderFormPage() {
 
         {/* ── Order Items ── */}
         <div className="flex flex-col rounded-lg border border-slate-200 bg-white shadow-sm">
-          <SectionHeader icon={Package} title="Order Items" colorClass="text-violet-700 bg-violet-50 border-violet-100" />
+          <SectionHeader
+            icon={Package}
+            title="Order Items"
+            colorClass="text-violet-700 bg-violet-50 border-violet-100"
+            extra={
+              <div className="flex items-center gap-2">
+                {items.length > 0 && (
+                  <span className="text-[10px] text-slate-500">{items.length} line{items.length !== 1 ? 's' : ''}</span>
+                )}
+                <button
+                  type="button"
+                  onClick={addManualRow}
+                  title="Add new item (Alt+N)"
+                  className="flex items-center gap-1 rounded border border-violet-200 bg-white px-2 py-0.5 text-[10px] font-bold text-violet-700 hover:bg-violet-100 transition-colors"
+                >
+                  <Plus size={10} /> Add Row
+                  <span className="ml-0.5 rounded bg-violet-100 px-1 py-px text-[9px] font-mono text-violet-500">Alt+N</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addRows(5)}
+                  className="flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 hover:bg-slate-50 transition-colors"
+                >
+                  <Plus size={10} /> Add 5
+                </button>
+              </div>
+            }
+          />
 
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -897,25 +1108,23 @@ export default function PurchaseOrderFormPage() {
                           onClose={() => setProductSearch((prev) => ({ ...prev, open: false }))}
                           onInputRef={setCellRef(row._key, 'product')}
                         />
+                        {duplicateRowNumbers[row._key] && (
+                          <span className="mt-0.5 flex items-center gap-1 text-[9px] font-medium text-amber-600">
+                            <AlertTriangle size={10} />
+                            Same product &amp; color as row {duplicateRowNumbers[row._key].filter((n) => n !== idx + 1).join(', ')} — consider merging
+                          </span>
+                        )}
                       </td>
                       <td className="px-1.5 py-1">
-                        <select
-                          ref={setCellRef(row._key, 'color')}
+                        <DropdownSelectCell
+                          cellRef={setCellRef(row._key, 'color')}
                           value={row.attribute_id}
-                          onChange={(e) => setRowField(idx, 'attribute_id', e.target.value)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'qty') }
-                          }}
+                          groups={[{ label: null, items: row.color_options.map((c) => ({ value: String(c.id), label: c.name })) }]}
+                          onChange={(val) => setRowField(idx, 'attribute_id', val)}
+                          onNext={() => focusCell(row._key, 'qty')}
+                          placeholder={!row.product_id ? '—' : row.color_options.length === 0 ? 'No colors' : '—'}
                           disabled={!row.product_id || row.color_options.length === 0}
-                          className={TABLE_SELECT}
-                        >
-                          <option value="">
-                            {!row.product_id ? '—' : row.color_options.length === 0 ? 'No colors' : '—'}
-                          </option>
-                          {row.color_options.map((c) => (
-                            <option key={c.id} value={c.id}>{c.name}</option>
-                          ))}
-                        </select>
+                        />
                       </td>
                       <td className="px-1.5 py-1">
                         <input
@@ -929,23 +1138,18 @@ export default function PurchaseOrderFormPage() {
                       </td>
                       <td className="px-1.5 py-1">
                         <div className="flex flex-col gap-0.5">
-                          <select
-                            ref={setCellRef(row._key, 'unit')}
+                          <DropdownSelectCell
+                            cellRef={setCellRef(row._key, 'unit')}
                             value={row.unit_id}
-                            onChange={(e) => setRowField(idx, 'unit_id', e.target.value)}
+                            groups={Object.values(uomGroups).map((group) => ({
+                              label: group.name,
+                              items: group.items.map((u) => ({ value: String(u.id), label: u.symbol ?? u.name })),
+                            }))}
+                            onChange={(val) => setRowField(idx, 'unit_id', val)}
+                            onNext={() => focusCell(row._key, 'price')}
                             onBlur={() => touchItemField(row._key, 'uom')}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
-                            }}
-                            className={getItemErr(row._key, 'uom') ? TABLE_SELECT_ERR : TABLE_SELECT}
-                          >
-                            <option value="">—</option>
-                            {Object.entries(uomGroups).map(([catId, group]) => (
-                              <optgroup key={catId} label={group.name}>
-                                {group.items.map((u) => <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>)}
-                              </optgroup>
-                            ))}
-                          </select>
+                            error={getItemErr(row._key, 'uom')}
+                          />
                           {getItemErr(row._key, 'uom') && (
                             <span className="text-[9px] text-red-500 leading-none">Required</span>
                           )}
@@ -986,16 +1190,7 @@ export default function PurchaseOrderFormPage() {
 
               <tfoot>
                 <tr className="border-t border-slate-200 bg-slate-50/50">
-                  <td colSpan={7} className="px-2 py-1.5">
-                    <div className="flex gap-1.5">
-                      <button type="button" onClick={addManualRow} title="Add new item (Alt+N)" className="flex items-center gap-1 rounded border border-indigo-200 bg-white px-2 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 transition-colors">
-                        <Plus size={10} /> Add Row
-                      </button>
-                      <button type="button" onClick={() => addRows(5)} className="flex items-center gap-1 rounded border border-slate-200 bg-white px-2 py-1 text-xs font-bold text-slate-500 hover:bg-slate-50 transition-colors">
-                        <Plus size={10} /> Add 5
-                      </button>
-                    </div>
-                  </td>
+                  <td colSpan={7} className="px-2 py-1.5"></td>
                   <td className="px-1.5 py-1.5 text-right text-xs font-semibold text-slate-600 tabular-nums">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td className="px-1.5 py-1.5 text-center text-xs font-bold text-amber-600 tabular-nums">-{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                   <td className="px-1.5 py-1.5 text-right text-sm font-black text-slate-800 tabular-nums">{totals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
@@ -1027,7 +1222,35 @@ export default function PurchaseOrderFormPage() {
             </div>
           )}
 
-          <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-white px-3 py-2">
+          <div className="flex items-center justify-between gap-2 border-t border-slate-100 bg-white px-3 py-2">
+
+            {/* Left: PDF download + Print (edit mode only) */}
+            <div className="flex items-center gap-2">
+              {isEdit && (
+                <button
+                  type="button"
+                  onClick={handleDownloadPdf}
+                  disabled={isDownloading}
+                  className="flex items-center gap-1.5 rounded border border-red-200 bg-red-50 px-3 py-1 text-xs font-semibold text-red-700 hover:bg-red-100 transition-colors disabled:opacity-60"
+                >
+                  <Download size={12} />
+                  {isDownloading ? 'Generating…' : 'Download PDF'}
+                </button>
+              )}
+              {isEdit && (
+                <button
+                  type="button"
+                  onClick={handlePrintPdf}
+                  disabled={isPrinting}
+                  className="flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-60"
+                >
+                  <Printer size={12} />
+                  {isPrinting ? 'Preparing…' : 'Print'}
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
 
             {/* ── Status (always visible, before Clear) ── */}
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Status</span>
@@ -1049,6 +1272,8 @@ export default function PurchaseOrderFormPage() {
             <button type="button" disabled={saveMutation.isPending} onClick={handleSubmit} className="flex items-center gap-1 rounded bg-indigo-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-60 transition-all active:scale-95">
               {saveMutation.isPending ? <><RefreshCw size={11} className="animate-spin" /> Saving…</> : isEdit ? <><Save size={11} /> Update PO</> : <><Save size={11} /> Create PO</>}
             </button>
+
+            </div>
 
           </div>
 

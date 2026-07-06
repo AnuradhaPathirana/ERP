@@ -5,6 +5,7 @@ import { CheckCircle, Plus } from 'lucide-react'
 import {
   confirmGoodsReceivedNote,
   deleteGoodsReceivedNote,
+  downloadGrnPdf,
   getGoodsReceivedNotes,
 } from '../../api/goodsReceivedNotes'
 import { getAllSuppliers } from '../../api/suppliers'
@@ -14,7 +15,8 @@ import TableFilter, { FilterField } from '../../components/TableFilter'
 import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
 import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, confirmAction, showError, showSuccess } from '../../utils/alerts'
-import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
+import { printPdfBlob } from '../../utils/pdf'
+import { ViewBtn, EditBtn, DeleteBtn, PrintBtn, PdfBtn } from '../../components/ui/ActionButtons'
 import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 
 const CRUMBS = [
@@ -32,6 +34,7 @@ const STATUS_STYLES = {
 
 export default function GoodsReceivedNotesPage() {
   const [page, setPage] = useState(1)
+  const [pdfBusy, setPdfBusy] = useState(null) // { id, action: 'print' | 'download' }
   const queryClient     = useQueryClient()
   const resetPage       = () => setPage(1)
 
@@ -74,6 +77,35 @@ export default function GoodsReceivedNotesPage() {
       confirmText: 'Yes, Confirm & Post Stock',
     })
     if (ok) confirmMutation.mutate(id)
+  }
+
+  const handleDownloadPdf = async (id, grnNo) => {
+    setPdfBusy({ id, action: 'download' })
+    try {
+      const blob = await downloadGrnPdf(id)
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `GRN_${grnNo}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      showError('Failed to download PDF.')
+    } finally {
+      setPdfBusy(null)
+    }
+  }
+
+  const handlePrintPdf = async (id) => {
+    setPdfBusy({ id, action: 'print' })
+    try {
+      const blob = await downloadGrnPdf(id)
+      printPdfBlob(blob)
+    } catch {
+      showError('Failed to print PDF.')
+    } finally {
+      setPdfBusy(null)
+    }
   }
 
   const meta = data?.meta
@@ -178,6 +210,14 @@ export default function GoodsReceivedNotesPage() {
                         <td className="px-3 py-2">
                           <div className="flex items-center justify-end gap-1">
                             <ViewBtn to={`/inventory/goods-received-notes/${grn.id}`} />
+                            <PrintBtn
+                              onClick={() => handlePrintPdf(grn.id)}
+                              disabled={pdfBusy?.id === grn.id}
+                            />
+                            <PdfBtn
+                              onClick={() => handleDownloadPdf(grn.id, grn.grn_no)}
+                              disabled={pdfBusy?.id === grn.id}
+                            />
                             {grn.status === 'draft' && (
                               <>
                                 <EditBtn to={`/inventory/goods-received-notes/${grn.id}/edit`} />

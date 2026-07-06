@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import {
   deletePurchaseOrder,
+  downloadPoPdf,
   getPurchaseOrders,
 } from '../../api/purchaseOrders'
 import Pagination from '../../components/ui/Pagination'
@@ -13,7 +14,8 @@ import TableFilter, { FilterField } from '../../components/TableFilter'
 import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
 import { useTableFilter } from '../../hooks/useTableFilter'
 import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
-import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
+import { printPdfBlob } from '../../utils/pdf'
+import { ViewBtn, EditBtn, DeleteBtn, PrintBtn, PdfBtn } from '../../components/ui/ActionButtons'
 import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 
 const CRUMBS = [
@@ -44,6 +46,7 @@ const STATUS_OPTIONS = [
 
 export default function PurchaseOrdersPage() {
   const [page, setPage] = useState(1)
+  const [pdfBusy, setPdfBusy] = useState(null) // { id, action: 'print' | 'download' }
   const queryClient     = useQueryClient()
   const resetPage       = () => setPage(1)
 
@@ -71,6 +74,35 @@ export default function PurchaseOrdersPage() {
 
   const handleDelete = async (id, poNo) => {
     if (await confirmDelete(poNo)) deleteMutation.mutate(id)
+  }
+
+  const handleDownloadPdf = async (id, poNo) => {
+    setPdfBusy({ id, action: 'download' })
+    try {
+      const blob = await downloadPoPdf(id)
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      a.href     = url
+      a.download = `PO_${poNo}.pdf`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      showError('Failed to download PDF.')
+    } finally {
+      setPdfBusy(null)
+    }
+  }
+
+  const handlePrintPdf = async (id) => {
+    setPdfBusy({ id, action: 'print' })
+    try {
+      const blob = await downloadPoPdf(id)
+      printPdfBlob(blob)
+    } catch {
+      showError('Failed to print PDF.')
+    } finally {
+      setPdfBusy(null)
+    }
   }
 
   const meta = data?.meta
@@ -176,6 +208,14 @@ export default function PurchaseOrdersPage() {
                         <td className="px-3 py-2">
                           <div className="flex items-center justify-end gap-1">
                             <ViewBtn to={`/inventory/purchase-orders/${po.id}`} />
+                            <PrintBtn
+                              onClick={() => handlePrintPdf(po.id)}
+                              disabled={pdfBusy?.id === po.id}
+                            />
+                            <PdfBtn
+                              onClick={() => handleDownloadPdf(po.id, po.po_no)}
+                              disabled={pdfBusy?.id === po.id}
+                            />
                             {(po.status === 'draft' || po.status === 'sent') && (
                               <EditBtn to={`/inventory/purchase-orders/${po.id}/edit`} />
                             )}

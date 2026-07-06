@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-<title>GRN — {{ $grn->grn_no }}</title>
+<title>PO — {{ $po->po_no }}</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'DejaVu Sans', Arial, sans-serif; font-size: 8.5pt; color: #1e293b; background: #fff; }
@@ -18,7 +18,7 @@
   .company-sub  { font-size: 7.5pt; color: #475569; margin-top: 1px; line-height: 1.4; }
   .doc-title    { font-size: 15pt; font-weight: 700; color: #111827; text-align: left; letter-spacing: 0.2px; white-space: nowrap; }
 
-  /* ── Doc meta (GRN No / PO No, under the title) ── */
+  /* ── Doc meta (PO No / Date, under the title) ── */
   .doc-meta { margin-top: 6px; border-collapse: collapse; }
   .doc-meta td { font-size: 7.8pt; padding: 2px 0; white-space: nowrap; text-align: left; }
   .meta-label { color: #475569; padding-left: 4px; }
@@ -71,16 +71,16 @@
 <div class="page">
 
   @php
-    $company  = $grn->location?->company;
-    $store    = $grn->store;
+    $company = $po->location?->company;
+    $store   = $po->store;
 
-    $gross       = $grn->items->sum(fn ($it) => (float) $it->quantity_received * (float) $it->unit_price);
-    $discount    = $grn->items->sum(fn ($it) => (float) $it->quantity_received * (float) $it->unit_price * ((float) $it->discount / 100));
-    $net         = (float) $grn->total_amount;
+    $gross       = $po->items->sum(fn ($it) => (float) $it->quantity_ordered * (float) $it->unit_price);
+    $discount    = $po->items->sum(fn ($it) => (float) $it->quantity_ordered * (float) $it->unit_price * ((float) $it->discount / 100));
+    $net         = (float) $po->grand_total;
     $discountPct = $gross > 0 ? round($discount / $gross * 100, 2) : 0;
-    $totalQty    = $grn->items->sum(fn ($it) => (float) $it->quantity_received);
+    $totalQty    = $po->items->sum(fn ($it) => (float) $it->quantity_ordered);
 
-    $amountInWords = \Modules\Inventory\Support\NumberToWords::convert($net, $grn->location?->base_currency ?? '');
+    $amountInWords = \Modules\Inventory\Support\NumberToWords::convert($net, $po->location?->base_currency ?? '');
   @endphp
 
   {{-- ══ HEADER ══════════════════════════════════════════════ --}}
@@ -99,22 +99,20 @@
         @endif
         </td>
         <td style="width:45%; vertical-align:top;">
-          <div class="doc-title">GOODS RECEIVED NOTE</div>
+          <div class="doc-title">PURCHASE ORDER</div>
           <table class="doc-meta">
             <tr>
-              <td class="meta-label" style="padding-left:0;">GRN No :</td>
-              <td class="meta-value">{{ $grn->grn_no }}</td>
-              <td class="meta-label">Date :</td>
-              <td class="meta-value" style="padding-right:0;">{{ $grn->grn_date?->format('Y-m-d') }}</td>
-            </tr>
-            @if($grn->purchaseOrder)
-            <tr>
               <td class="meta-label" style="padding-left:0;">PO No :</td>
-              <td class="meta-value">{{ $grn->purchaseOrder->po_no }}</td>
+              <td class="meta-value">{{ $po->po_no }}</td>
               <td class="meta-label">Date :</td>
-              <td class="meta-value" style="padding-right:0;">{{ $grn->purchaseOrder->order_date?->format('Y-m-d') }}</td>
+              <td class="meta-value" style="padding-right:0;">{{ $po->order_date?->format('Y-m-d') }}</td>
             </tr>
-            @endif
+            <tr>
+              <td class="meta-label" style="padding-left:0;">Location :</td>
+              <td class="meta-value">{{ $po->location?->location_name ?? '—' }}</td>
+              <td class="meta-label">Exp. Date :</td>
+              <td class="meta-value" style="padding-right:0;">{{ $po->expected_delivery_date?->format('Y-m-d') ?? '—' }}</td>
+            </tr>
           </table>
         </td>
       </tr>
@@ -128,23 +126,11 @@
         {{-- Vendor --}}
         <td style="width:55%; vertical-align:top;">
           <div class="party-title">Vendor</div>
-          @if($grn->supplier)
-          <div class="party-line party-name">{{ $grn->supplier->supplier_name }}</div>
-          @php
-            $vendorAddress = collect([
-              $grn->supplier->bil_address_line_1,
-              $grn->supplier->bil_address_line_2,
-              $grn->supplier->bil_address_line_3,
-            ])->filter()->implode(', ');
-            $vendorCityLine = collect([
-              $grn->supplier->bil_city,
-              $grn->supplier->bil_postal_code,
-            ])->filter()->implode(', ');
-          @endphp
-          @if($vendorAddress)<div class="party-line">{{ $vendorAddress }}</div>@endif
-          @if($vendorCityLine)<div class="party-line">{{ $vendorCityLine }}</div>@endif
-          @if($grn->supplier->mobile ?? $grn->supplier->land_line ?? null)
-          <div class="party-line">{{ $grn->supplier->mobile ?: $grn->supplier->land_line }}</div>
+          @if($po->supplier)
+          <div class="party-line party-name">{{ $po->supplier->supplier_name }}</div>
+          @if($po->billing_address)<div class="party-line">{{ $po->billing_address }}</div>@endif
+          @if($po->contact_person_name)
+          <div class="party-line">{{ $po->contact_person_name }}{{ $po->contact_person_phone ? ' — ' . $po->contact_person_phone : '' }}</div>
           @endif
           @else
           <div class="party-line muted">No supplier linked.</div>
@@ -184,13 +170,13 @@
         </tr>
       </thead>
       <tbody>
-        @foreach($grn->items as $item)
+        @foreach($po->items as $item)
         <tr>
           <td class="mono">{{ $item->product?->product_code ?? '—' }}</td>
           <td class="bold">{{ $item->product?->name ?? '—' }}</td>
           <td class="ta-c">{{ $item->attribute?->attribute_name ?? '—' }}</td>
           <td class="ta-r">
-            {{ number_format((float) $item->quantity_received, 2) }}
+            {{ number_format((float) $item->quantity_ordered, 2) }}
             <span class="unit">{{ $item->unit?->symbol ?? $item->unit?->name }}</span>
           </td>
           <td class="ta-r">{{ number_format((float) $item->unit_price, 2) }}</td>
@@ -234,10 +220,10 @@
   <div class="amount-words">{{ $amountInWords }}</div>
 
   {{-- ══ NOTE ════════════════════════════════════════════════ --}}
-  @if($grn->remarks)
+  @if($po->remarks)
   <div class="note-box">
     <div class="note-label">Note</div>
-    {{ $grn->remarks }}
+    {{ $po->remarks }}
   </div>
   @endif
 
@@ -253,7 +239,7 @@
         <div class="sig-line">Approved By</div>
       </td>
       <td style="width:34%;">
-        <div class="sig-name">{{ $grn->receivedBy?->name }}</div>
+        <div class="sig-name">{{ $po->createdBy?->name }}</div>
         <div class="sig-line">Prepared By</div>
       </td>
     </tr>
@@ -261,7 +247,7 @@
 
   {{-- ══ FOOTER ══════════════════════════════════════════════ --}}
   <div class="footer">
-    Printed {{ now()->format('l, d M Y h:i A') }}{{ $grn->receivedBy ? ' | ' . $grn->receivedBy->name : '' }}
+    Printed {{ now()->format('l, d M Y h:i A') }}{{ $po->createdBy ? ' | ' . $po->createdBy->name : '' }}
     @if($company)
     <div class="footer-company" style="margin-top:4px;">{{ $company->company_name }}</div>
     <div>

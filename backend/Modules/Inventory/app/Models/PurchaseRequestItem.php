@@ -15,6 +15,7 @@ class PurchaseRequestItem extends Model
         'pr_id',
         'product_id',
         'unit_id',
+        'attribute_id',
         'quantity',
         'estimated_unit_price',
         'remarks',
@@ -24,6 +25,7 @@ class PurchaseRequestItem extends Model
         'pr_id'                => 'integer',
         'product_id'           => 'integer',
         'unit_id'              => 'integer',
+        'attribute_id'         => 'integer',
         'quantity'             => 'decimal:4',
         'estimated_unit_price' => 'decimal:4',
     ];
@@ -41,5 +43,10 @@ class PurchaseRequestItem extends Model
     public function unit(): BelongsTo
     {
         return $this->belongsTo(UnitType::class, 'unit_id');
+    }
+
+    public function attribute(): BelongsTo
+    {
+        return $this->belongsTo(Attribute::class, 'attribute_id');
     }
 }

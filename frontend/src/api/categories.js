@@ -3,8 +3,8 @@ import api from './axios'
 export const getAllCategories = () =>
   api.get('/api/v1/categories/all').then((r) => r.data.data)
 
-export const getCategories = (page = 1) =>
-  api.get('/api/v1/categories', { params: { page } }).then((r) => r.data)
+export const getCategories = (page = 1, filters = {}) =>
+  api.get('/api/v1/categories', { params: { page, ...filters } }).then((r) => r.data)
 
 export const getCategory = (id) =>
   api.get(`/api/v1/categories/${id}`).then((r) => r.data)

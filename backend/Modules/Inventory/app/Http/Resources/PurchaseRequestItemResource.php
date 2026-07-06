@@ -17,6 +17,7 @@ class PurchaseRequestItemResource extends JsonResource
             'pr_id'                 => $this->pr_id,
             'product_id'            => $this->product_id,
             'unit_id'               => $this->unit_id,
+            'attribute_id'          => $this->attribute_id,
             'quantity'              => (float) $this->quantity,
             'estimated_unit_price'  => $this->estimated_unit_price !== null
                                            ? (float) $this->estimated_unit_price
@@ -34,6 +35,10 @@ class PurchaseRequestItemResource extends JsonResource
                 'id'   => $this->unit->id,
                 'name' => $this->unit->name,
             ]),
+            'attribute' => $this->whenLoaded('attribute', fn () => $this->attribute ? [
+                'id'   => $this->attribute->id,
+                'name' => $this->attribute->attribute_name,
+            ] : null),
         ];
     }
 }

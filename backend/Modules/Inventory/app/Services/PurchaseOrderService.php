@@ -78,7 +78,7 @@ class PurchaseOrderService
     /** Load PR items into PO draft (pre-populate from an approved PR) */
     public function loadFromPR(int $prId): array
     {
-        $pr = PurchaseRequest::with(['items.product', 'items.unit'])->findOrFail($prId);
+        $pr = PurchaseRequest::with(['items.product', 'items.unit', 'items.attribute'])->findOrFail($prId);
 
         if ($pr->status !== PurchaseRequestStatus::Approved) {
             abort(422, 'Purchase requests must be approved before creating a PO.');
@@ -90,6 +90,7 @@ class PurchaseOrderService
                 'pr_item_id'     => $item->id,
                 'product_id'     => $item->product_id,
                 'unit_id'        => $item->unit_id,
+                'attribute_id'   => $item->attribute_id,
                 'quantity_ordered' => (float) $item->quantity,
                 'unit_price'     => (float) ($item->estimated_unit_price ?? 0),
                 'product'        => [

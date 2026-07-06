@@ -23,3 +23,7 @@ export const loadPOFromPR = (prId) =>
 
 export const getNextPoNo = () =>
   api.get('/api/v1/purchase-orders/next-po-no').then((r) => r.data.data)
+
+/** Download PO as PDF — returns a Blob */
+export const downloadPoPdf = (id) =>
+  api.get(`/api/v1/purchase-orders/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data)

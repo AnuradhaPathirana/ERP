@@ -7,29 +7,28 @@ namespace Modules\Inventory\Http\Controllers;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller;
-use Modules\Inventory\Models\GoodsReceivedNote;
+use Modules\Inventory\Models\PurchaseOrder;
 
-class GrnPdfController extends Controller
+class PurchaseOrderPdfController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('permission:view_grns');
+        $this->middleware('permission:view_purchase_orders');
     }
 
-    public function download(GoodsReceivedNote $goodsReceivedNote): Response
+    public function download(PurchaseOrder $purchaseOrder): Response
     {
-        $grn = GoodsReceivedNote::with([
+        $po = PurchaseOrder::with([
             'items.product',
             'items.unit',
             'items.attribute',
-            'purchaseOrder',
             'supplier',
             'store',
             'location.company',
-            'receivedBy',
-        ])->findOrFail($goodsReceivedNote->id);
+            'createdBy',
+        ])->findOrFail($purchaseOrder->id);
 
-        $pdf = Pdf::loadView('inventory::pdf.grn', ['grn' => $grn])
+        $pdf = Pdf::loadView('inventory::pdf.purchase_order', ['po' => $po])
             ->setPaper('a4', 'portrait')
             ->setOptions([
                 'defaultFont'     => 'DejaVu Sans',
@@ -39,7 +38,7 @@ class GrnPdfController extends Controller
                 'defaultPaperSize' => 'a4',
             ]);
 
-        $filename = "GRN_{$grn->grn_no}.pdf";
+        $filename = "PO_{$po->po_no}.pdf";
 
         return $pdf->download($filename);
     }

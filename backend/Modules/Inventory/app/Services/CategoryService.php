@@ -12,11 +12,37 @@ use Modules\Inventory\Models\Category;
 
 class CategoryService
 {
-    public function paginate(int $perPage = 50): LengthAwarePaginator
+    /** @param array<string, mixed> $filters */
+    public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
-        return Category::with('parent')
-            ->orderBy('category_name')
-            ->paginate($perPage);
+        $query = Category::with('parent')
+            ->orderBy('category_name');
+
+        if (!empty($filters['search'])) {
+            $term = '%' . $filters['search'] . '%';
+            $query->where(function ($q) use ($term) {
+                $q->where('category_name', 'like', $term)
+                    ->orWhere('reference_name', 'like', $term);
+            });
+        }
+
+        if (!empty($filters['product_service_type'])) {
+            $query->where('product_service_type', $filters['product_service_type']);
+        }
+
+        if (!empty($filters['parent_category_id'])) {
+            $query->where('parent_category_id', (int) $filters['parent_category_id']);
+        }
+
+        if (!empty($filters['industry_id'])) {
+            $query->where('industry_id', (int) $filters['industry_id']);
+        }
+
+        if (!empty($filters['company_id'])) {
+            $query->where('company_id', (int) $filters['company_id']);
+        }
+
+        return $query->paginate($perPage);
     }
 
     public function find(int $id): Category

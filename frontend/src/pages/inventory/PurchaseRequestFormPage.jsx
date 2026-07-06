@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
-  CalendarDays, ClipboardList, Plus, RefreshCw, Save, Trash2, Warehouse,
+  AlertTriangle, CalendarDays, ChevronDown, ClipboardList, Plus, RefreshCw, Save, Trash2, Warehouse, X,
 } from 'lucide-react'
 import {
   createPurchaseRequest,
@@ -13,7 +14,10 @@ import {
 import { getAllLocations } from '../../api/locations'
 import { getAllStores } from '../../api/stores'
 import { getAllCustomers } from '../../api/customers'
-import { getAllUnitTypes } from '../../api/unitTypes'
+import { getAllUnitTypesFlat } from '../../api/unitTypes'
+import { getProducts, getProduct } from '../../api/products'
+import { getAllAttributeTypes } from '../../api/attributeTypes'
+import { getAllAttributes } from '../../api/attributes'
 import Breadcrumb from '../../components/Breadcrumb'
 import { showError, showSuccess } from '../../utils/alerts'
 import api from '../../api/axios'
@@ -26,24 +30,256 @@ const INPUT_ERR_CLS =
   'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
 const SELECT_CLS =
   'block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer'
-const SELECT_ERR_CLS =
-  'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15 cursor-pointer'
 const SELECT_DISABLED_CLS =
   'block w-full rounded-md border-2 border-slate-200 bg-slate-100 px-2 py-1 text-xs text-slate-400 outline-none cursor-not-allowed'
-const TABLE_SELECT =
-  'block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer'
-const TABLE_SELECT_ERR =
-  'block w-full rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15 cursor-pointer'
 const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
 const ERR_CLS   = 'mt-0.5 text-[10px] text-red-500'
 
-function SectionHeader({ icon: Icon, title, colorClass }) {
+function SectionHeader({ icon: Icon, title, colorClass, extra }) {
   return (
-    <div className={`flex items-center gap-1.5 px-3 py-2 border-b ${colorClass}`}>
-      {Icon && <Icon size={13} />}
-      <h2 className="text-xs font-bold">{title}</h2>
+    <div className={`flex items-center justify-between gap-1.5 px-3 py-2 border-b ${colorClass}`}>
+      <div className="flex items-center gap-1.5">
+        {Icon && <Icon size={13} />}
+        <h2 className="text-xs font-bold">{title}</h2>
+      </div>
+      {extra}
     </div>
   )
+}
+
+/* ── Product search cell (searchable dropdown, same style as PO/GRN's Product cell) ── */
+function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClear, onClose, onInputRef }) {
+  const [highlightIdx, setHighlightIdx] = useState(0)
+  const [dropPos, setDropPos]           = useState({ top: 0, left: 0, width: 280 })
+  const inputRef = useRef(null)
+
+  const results    = productSearch.key === row._key ? (productSearch.results ?? []) : []
+  const isOpen     = productSearch.key === row._key && productSearch.open && results.length > 0
+  const isSelected = Boolean(row.product_id)
+
+  useEffect(() => { setHighlightIdx(0) }, [results.length])
+
+  useEffect(() => {
+    if (isOpen && inputRef.current) {
+      const rect = inputRef.current.getBoundingClientRect()
+      setDropPos({
+        top:   rect.bottom + 2,
+        left:  rect.left,
+        width: Math.max(rect.width, 280),
+      })
+    }
+  }, [isOpen])
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'ArrowDown') {
+      if (!isOpen) return
+      e.preventDefault()
+      setHighlightIdx((i) => Math.min(i + 1, results.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      if (!isOpen) return
+      e.preventDefault()
+      setHighlightIdx((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (isOpen && results[highlightIdx]) onSelect(row._key, results[highlightIdx])
+    } else if (e.key === 'Escape') {
+      onClose?.()
+    }
+  }
+
+  if (isSelected) {
+    return (
+      <div className="flex items-center gap-1 min-w-0">
+        <span className="truncate text-xs font-medium text-slate-700">{row.product_name}</span>
+        <button
+          type="button"
+          title="Clear product"
+          onClick={() => onClear(row._key)}
+          className="shrink-0 text-slate-300 hover:text-red-500 transition-colors"
+        >
+          <X size={10} />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative">
+      <input
+        ref={(el) => { inputRef.current = el; onInputRef?.(el) }}
+        type="text"
+        placeholder="Search product…"
+        className={INPUT_CLS}
+        value={productSearch.key === row._key ? productSearch.query : ''}
+        onChange={(e) => onQueryChange(row._key, e.target.value)}
+        onKeyDown={handleKeyDown}
+        onFocus={() => {
+          const currentQuery = productSearch.key === row._key ? productSearch.query : ''
+          onQueryChange(row._key, currentQuery)
+        }}
+        autoComplete="off"
+      />
+      {isOpen && createPortal(
+        <div
+          style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
+          className="rounded-md border border-slate-200 bg-white shadow-xl max-h-52 overflow-y-auto"
+        >
+          {results.map((p, i) => (
+            <button
+              key={p.id}
+              type="button"
+              className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition-colors ${
+                i === highlightIdx
+                  ? 'bg-indigo-100 text-indigo-900'
+                  : 'hover:bg-slate-50 text-slate-700'
+              }`}
+              onMouseDown={(e) => { e.preventDefault(); onSelect(row._key, p) }}
+              onMouseEnter={() => setHighlightIdx(i)}
+            >
+              <span className="font-mono text-[10px] text-indigo-400 shrink-0 w-20 truncate">{p.product_code}</span>
+              <span className="truncate font-medium">{p.name}</span>
+            </button>
+          ))}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+/* ── Custom dropdown (Color / UOM) — opens its option pad automatically on focus
+   so the Enter-key chain can "show the pad" the way a native <select> can't
+   (browsers block scripts from opening a native select's popup). ── */
+function DropdownSelectCell({ groups, value, onChange, onNext, onBlur, placeholder = '—', disabled, error, cellRef }) {
+  const [open, setOpen] = useState(false)
+  const [highlightIdx, setHighlightIdx] = useState(0)
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: 140 })
+  const btnRef = useRef(null)
+  const containerRef = useRef(null)
+
+  const flatItems = groups.flatMap((g) => g.items)
+  const selected = flatItems.find((it) => String(it.value) === String(value))
+
+  const openDropdown = () => {
+    if (disabled) return
+    const idx = flatItems.findIndex((it) => String(it.value) === String(value))
+    setHighlightIdx(idx >= 0 ? idx : 0)
+    setOpen(true)
+  }
+
+  useEffect(() => {
+    if (open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setDropPos({ top: rect.bottom + 2, left: rect.left, width: Math.max(rect.width, 140) })
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const selectItem = (item) => {
+    onChange(item.value)
+    setOpen(false)
+    setTimeout(() => onNext?.(), 0)
+  }
+
+  const handleKeyDown = (e) => {
+    if (disabled) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (!open) { openDropdown(); return }
+      setHighlightIdx((i) => Math.min(i + 1, flatItems.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (!open) { openDropdown(); return }
+      setHighlightIdx((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (open && flatItems[highlightIdx]) {
+        selectItem(flatItems[highlightIdx])
+      } else {
+        setOpen(false)
+        onNext?.()
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setOpen(false)
+    } else if (e.key === ' ') {
+      e.preventDefault()
+      if (open) setOpen(false)
+      else openDropdown()
+    }
+  }
+
+  const btnClass = disabled
+    ? 'flex w-full items-center justify-between gap-1 rounded-md border-2 border-slate-200 bg-slate-100 px-2 py-0.5 text-xs text-slate-400 outline-none cursor-not-allowed'
+    : error
+      ? 'flex w-full items-center justify-between gap-1 rounded-md border-2 border-red-300 bg-red-50/40 px-2 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15 cursor-pointer'
+      : 'flex w-full items-center justify-between gap-1 rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer'
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        ref={(el) => { btnRef.current = el; cellRef?.(el) }}
+        disabled={disabled}
+        onFocus={openDropdown}
+        onClick={() => { if (!disabled) { if (open) setOpen(false); else openDropdown() } }}
+        onKeyDown={handleKeyDown}
+        onBlur={onBlur}
+        className={btnClass}
+      >
+        <span className={`truncate text-left ${selected ? '' : 'text-slate-400'}`}>{selected ? selected.label : placeholder}</span>
+        <ChevronDown size={11} className="shrink-0 text-slate-400" />
+      </button>
+      {open && !disabled && createPortal(
+        <div
+          style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
+          className="rounded-md border border-slate-200 bg-white shadow-xl max-h-56 overflow-y-auto"
+        >
+          {flatItems.length === 0 && <div className="px-2 py-1.5 text-xs text-slate-400">No options</div>}
+          {groups.map((g, gi) => (
+            g.items.length === 0 ? null : (
+              <div key={gi}>
+                {g.label && (
+                  <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50">{g.label}</div>
+                )}
+                {g.items.map((it) => {
+                  const flatIdx = flatItems.indexOf(it)
+                  return (
+                    <button
+                      key={it.value}
+                      type="button"
+                      className={`block w-full px-2 py-1.5 text-left text-xs transition-colors ${
+                        flatIdx === highlightIdx ? 'bg-indigo-100 text-indigo-900' : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                      onMouseDown={(e) => { e.preventDefault(); selectItem(it) }}
+                      onMouseEnter={() => setHighlightIdx(flatIdx)}
+                    >
+                      {it.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          ))}
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
+// "Color" or "Colour" — attribute-type spelling varies by who entered the master data.
+function isColorAttributeTypeName(name) {
+  const n = (name || '').trim().toLowerCase()
+  return n === 'color' || n === 'colour'
 }
 
 function emptyRow() {
@@ -53,6 +289,8 @@ function emptyRow() {
     product_code:  '',
     product_name:  '',
     unit_id:       '',
+    attribute_id:  '',
+    color_options: [],
     quantity:      '',
     stock_in_hand: null,
   }
@@ -88,14 +326,78 @@ export default function PurchaseRequestFormPage() {
   const [items, setItems]       = useState([emptyRow()])
   const [errors, setErrors]     = useState({})
   const [itemTouched, setItemTouched] = useState({})
-  const [products, setProducts] = useState([])
   const stockCache = useRef({})
   const itemsRef   = useRef(items)
+
+  /* ── Product search state (searchable dropdown for Request Items) ──── */
+  const [productSearch, setProductSearch] = useState({ key: null, query: '', results: [], open: false })
+  const searchTimerRef = useRef(null)
+
+  /* ── Header field ref — Source Location → Source Store chain ──────── */
+  const sourceStoreFieldRef = useRef(null)
+
+  /* ── Cell refs for Enter-key row navigation ───────────────── */
+  const cellRefs = useRef({}) // { [rowKey]: { product, color, uom, qty } }
+
+  const setCellRef = (rowKey, field) => (el) => {
+    if (!cellRefs.current[rowKey]) cellRefs.current[rowKey] = {}
+    cellRefs.current[rowKey][field] = el
+  }
+
+  const focusCell = (rowKey, field) => {
+    cellRefs.current[rowKey]?.[field]?.focus()
+  }
 
   const { data: locations  = [] } = useQuery({ queryKey: ['locations-all'],   queryFn: getAllLocations })
   const { data: stores     = [] } = useQuery({ queryKey: ['stores-all'],      queryFn: getAllStores })
   const { data: customers  = [] } = useQuery({ queryKey: ['customers-all'],   queryFn: getAllCustomers })
-  const { data: unitTypes  = [] } = useQuery({ queryKey: ['unit-types-all'],  queryFn: () => getAllUnitTypes() })
+  // Flat, cross-category list — a product's UOM (from its sales channel) may belong
+  // to any unit category, not just the system default one.
+  const { data: unitTypes  = [] } = useQuery({ queryKey: ['unit-types-flat'], queryFn: getAllUnitTypesFlat, staleTime: 5 * 60 * 1000 })
+  const uomGroups = unitTypes.reduce((acc, u) => {
+    const key = String(u.unit_category_id)
+    if (!acc[key]) acc[key] = { name: u.unit_category_name ?? 'Other', items: [] }
+    acc[key].items.push(u)
+    return acc
+  }, {})
+
+  // Color options are scoped to the SELECTED PRODUCT's own "Product Attributes"
+  // (set at product creation), not just its category — a product may only come in
+  // a subset of the colors its category's Color attribute type defines.
+  const { data: attributeTypes = [] } = useQuery({ queryKey: ['attribute-types-all'], queryFn: getAllAttributeTypes })
+  const { data: allAttributes  = [] } = useQuery({ queryKey: ['attributes-all'],      queryFn: getAllAttributes })
+  const colorOptionsCache = useRef({})
+
+  const loadColorOptions = (productId) => {
+    if (!productId) return Promise.resolve([])
+    if (colorOptionsCache.current[productId]) return colorOptionsCache.current[productId]
+
+    const promise = getProduct(productId)
+      .then((res) => {
+        const colorTypeIds = new Set(
+          attributeTypes.filter((t) => isColorAttributeTypeName(t.attribute_type_name)).map((t) => String(t.id))
+        )
+        return (res.data.product_attributes ?? [])
+          .filter((pa) => colorTypeIds.has(String(pa.attribute_type_id)))
+          .map((pa) => allAttributes.find((a) => String(a.id) === String(pa.attribute_id)))
+          .filter(Boolean)
+          .map((a) => ({ id: a.id, name: a.attribute_name }))
+      })
+      .catch(() => [])
+
+    colorOptionsCache.current[productId] = promise
+    return promise
+  }
+
+  // Populate color_options for already-loaded rows (edit mode) without blocking the initial render
+  const hydrateColorOptions = (rows) => {
+    rows.forEach((row) => {
+      if (!row.product_id) return
+      loadColorOptions(row.product_id).then((options) => {
+        setItems((prev) => prev.map((r) => r._key === row._key ? { ...r, color_options: options } : r))
+      })
+    })
+  }
 
   const { data: nextRefNo } = useQuery({
     queryKey: ['purchase-requests-next-ref-no'],
@@ -124,16 +426,6 @@ export default function PurchaseRequestFormPage() {
       setForm((f) => ({ ...f, reference_no: nextRefNo }))
     }
   }, [nextRefNo, isEdit])
-
-  // Pre-fill UOM with "m" for rows that have no unit set yet
-  useEffect(() => {
-    if (!unitTypes.length) return
-    const mUnit = unitTypes.find((u) => u.symbol === 'm' || u.name === 'm')
-    if (!mUnit) return
-    setItems((prev) =>
-      prev.map((row) => row.unit_id === '' ? { ...row, unit_id: String(mUnit.id) } : row)
-    )
-  }, [unitTypes])
 
   // Keep itemsRef current so the stock effect reads the latest rows without a stale closure
   useEffect(() => { itemsRef.current = items }, [items])
@@ -174,12 +466,6 @@ export default function PurchaseRequestFormPage() {
     ? stores.filter((s) => String(s.location_id) === String(form.target_location_id))
     : []
 
-  useEffect(() => {
-    api.get('/api/v1/products', { params: { per_page: 1000 } })
-      .then((r) => setProducts(r.data.data ?? []))
-      .catch(() => {})
-  }, [])
-
   const { data: existingPR, isLoading: loadingPR } = useQuery({
     queryKey: ['purchase-request', id],
     queryFn:  () => getPurchaseRequest(id),
@@ -204,39 +490,107 @@ export default function PurchaseRequestFormPage() {
       status:              pr.status              ?? 'approved',
     })
     if (pr.items?.length) {
-      setItems(pr.items.map((it) => ({
+      const mappedItems = pr.items.map((it) => ({
         _key:          it.id,
         product_id:    it.product_id,
         product_code:  it.product?.product_code ?? '',
         product_name:  it.product?.name         ?? '',
         unit_id:       it.unit_id               ?? '',
+        attribute_id:  it.attribute_id != null ? String(it.attribute_id) : '',
+        color_options: [],
         quantity:      it.quantity,
         stock_in_hand: null,
-      })))
+      }))
+      setItems(mappedItems)
+      hydrateColorOptions(mappedItems)
     }
   }, [existingPR])
 
-  const handleProductSelect = async (idx, productId) => {
-    const product = products.find((p) => p.id === parseInt(productId))
-    const stock   = product ? await fetchStock(product.id, form.source_store_id) : null
-    setItems((prev) => prev.map((row, i) =>
-      i === idx
-        ? { ...row, product_id: productId, product_code: product?.product_code ?? '', product_name: product?.name ?? '', stock_in_hand: stock }
-        : row,
-    ))
+  /* ── Product search for Request Items ─────────────────────── */
+  const handleProductQueryChange = (rowKey, query) => {
+    setProductSearch({ key: rowKey, query, results: [], open: true })
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+
+    const doFetch = async (search) => {
+      try {
+        const params = search ? { search, per_page: 30 } : { per_page: 100 }
+        const res = await getProducts(1, params)
+        setProductSearch((prev) =>
+          prev.key === rowKey
+            ? { ...prev, results: res.data ?? [], open: true }
+            : prev
+        )
+      } catch { /* silent */ }
+    }
+
+    if (query === '') {
+      doFetch('')
+    } else {
+      searchTimerRef.current = setTimeout(() => doFetch(query), 300)
+    }
   }
 
-  const defaultUnitId = () => {
-    const mUnit = unitTypes.find((u) => u.symbol === 'm' || u.name === 'm')
-    return mUnit ? String(mUnit.id) : ''
+  const selectProduct = async (rowKey, product) => {
+    // Default UOM from the product's first sales channel (Product creation's "Unit of Measure").
+    // Editable afterward — this is just a starting guess, not a lock.
+    const defaultUnitTypeId = product.cost_details?.[0]?.unit_type_id
+    const stock = await fetchStock(product.id, form.source_store_id)
+    setItems((prev) => prev.map((row) =>
+      row._key === rowKey
+        ? {
+            ...row,
+            product_id:    product.id,
+            product_code:  product.product_code ?? '',
+            product_name:  product.name ?? '',
+            unit_id:       defaultUnitTypeId != null ? String(defaultUnitTypeId) : '',
+            attribute_id:  '',
+            color_options: [],
+            stock_in_hand: stock,
+          }
+        : row
+    ))
+    setProductSearch({ key: null, query: '', results: [], open: false })
+
+    loadColorOptions(product.id).then((options) => {
+      setItems((prev) => prev.map((row) => row._key === rowKey ? { ...row, color_options: options } : row))
+      // Auto-focus Color once its options are ready — skip straight to UOM if this
+      // product has none, since a disabled Color select can't receive focus.
+      setTimeout(() => focusCell(rowKey, options.length > 0 ? 'color' : 'uom'), 50)
+    })
   }
-  const addRows = (n = 1) => setItems((prev) => [
-    ...prev,
-    ...Array.from({ length: n }, () => ({ ...emptyRow(), unit_id: defaultUnitId() })),
-  ])
+
+  const clearProductSelection = (rowKey) => {
+    setItems((prev) => prev.map((row) =>
+      row._key === rowKey
+        ? { ...row, product_id: '', product_code: '', product_name: '', attribute_id: '', color_options: [], stock_in_hand: null }
+        : row
+    ))
+    setProductSearch({ key: rowKey, query: '', results: [], open: false })
+  }
+
+  const addRows = (n = 1) => setItems((prev) => [...prev, ...Array.from({ length: n }, emptyRow)])
+
+  const addManualRow = useCallback(() => {
+    const row = emptyRow()
+    setItems((prev) => [...prev, row])
+    setTimeout(() => cellRefs.current[row._key]?.product?.focus(), 50)
+  }, [])
+
   const removeRow = (idx) => setItems((prev) => prev.length > 1 ? prev.filter((_, i) => i !== idx) : prev)
   const setRowField = (idx, field, value) => setItems((prev) => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row))
   const setField = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
+
+  /* ── Alt+N shortcut to add a new item row ─────────────────── */
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.altKey && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault()
+        addManualRow()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [addManualRow])
 
   const totalQty = items.reduce((sum, r) => sum + (parseFloat(r.quantity) || 0), 0)
 
@@ -287,9 +641,10 @@ export default function PurchaseRequestFormPage() {
       target_store_id:     form.target_store_id    || null,
       customer_id:         form.customer_id        || null,
       items: validItems.map((r) => ({
-        product_id: parseInt(r.product_id),
-        unit_id:    r.unit_id ? parseInt(r.unit_id) : null,
-        quantity:   parseFloat(r.quantity),
+        product_id:   parseInt(r.product_id),
+        unit_id:      r.unit_id ? parseInt(r.unit_id) : null,
+        attribute_id: r.attribute_id ? parseInt(r.attribute_id) : null,
+        quantity:     parseFloat(r.quantity),
       })),
     })
   }
@@ -320,6 +675,24 @@ export default function PurchaseRequestFormPage() {
     if (field === 'uom') return row.unit_id ? null : 'Required'
     return null
   }
+
+  // Rows sharing the same product + color — nudge the user to merge them instead of blocking save
+  const duplicateRowNumbers = useMemo(() => {
+    const groups = {}
+    items.forEach((row, idx) => {
+      if (!row.product_id) return
+      const key = `${row.product_id}|${row.attribute_id || ''}`
+      ;(groups[key] ??= []).push(idx + 1)
+    })
+    const result = {}
+    items.forEach((row) => {
+      if (!row.product_id) return
+      const key = `${row.product_id}|${row.attribute_id || ''}`
+      const rowNumbers = groups[key]
+      if (rowNumbers.length > 1) result[row._key] = rowNumbers
+    })
+    return result
+  }, [items])
 
   if (isEdit && loadingPR) {
     return (
@@ -353,6 +726,29 @@ export default function PurchaseRequestFormPage() {
               icon={ClipboardList}
               title="Request Items"
               colorClass="text-indigo-700 bg-indigo-50 border-indigo-100"
+              extra={
+                <div className="flex items-center gap-2">
+                  {items.length > 0 && (
+                    <span className="text-[10px] text-slate-500">{items.length} line{items.length !== 1 ? 's' : ''}</span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={addManualRow}
+                    title="Add new item (Alt+N)"
+                    className="flex items-center gap-1 rounded border-2 border-indigo-200 bg-white px-2 py-0.5 text-[10px] font-bold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
+                  >
+                    <Plus size={10} /> Add Row
+                    <span className="ml-0.5 rounded bg-indigo-100 px-1 py-px text-[9px] font-mono text-indigo-500">Alt+N</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addRows(5)}
+                    className="flex items-center gap-1 rounded border-2 border-slate-200 bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 hover:bg-slate-50 hover:border-slate-300 transition-colors"
+                  >
+                    <Plus size={10} /> Add 5
+                  </button>
+                </div>
+              }
             />
 
             <div className="overflow-x-auto">
@@ -362,6 +758,7 @@ export default function PurchaseRequestFormPage() {
                     <th className="w-9 px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-400">#</th>
                     <th className="w-28 px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Code</th>
                     <th className="px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Product Name</th>
+                    <th className="w-24 px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Color</th>
                     <th className="w-24 px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">UOM</th>
                     <th className="w-28 px-3 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty</th>
                     <th className="w-32 px-3 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-slate-500">Stock in Hand</th>
@@ -370,16 +767,6 @@ export default function PurchaseRequestFormPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {items.map((row, idx) => {
-                    // IDs already chosen in every OTHER row — exclude them from this row's dropdown
-                    const usedIds = new Set(
-                      items
-                        .filter((_, i) => i !== idx)
-                        .map((r) => r.product_id)
-                        .filter(Boolean)
-                        .map(Number),
-                    )
-                    const availableProducts = products.filter((p) => !usedIds.has(p.id))
-
                     return (
                     <tr key={row._key} className="group hover:bg-slate-50/60 transition-colors">
                       <td className="px-3 py-1 text-slate-400 font-medium tabular-nums">{idx + 1}</td>
@@ -392,30 +779,47 @@ export default function PurchaseRequestFormPage() {
                         />
                       </td>
                       <td className="px-1.5 py-1 min-w-40">
-                        <select
-                          value={row.product_id}
-                          onChange={(e) => handleProductSelect(idx, e.target.value)}
-                          className="block w-full rounded-md border-2 border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer"
-                        >
-                          <option value="">— Select product —</option>
-                          {availableProducts.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}</option>
-                          ))}
-                        </select>
+                        <ProductSearchCell
+                          row={row}
+                          productSearch={productSearch}
+                          onQueryChange={handleProductQueryChange}
+                          onSelect={selectProduct}
+                          onClear={clearProductSelection}
+                          onClose={() => setProductSearch((prev) => ({ ...prev, open: false }))}
+                          onInputRef={setCellRef(row._key, 'product')}
+                        />
+                        {duplicateRowNumbers[row._key] && (
+                          <span className="mt-0.5 flex items-center gap-1 text-[9px] font-medium text-amber-600">
+                            <AlertTriangle size={10} />
+                            Same product &amp; color as row {duplicateRowNumbers[row._key].filter((n) => n !== idx + 1).join(', ')} — consider merging
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-1.5 py-1">
+                        <DropdownSelectCell
+                          cellRef={setCellRef(row._key, 'color')}
+                          value={row.attribute_id}
+                          groups={[{ label: null, items: row.color_options.map((c) => ({ value: String(c.id), label: c.name })) }]}
+                          onChange={(val) => setRowField(idx, 'attribute_id', val)}
+                          onNext={() => focusCell(row._key, 'uom')}
+                          placeholder={!row.product_id ? '—' : row.color_options.length === 0 ? 'No colors' : '—'}
+                          disabled={!row.product_id || row.color_options.length === 0}
+                        />
                       </td>
                       <td className="px-1.5 py-1">
                         <div className="flex flex-col gap-0.5">
-                          <select
+                          <DropdownSelectCell
+                            cellRef={setCellRef(row._key, 'uom')}
                             value={row.unit_id}
-                            onChange={(e) => setRowField(idx, 'unit_id', e.target.value)}
+                            groups={Object.values(uomGroups).map((group) => ({
+                              label: group.name,
+                              items: group.items.map((u) => ({ value: String(u.id), label: u.symbol ?? u.name })),
+                            }))}
+                            onChange={(val) => setRowField(idx, 'unit_id', val)}
+                            onNext={() => focusCell(row._key, 'qty')}
                             onBlur={() => touchItemField(row._key, 'uom')}
-                            className={getItemErr(row._key, 'uom') ? TABLE_SELECT_ERR : TABLE_SELECT}
-                          >
-                            <option value="">—</option>
-                            {unitTypes.map((u) => (
-                              <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>
-                            ))}
-                          </select>
+                            error={getItemErr(row._key, 'uom')}
+                          />
                           {getItemErr(row._key, 'uom') && (
                             <span className="text-[9px] text-red-500 leading-none">Required</span>
                           )}
@@ -423,6 +827,7 @@ export default function PurchaseRequestFormPage() {
                       </td>
                       <td className="px-1.5 py-1">
                         <input
+                          ref={setCellRef(row._key, 'qty')}
                           type="number"
                           min="0"
                           step="0.0001"
@@ -460,24 +865,7 @@ export default function PurchaseRequestFormPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t-2 border-slate-200 bg-slate-50">
-                    <td colSpan={4} className="px-3 py-1.5">
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          onClick={() => addRows(1)}
-                          className="flex items-center gap-1 rounded border-2 border-indigo-200 bg-white px-2.5 py-1 text-xs font-bold text-indigo-600 hover:bg-indigo-50 hover:border-indigo-300 transition-colors"
-                        >
-                          <Plus size={10} /> Add Row
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => addRows(5)}
-                          className="flex items-center gap-1 rounded border-2 border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-500 hover:bg-slate-50 hover:border-slate-300 transition-colors"
-                        >
-                          <Plus size={10} /> Add 5 Rows
-                        </button>
-                      </div>
-                    </td>
+                    <td colSpan={5} className="px-3 py-1.5"></td>
                     <td className="px-3 py-1.5 text-left text-sm font-black text-slate-700 tabular-nums">
                       {totalQty > 0 ? totalQty.toLocaleString(undefined, { maximumFractionDigits: 4 }) : '—'}
                     </td>
@@ -613,19 +1001,17 @@ export default function PurchaseRequestFormPage() {
                   <label className={LABEL_CLS}>
                     Source Location <span className="text-red-500 normal-case font-bold">*</span>
                   </label>
-                  <select
-                    className={err('source_location_id') ? SELECT_ERR_CLS : SELECT_CLS}
+                  <DropdownSelectCell
                     value={form.source_location_id}
-                    onChange={(e) => {
-                      setForm((f) => ({ ...f, source_location_id: e.target.value, source_store_id: '' }))
+                    groups={[{ label: null, items: locations.map((l) => ({ value: String(l.id), label: l.location_name ?? l.name })) }]}
+                    onChange={(val) => {
+                      setForm((f) => ({ ...f, source_location_id: val, source_store_id: '' }))
                       if (errors.source_location_id) setErrors((prev) => ({ ...prev, source_location_id: undefined, source_store_id: undefined }))
                     }}
-                  >
-                    <option value="">— Select location —</option>
-                    {locations.map((l) => (
-                      <option key={l.id} value={l.id}>{l.location_name ?? l.name}</option>
-                    ))}
-                  </select>
+                    onNext={() => sourceStoreFieldRef.current?.focus()}
+                    placeholder="— Select location —"
+                    error={err('source_location_id')}
+                  />
                   {err('source_location_id') && <p className={ERR_CLS}>{err('source_location_id')}</p>}
                 </div>
                 <div>
@@ -635,25 +1021,18 @@ export default function PurchaseRequestFormPage() {
                       <span className="ml-1 normal-case font-medium text-amber-500 text-[10px]">↑ first</span>
                     )}
                   </label>
-                  {form.source_location_id ? (
-                    <select
-                      className={err('source_store_id') ? SELECT_ERR_CLS : SELECT_CLS}
-                      value={form.source_store_id}
-                      onChange={(e) => {
-                        setField('source_store_id')(e)
-                        if (errors.source_store_id) setErrors((prev) => ({ ...prev, source_store_id: undefined }))
-                      }}
-                    >
-                      <option value="">— Select store —</option>
-                      {sourceStores.map((s) => (
-                        <option key={s.id} value={s.id}>{s.store_name}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <select className={SELECT_DISABLED_CLS} disabled>
-                      <option>— Select location first —</option>
-                    </select>
-                  )}
+                  <DropdownSelectCell
+                    cellRef={(el) => { sourceStoreFieldRef.current = el }}
+                    value={form.source_store_id}
+                    groups={[{ label: null, items: sourceStores.map((s) => ({ value: String(s.id), label: s.store_name })) }]}
+                    onChange={(val) => {
+                      setForm((f) => ({ ...f, source_store_id: val }))
+                      if (errors.source_store_id) setErrors((prev) => ({ ...prev, source_store_id: undefined }))
+                    }}
+                    disabled={!form.source_location_id}
+                    placeholder={form.source_location_id ? '— Select store —' : '— Select location first —'}
+                    error={err('source_store_id')}
+                  />
                   {err('source_store_id') && <p className={ERR_CLS}>{err('source_store_id')}</p>}
                 </div>
               </div>
@@ -751,6 +1130,30 @@ export default function PurchaseRequestFormPage() {
 
         </div>{/* end right column */}
       </div>{/* end main grid */}
+
+      {/* Keyboard Shortcuts Reference */}
+      <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+        <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Keyboard Shortcuts</p>
+        <div className="flex flex-wrap gap-x-5 gap-y-1">
+          {[
+            { keys: ['Alt', 'N'],   desc: 'Add new item row' },
+            { keys: ['Enter'],      desc: 'Move to next field in row (Color → UOM → Qty)' },
+            { keys: ['↑', '↓'],    desc: 'Navigate product search results / dropdown options' },
+            { keys: ['Esc'],        desc: 'Close product search or dropdown' },
+          ].map(({ keys, desc }) => (
+            <div key={desc} className="flex items-center gap-1.5">
+              <div className="flex items-center gap-0.5">
+                {keys.map((k, i) => (
+                  <span key={i} className="inline-flex items-center justify-center rounded border border-slate-300 bg-white px-1 py-px text-[10px] font-mono font-semibold text-slate-600 shadow-sm">
+                    {k}
+                  </span>
+                ))}
+              </div>
+              <span className="text-[10px] text-slate-500">{desc}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }

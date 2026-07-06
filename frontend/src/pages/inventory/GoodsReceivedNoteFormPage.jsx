@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ClipboardList, Download, FileText, Layers, PackageCheck, Plus, QrCode, ShoppingCart, Trash2, Weight, X } from 'lucide-react'
+import { AlertTriangle, ChevronDown, ClipboardList, Download, FileText, Layers, PackageCheck, Plus, Printer, QrCode, ShoppingCart, Trash2, Weight, X } from 'lucide-react'
 import {
   confirmGoodsReceivedNote,
   createGoodsReceivedNote,
@@ -28,6 +28,7 @@ import Breadcrumb from '../../components/Breadcrumb'
 import BatchAssignModal from '../../components/inventory/BatchAssignModal'
 import RollAssignModal from '../../components/inventory/RollAssignModal'
 import { showError, showSuccess } from '../../utils/alerts'
+import { printPdfBlob } from '../../utils/pdf'
 
 /* ── Style tokens ─────────────────────────────────────────────── */
 const INPUT_CLS   = 'block w-full rounded border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15'
@@ -37,8 +38,6 @@ const SELECT_CLS  = 'block w-full rounded border-2 border-slate-200 bg-slate-50 
 const SELECT_ERR  = 'block w-full rounded border-2 border-red-400 bg-red-50 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-400/20 cursor-pointer'
 const TABLE_INPUT   = 'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white'
 const TABLE_ERR     = 'block w-full rounded border border-red-400 bg-red-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white'
-const TABLE_SEL     = 'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white cursor-pointer'
-const TABLE_SEL_ERR = 'block w-full rounded border border-red-400 bg-red-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white cursor-pointer'
 const LABEL_CLS   = 'text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap'
 const ERR_CLS     = 'mt-0.5 text-[10px] text-red-500'
 
@@ -76,6 +75,137 @@ function FieldRow({ label, required, error, children }) {
         {children}
         {error && <p className={ERR_CLS}>{error}</p>}
       </div>
+    </div>
+  )
+}
+
+/* ── Custom dropdown (Location / Store) — opens its option pad automatically on
+   focus so the Enter-key chain can "show the pad" the way a native <select>
+   can't (browsers block scripts from opening a native select's popup). ── */
+function FormDropdown({ groups, value, onChange, onNext, onBlur, placeholder = 'Select', disabled, error, cellRef, compact = false }) {
+  const [open, setOpen] = useState(false)
+  const [highlightIdx, setHighlightIdx] = useState(0)
+  const [dropPos, setDropPos] = useState({ top: 0, left: 0, width: compact ? 140 : 200 })
+  const btnRef = useRef(null)
+  const containerRef = useRef(null)
+
+  const flatItems = groups.flatMap((g) => g.items)
+  const selected = flatItems.find((it) => String(it.value) === String(value))
+
+  const openDropdown = () => {
+    if (disabled) return
+    const idx = flatItems.findIndex((it) => String(it.value) === String(value))
+    setHighlightIdx(idx >= 0 ? idx : 0)
+    setOpen(true)
+  }
+
+  useEffect(() => {
+    if (open && btnRef.current) {
+      const rect = btnRef.current.getBoundingClientRect()
+      setDropPos({ top: rect.bottom + 2, left: rect.left, width: Math.max(rect.width, compact ? 140 : 200) })
+    }
+  }, [open, compact])
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  const selectItem = (item) => {
+    onChange(item.value)
+    setOpen(false)
+    setTimeout(() => onNext?.(), 0)
+  }
+
+  const handleKeyDown = (e) => {
+    if (disabled) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (!open) { openDropdown(); return }
+      setHighlightIdx((i) => Math.min(i + 1, flatItems.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (!open) { openDropdown(); return }
+      setHighlightIdx((i) => Math.max(i - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (open && flatItems[highlightIdx]) {
+        selectItem(flatItems[highlightIdx])
+      } else {
+        setOpen(false)
+        onNext?.()
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault()
+      setOpen(false)
+    } else if (e.key === ' ') {
+      e.preventDefault()
+      if (open) setOpen(false)
+      else openDropdown()
+    }
+  }
+
+  const borderW  = compact ? 'border' : 'border-2'
+  const padding  = compact ? 'px-1.5 py-0.5' : 'px-2 py-1'
+  const btnClass = disabled
+    ? `flex w-full items-center justify-between gap-1 rounded ${borderW} border-slate-200 bg-slate-100 ${padding} text-xs text-slate-400 outline-none cursor-not-allowed`
+    : error
+      ? `flex w-full items-center justify-between gap-1 rounded ${borderW} border-red-400 bg-red-50 ${padding} text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white ${compact ? '' : 'focus:ring-2 focus:ring-red-400/20'} cursor-pointer`
+      : `flex w-full items-center justify-between gap-1 rounded ${borderW} border-slate-200 bg-slate-50 ${padding} text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white ${compact ? '' : 'focus:ring-2 focus:ring-indigo-500/15'} cursor-pointer`
+
+  return (
+    <div className="relative" ref={containerRef}>
+      <button
+        type="button"
+        ref={(el) => { btnRef.current = el; cellRef?.(el) }}
+        disabled={disabled}
+        onFocus={openDropdown}
+        onClick={() => { if (!disabled) { if (open) setOpen(false); else openDropdown() } }}
+        onKeyDown={handleKeyDown}
+        onBlur={onBlur}
+        className={btnClass}
+      >
+        <span className={`truncate text-left ${selected ? '' : 'text-slate-400'}`}>{selected ? selected.label : placeholder}</span>
+        <ChevronDown size={compact ? 10 : 12} className="shrink-0 text-slate-400" />
+      </button>
+      {open && !disabled && createPortal(
+        <div
+          style={{ position: 'fixed', top: dropPos.top, left: dropPos.left, width: dropPos.width, zIndex: 9999 }}
+          className="rounded border border-slate-200 bg-white shadow-xl max-h-56 overflow-y-auto"
+        >
+          {flatItems.length === 0 && <div className="px-2 py-1.5 text-xs text-slate-400">No options</div>}
+          {groups.map((g, gi) => (
+            g.items.length === 0 ? null : (
+              <div key={gi}>
+                {g.label && (
+                  <div className="px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50">{g.label}</div>
+                )}
+                {g.items.map((it) => {
+                  const flatIdx = flatItems.indexOf(it)
+                  return (
+                    <button
+                      key={it.value}
+                      type="button"
+                      className={`block w-full px-2 py-1.5 text-left text-xs transition-colors ${
+                        flatIdx === highlightIdx ? 'bg-indigo-100 text-indigo-900' : 'hover:bg-slate-50 text-slate-700'
+                      }`}
+                      onMouseDown={(e) => { e.preventDefault(); selectItem(it) }}
+                      onMouseEnter={() => setHighlightIdx(flatIdx)}
+                    >
+                      {it.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )
+          ))}
+        </div>,
+        document.body
+      )}
     </div>
   )
 }
@@ -262,6 +392,7 @@ export default function GoodsReceivedNoteFormPage() {
   /* ── Save status & PDF ────────────────────────────────────── */
   const [saveStatus,      setSaveStatus]      = useState('confirmed')  // 'draft' | 'confirmed'
   const [isDownloading,   setIsDownloading]   = useState(false)
+  const [isPrinting,      setIsPrinting]      = useState(false)
   const [isPrintingLabels, setIsPrintingLabels] = useState(false)
 
   /* ── Attachment state ─────────────────────────────────────── */
@@ -286,6 +417,11 @@ export default function GoodsReceivedNoteFormPage() {
   /* ── Product search state (manual rows) ───────────────────── */
   const [productSearch, setProductSearch] = useState({ key: null, query: '', results: [], open: false })
   const searchTimerRef = useRef(null)
+
+  /* ── Header field refs — Supplier → Location → Store → Shipping Code chain ── */
+  const locationFieldRef     = useRef(null)
+  const storeFieldRef        = useRef(null)
+  const shippingCodeFieldRef = useRef(null)
 
   /* ── Cell refs for Enter-key row navigation ───────────────── */
   const cellRefs = useRef({}) // { [rowKey]: { uom, qty, price, disc, tax, batch } }
@@ -515,6 +651,7 @@ export default function GoodsReceivedNoteFormPage() {
     setForm((f) => ({ ...f, supplier_id: supplierId }))
     setSelectedPoIds(new Set())
     setItems((prev) => prev.filter((it) => !it.po_item_id)) // keep manual rows
+    setTimeout(() => locationFieldRef.current?.focus(), 50)
   }
 
   /* ── PO item mapper ───────────────────────────────────────── */
@@ -528,7 +665,7 @@ export default function GoodsReceivedNoteFormPage() {
     product_name:      it.product?.name ?? '',
     unit_id:           it.unit_id ?? '',
     attribute_name:    it.attribute_name ?? '',
-    attribute_id:      '',
+    attribute_id:      it.attribute_id != null ? String(it.attribute_id) : '',
     color_options:     [],
     quantity_ordered:  it.quantity_ordered,
     already_received:  it.quantity_received,
@@ -878,6 +1015,20 @@ export default function GoodsReceivedNoteFormPage() {
     }
   }
 
+  const handlePrintPdf = async () => {
+    const grnId = isEdit ? id : null
+    if (!grnId) { showError('Save the GRN first before printing.'); return }
+    setIsPrinting(true)
+    try {
+      const blob = await downloadGrnPdf(grnId)
+      printPdfBlob(blob)
+    } catch {
+      showError('Failed to print PDF.')
+    } finally {
+      setIsPrinting(false)
+    }
+  }
+
   /* ── Piece QR labels PDF ──────────────────────────────────── */
   const handlePrintPieceLabels = async () => {
     const grnId = isEdit ? id : null
@@ -1018,6 +1169,24 @@ export default function GoodsReceivedNoteFormPage() {
     return null
   }
 
+  // Rows sharing the same product + color — nudge the user to merge them instead of blocking save
+  const duplicateRowNumbers = useMemo(() => {
+    const groups = {}
+    items.forEach((row, idx) => {
+      if (!row.product_id) return
+      const key = `${row.product_id}|${row.attribute_id || ''}`
+      ;(groups[key] ??= []).push(idx + 1)
+    })
+    const result = {}
+    items.forEach((row) => {
+      if (!row.product_id) return
+      const key = `${row.product_id}|${row.attribute_id || ''}`
+      const rowNumbers = groups[key]
+      if (rowNumbers.length > 1) result[row._key] = rowNumbers
+    })
+    return result
+  }, [items])
+
   const allSelected = displayedPOs.length > 0 && selectedPoIds.size === displayedPOs.length
 
   if (isEdit && loadingGRN) {
@@ -1109,32 +1278,29 @@ export default function GoodsReceivedNoteFormPage() {
             </FieldRow>
 
             <FieldRow label="Location" required error={getErr('location_id')}>
-              <select
-                className={selCls('location_id')}
+              <FormDropdown
+                cellRef={(el) => { locationFieldRef.current = el }}
                 value={form.location_id}
-                onChange={(e) => setForm((f) => ({ ...f, location_id: e.target.value, store_id: '' }))}
+                groups={[{ label: null, items: locations.map((l) => ({ value: String(l.id), label: l.location_name })) }]}
+                onChange={(val) => setForm((f) => ({ ...f, location_id: val, store_id: '' }))}
+                onNext={() => storeFieldRef.current?.focus()}
                 onBlur={() => touch('location_id')}
-              >
-                <option value="">Select</option>
-                {locations.map((l) => (
-                  <option key={l.id} value={l.id}>{l.location_name}</option>
-                ))}
-              </select>
+                error={getErr('location_id')}
+              />
             </FieldRow>
 
             <FieldRow label="Store" required error={getErr('store_id')}>
-              <select
-                className={selCls('store_id')}
+              <FormDropdown
+                cellRef={(el) => { storeFieldRef.current = el }}
                 value={form.store_id}
-                onChange={(e) => setForm((f) => ({ ...f, store_id: e.target.value }))}
+                groups={[{ label: null, items: storesForLocation.map((s) => ({ value: String(s.id), label: s.store_name })) }]}
+                onChange={(val) => setForm((f) => ({ ...f, store_id: val }))}
+                onNext={() => shippingCodeFieldRef.current?.focus()}
                 onBlur={() => touch('store_id')}
                 disabled={!form.location_id}
-              >
-                <option value="">{form.location_id ? 'Select' : 'Select location first'}</option>
-                {storesForLocation.map((s) => (
-                  <option key={s.id} value={s.id}>{s.store_name}</option>
-                ))}
-              </select>
+                placeholder={form.location_id ? 'Select' : 'Select location first'}
+                error={getErr('store_id')}
+              />
             </FieldRow>
 
             <FieldRow label="Payment Terms">
@@ -1163,6 +1329,7 @@ export default function GoodsReceivedNoteFormPage() {
             </FieldRow>
             <FieldRow label="Shipping Code" required error={getErr('shipping_code')}>
               <input
+                ref={shippingCodeFieldRef}
                 className={inpCls('shipping_code')}
                 placeholder="e.g. SHP-0001"
                 value={form.shipping_code}
@@ -1442,29 +1609,28 @@ export default function GoodsReceivedNoteFormPage() {
                           ) : (
                             <span className="font-medium text-slate-700">{row.product_name || '—'}</span>
                           )}
+                          {duplicateRowNumbers[row._key] && (
+                            <span className="mt-0.5 flex items-center gap-1 text-[9px] font-medium text-amber-600">
+                              <AlertTriangle size={10} />
+                              Same product &amp; color as row {duplicateRowNumbers[row._key].filter((n) => n !== idx + 1).join(', ')} — consider merging
+                            </span>
+                          )}
                         </td>
 
                         {/* Color — PO-linked rows inherit it read-only from the linked PO line;
                             manual rows have no PO item to inherit from, so pick it directly here. */}
                         <td className="px-2 py-1">
                           {isManual ? (
-                            <select
-                              ref={setCellRef(row._key, 'color')}
+                            <FormDropdown
+                              compact
+                              cellRef={setCellRef(row._key, 'color')}
                               value={row.attribute_id}
-                              onChange={(e) => setRowField(idx, 'attribute_id', e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'uom') }
-                              }}
+                              groups={[{ label: null, items: row.color_options.map((c) => ({ value: String(c.id), label: c.name })) }]}
+                              onChange={(val) => setRowField(idx, 'attribute_id', val)}
+                              onNext={() => focusCell(row._key, 'uom')}
+                              placeholder={!row.product_id ? '—' : row.color_options.length === 0 ? 'No colors' : '—'}
                               disabled={!row.product_id || row.color_options.length === 0}
-                              className={TABLE_SEL}
-                            >
-                              <option value="">
-                                {!row.product_id ? '—' : row.color_options.length === 0 ? 'No colors' : '—'}
-                              </option>
-                              {row.color_options.map((c) => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                              ))}
-                            </select>
+                            />
                           ) : (
                             <span className="text-slate-600">{row.attribute_name || <span className="text-slate-300">—</span>}</span>
                           )}
@@ -1496,25 +1662,19 @@ export default function GoodsReceivedNoteFormPage() {
                         {/* UOM */}
                         <td className="px-2 py-1">
                           <div className="flex flex-col gap-0.5">
-                            <select
-                              ref={setCellRef(row._key, 'uom')}
+                            <FormDropdown
+                              compact
+                              cellRef={setCellRef(row._key, 'uom')}
                               value={row.unit_id ?? ''}
-                              onChange={(e) => setRowField(idx, 'unit_id', e.target.value)}
+                              groups={Object.values(uomGroups).map((group) => ({
+                                label: group.name,
+                                items: group.items.map((u) => ({ value: String(u.id), label: u.symbol ?? u.name })),
+                              }))}
+                              onChange={(val) => setRowField(idx, 'unit_id', val)}
+                              onNext={() => focusCell(row._key, 'qty')}
                               onBlur={() => touchItemField(row._key, 'uom')}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'qty') }
-                              }}
-                              className={getItemErr(row._key, 'uom') ? TABLE_SEL_ERR : TABLE_SEL}
-                            >
-                              <option value="">—</option>
-                              {Object.entries(uomGroups).map(([catId, group]) => (
-                                <optgroup key={catId} label={group.name}>
-                                  {group.items.map((u) => (
-                                    <option key={u.id} value={u.id}>{u.symbol ?? u.name}</option>
-                                  ))}
-                                </optgroup>
-                              ))}
-                            </select>
+                              error={getItemErr(row._key, 'uom')}
+                            />
                             {getItemErr(row._key, 'uom') && (
                               <span className="text-[9px] text-red-500 leading-none">Required</span>
                             )}
@@ -1692,6 +1852,17 @@ export default function GoodsReceivedNoteFormPage() {
                   {isDownloading ? 'Generating…' : 'Download PDF'}
                 </button>
               )}
+              {isEdit && (
+                <button
+                  type="button"
+                  onClick={handlePrintPdf}
+                  disabled={isPrinting}
+                  className="flex items-center gap-1.5 rounded border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors disabled:opacity-60"
+                >
+                  <Printer size={12} />
+                  {isPrinting ? 'Preparing…' : 'Print'}
+                </button>
+              )}
               {isEdit && existingGRN?.data?.status === 'confirmed' && (
                 <button
                   type="button"
@@ -1843,8 +2014,10 @@ export default function GoodsReceivedNoteFormPage() {
           item={items[rollModalIdx]}
           isWeightUnit={unitTypes.find((u) => u.id === Number(items[rollModalIdx].unit_id))?.unit_category_name === 'Weight'}
           onApply={(rolls) => {
+            const rowKey = items[rollModalIdx]._key
             setItems((prev) => prev.map((row, i) => i === rollModalIdx ? { ...row, rolls } : row))
             setRollModalIdx(null)
+            setTimeout(() => focusCell(rowKey, 'price'), 50)
           }}
           onClose={() => setRollModalIdx(null)}
         />

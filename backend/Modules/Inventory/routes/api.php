@@ -23,6 +23,7 @@ use Modules\Inventory\Http\Controllers\UnitConversionController;
 use Modules\Inventory\Http\Controllers\UnitTypeController;
 use Modules\Inventory\Http\Controllers\PurchaseRequestController;
 use Modules\Inventory\Http\Controllers\PurchaseOrderController;
+use Modules\Inventory\Http\Controllers\PurchaseOrderPdfController;
 use Modules\Inventory\Http\Controllers\BatchController;
 use Modules\Inventory\Http\Controllers\GoodsReceivedNoteController;
 use Modules\Inventory\Http\Controllers\GrnAttachmentController;
@@ -194,6 +195,8 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.purchase-orders.from-pr');
     Route::patch('purchase-orders/{purchase_order}/status', [PurchaseOrderController::class, 'updateStatus'])
         ->name('inventory.purchase-orders.update-status');
+    Route::get('purchase-orders/{purchase_order}/pdf', [PurchaseOrderPdfController::class, 'download'])
+        ->name('inventory.purchase-orders.pdf');
     Route::apiResource('purchase-orders', PurchaseOrderController::class)
         ->names('inventory.purchase-orders');
 
