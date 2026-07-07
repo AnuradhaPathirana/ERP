@@ -609,10 +609,21 @@ export default function PurchaseOrderFormPage() {
     }))
   }
 
+  const storeSelectRef = useRef(null)
+
   const handleLocationChange = (locationId) => {
     setForm((f) => ({ ...f, location_id: locationId, store_id: '' }))
     if (errors.location_id || errors.store_id) {
       setErrors((prev) => ({ ...prev, location_id: undefined, store_id: undefined }))
+    }
+    // Auto-advance: focus Store and open its options pad once it renders
+    if (locationId) {
+      setTimeout(() => {
+        const el = storeSelectRef.current
+        if (!el) return
+        el.focus()
+        try { el.showPicker?.() } catch { /* unsupported browser — focus is enough */ }
+      }, 0)
     }
   }
 
@@ -965,7 +976,7 @@ export default function PurchaseOrderFormPage() {
                   {!form.location_id && <span className="ml-1 normal-case font-medium text-amber-500 text-[10px]">↑ first</span>}
                 </label>
                 {form.location_id ? (
-                  <select className={err('store_id') ? SELECT_ERR_CLS : SELECT_CLS} value={form.store_id} onChange={(e) => { setForm((f) => ({ ...f, store_id: e.target.value })); clearFieldError('store_id') }}>
+                  <select ref={storeSelectRef} className={err('store_id') ? SELECT_ERR_CLS : SELECT_CLS} value={form.store_id} onChange={(e) => { setForm((f) => ({ ...f, store_id: e.target.value })); clearFieldError('store_id') }}>
                     <option value="">— Select store —</option>
                     {filteredStores.map((s) => <option key={s.id} value={s.id}>{s.store_name}</option>)}
                   </select>

@@ -72,19 +72,19 @@ const NAV_ITEMS = [
         icon: BarChart2,
         isSubgroup: true,
         children: [
-          { label: 'Stock Levels',       to: '/inventory/reports/stock-levels',       icon: BarChart2,      permissionGuard: 'view_reports' },
-          { label: 'Stock Movements',    to: '/inventory/reports/stock-movements',    icon: ArrowLeftRight, permissionGuard: 'view_reports' },
+          { label: 'Stock Levels',       to: '/inventory/reports/stock-levels',       icon: BarChart2,      permissionGuard: 'view_reports', disabled: true },
+          { label: 'Stock Movements',    to: '/inventory/reports/stock-movements',    icon: ArrowLeftRight, permissionGuard: 'view_reports', disabled: true },
           { label: 'Bin Card',           to: '/inventory/reports/bin-card',           icon: BookOpen,       permissionGuard: 'view_reports' },
           { label: 'Movement Summary',   to: '/inventory/reports/movement-summary',   icon: TrendingUp,     permissionGuard: 'view_reports' },
-          { label: 'Low Stock Alert',    to: '/inventory/reports/low-stock',          icon: AlertTriangle,  permissionGuard: 'view_reports' },
-          { label: 'Stock Valuation',    to: '/inventory/reports/stock-valuation',    icon: DollarSign,     permissionGuard: 'view_reports' },
-          { label: 'Batch / Expiry',     to: '/inventory/reports/batch-expiry',       icon: FlaskConical,   permissionGuard: 'view_reports' },
-          { label: 'Purchase Requests',  to: '/inventory/reports/purchase-requests',  icon: ClipboardList,  permissionGuard: 'view_reports' },
-          { label: 'Purchase Orders',    to: '/inventory/reports/purchase-orders',    icon: ShoppingBag,    permissionGuard: 'view_reports' },
-          { label: 'Outstanding POs',    to: '/inventory/reports/outstanding-pos',    icon: Clock,          permissionGuard: 'view_reports' },
-          { label: 'GRN Report',         to: '/inventory/reports/grn',               icon: PackageCheck,   permissionGuard: 'view_reports' },
-          { label: 'Supplier Summary',   to: '/inventory/reports/supplier-summary',   icon: Users,          permissionGuard: 'view_reports' },
-          { label: 'Landed Costs',       to: '/inventory/reports/landed-costs',       icon: Receipt,        permissionGuard: 'view_reports' },
+          { label: 'Low Stock Alert',    to: '/inventory/reports/low-stock',          icon: AlertTriangle,  permissionGuard: 'view_reports', disabled: true },
+          { label: 'Stock Valuation',    to: '/inventory/reports/stock-valuation',    icon: DollarSign,     permissionGuard: 'view_reports', disabled: true },
+          { label: 'Batch / Expiry',     to: '/inventory/reports/batch-expiry',       icon: FlaskConical,   permissionGuard: 'view_reports', disabled: true },
+          { label: 'Purchase Requests',  to: '/inventory/reports/purchase-requests',  icon: ClipboardList,  permissionGuard: 'view_reports', disabled: true },
+          { label: 'Purchase Orders',    to: '/inventory/reports/purchase-orders',    icon: ShoppingBag,    permissionGuard: 'view_reports', disabled: true },
+          { label: 'Outstanding POs',    to: '/inventory/reports/outstanding-pos',    icon: Clock,          permissionGuard: 'view_reports', disabled: true },
+          { label: 'GRN Report',         to: '/inventory/reports/grn',               icon: PackageCheck,   permissionGuard: 'view_reports', disabled: true },
+          { label: 'Supplier Summary',   to: '/inventory/reports/supplier-summary',   icon: Users,          permissionGuard: 'view_reports', disabled: true },
+          { label: 'Landed Costs',       to: '/inventory/reports/landed-costs',       icon: Receipt,        permissionGuard: 'view_reports', disabled: true },
         ],
       },
       {
@@ -364,25 +364,39 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
                             className={['shrink-0 transition-transform duration-200', isOpen ? 'rotate-180' : ''].join(' ')}
                           />
                         </button>
-                        {isOpen && visibleSgChildren.map(({ label: cl, to: ct, icon: CI }) => (
-                          <NavLink
-                            key={cl}
-                            to={ct}
-                            className={({ isActive }) =>
-                              [
-                                'flex items-center gap-3 rounded-lg pl-9 pr-3 py-1.5 text-sm transition-colors duration-150',
-                                isActive
-                                  ? 'bg-indigo-600/20 text-indigo-400 font-medium'
-                                  : 'text-slate-400 hover:bg-slate-800 hover:text-white',
-                              ].join(' ')
-                            }
-                          >
-                            {CI
-                              ? <CI size={14} className="shrink-0" />
-                              : <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
-                            }
-                            <span>{cl}</span>
-                          </NavLink>
+                        {isOpen && visibleSgChildren.map(({ label: cl, to: ct, icon: CI, disabled }) => (
+                          disabled ? (
+                            <div
+                              key={cl}
+                              title="Coming soon"
+                              className="flex cursor-not-allowed items-center gap-3 rounded-lg pl-9 pr-3 py-1.5 text-sm text-slate-600"
+                            >
+                              {CI
+                                ? <CI size={14} className="shrink-0" />
+                                : <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
+                              }
+                              <span>{cl}</span>
+                            </div>
+                          ) : (
+                            <NavLink
+                              key={cl}
+                              to={ct}
+                              className={({ isActive }) =>
+                                [
+                                  'flex items-center gap-3 rounded-lg pl-9 pr-3 py-1.5 text-sm transition-colors duration-150',
+                                  isActive
+                                    ? 'bg-indigo-600/20 text-indigo-400 font-medium'
+                                    : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+                                ].join(' ')
+                              }
+                            >
+                              {CI
+                                ? <CI size={14} className="shrink-0" />
+                                : <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current opacity-60" />
+                              }
+                              <span>{cl}</span>
+                            </NavLink>
+                          )
                         ))}
                       </div>
                     )
@@ -417,25 +431,38 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
                   child.isSubgroup ? child.children ?? [] : [child]
                 ).filter(({ permissionGuard }) =>
                   !permissionGuard || isSuperAdmin || userPermissions.includes(permissionGuard)
-                ).map(({ label: cl, to: ct, icon: CI }) => (
-                  <NavLink
-                    key={cl}
-                    to={ct}
-                    title={cl}
-                    className={({ isActive }) =>
-                      [
-                        'flex w-full justify-center rounded-lg px-3 py-2 transition-colors duration-150',
-                        isActive
-                          ? 'text-indigo-400'
-                          : 'text-slate-500 hover:bg-slate-800 hover:text-white',
-                      ].join(' ')
-                    }
-                  >
-                    {CI
-                      ? <CI size={16} className="shrink-0" />
-                      : <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />
-                    }
-                  </NavLink>
+                ).map(({ label: cl, to: ct, icon: CI, disabled }) => (
+                  disabled ? (
+                    <div
+                      key={cl}
+                      title={`${cl} (coming soon)`}
+                      className="flex w-full cursor-not-allowed justify-center rounded-lg px-3 py-2 text-slate-700"
+                    >
+                      {CI
+                        ? <CI size={16} className="shrink-0" />
+                        : <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />
+                      }
+                    </div>
+                  ) : (
+                    <NavLink
+                      key={cl}
+                      to={ct}
+                      title={cl}
+                      className={({ isActive }) =>
+                        [
+                          'flex w-full justify-center rounded-lg px-3 py-2 transition-colors duration-150',
+                          isActive
+                            ? 'text-indigo-400'
+                            : 'text-slate-500 hover:bg-slate-800 hover:text-white',
+                        ].join(' ')
+                      }
+                    >
+                      {CI
+                        ? <CI size={16} className="shrink-0" />
+                        : <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />
+                      }
+                    </NavLink>
+                  )
                 ))}
               </div>
             )
