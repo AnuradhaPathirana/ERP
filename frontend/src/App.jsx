@@ -47,6 +47,7 @@ const PurchaseOrderFormPage    = lazy(() => import('./pages/inventory/PurchaseOr
 const GoodsReceivedNotesPage   = lazy(() => import('./pages/inventory/GoodsReceivedNotesPage'))
 const GoodsReceivedNoteFormPage = lazy(() => import('./pages/inventory/GoodsReceivedNoteFormPage'))
 const PieceScanResultPage       = lazy(() => import('./pages/inventory/PieceScanResultPage'))
+const PrintPieceLabelsPage      = lazy(() => import('./pages/inventory/PrintPieceLabelsPage'))
 const CostingsPage              = lazy(() => import('./pages/inventory/CostingsPage'))
 const CostingFormPage           = lazy(() => import('./pages/inventory/CostingFormPage'))
 const SupplierPaymentsPage      = lazy(() => import('./pages/inventory/SupplierPaymentsPage'))
@@ -167,6 +168,7 @@ export default function App() {
         <Route path="/inventory/goods-received-notes/create"   element={<Lazy component={GoodsReceivedNoteFormPage} />} />
         <Route path="/inventory/goods-received-notes/:id"      element={<Lazy component={GoodsReceivedNoteFormPage} />} />
         <Route path="/inventory/goods-received-notes/:id/edit" element={<Lazy component={GoodsReceivedNoteFormPage} />} />
+        <Route path="/inventory/piece-labels"                  element={<Lazy component={PrintPieceLabelsPage} />} />
         <Route path="/inventory/costings"                      element={<Lazy component={CostingsPage} />} />
         <Route path="/inventory/costings/create"               element={<Lazy component={CostingFormPage} />} />
         <Route path="/inventory/costings/:id"                  element={<Lazy component={CostingFormPage} />} />

@@ -1,6 +1,6 @@
 import { Link, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Box, Calendar, MapPin, Package, QrCode, Tag, Weight } from 'lucide-react'
+import { Box, Calendar, MapPin, Package, QrCode, Tag, Truck, Weight } from 'lucide-react'
 import { getGrnItemPiece } from '../../api/grnItemPieces'
 
 function Row({ icon: Icon, label, value }) {
@@ -66,8 +66,9 @@ export default function PieceScanResultPage() {
         </div>
 
         <div className="px-4 py-3">
-          <Row icon={Package}  label="Product"  value={piece.product ? `${piece.product.name} (${piece.product.product_code})` : null} />
-          <Row icon={Tag}      label="Roll No"  value={piece.roll_no} />
+          <Row icon={Package}  label="Product"       value={piece.product ? `${piece.product.name} (${piece.product.product_code})` : null} />
+          <Row icon={Truck}    label="Shipping Code" value={piece.grn?.shipping_code} />
+          <Row icon={Tag}      label="Roll No"       value={piece.roll_no} />
           <Row icon={Weight}   label="Weight"   value={piece.weight != null ? piece.weight : null} />
           <Row icon={Tag}      label="Batch No" value={piece.batch?.batch_no} />
           <Row icon={Calendar} label="Expiry"   value={piece.batch?.expiry_date} />

@@ -11,6 +11,7 @@ import { getAllStores } from '../../../api/stores'
 import { getAllCategories } from '../../../api/categories'
 import Breadcrumb from '../../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../../components/TableFilter'
+import CollapsibleCard from '../../../components/ui/CollapsibleCard'
 import FilterSearchSelect from '../../../components/ui/FilterSearchSelect'
 import { ExcelBtn, PdfBtn, PrintBtn } from '../../../components/ui/ActionButtons'
 import { useTableFilter } from '../../../hooks/useTableFilter'
@@ -171,9 +172,9 @@ export default function StockMovementSummaryReport() {
         </FilterField>
       </TableFilter>
 
-      {/* ── Report header (company + summary info) ── */}
+      {/* ── Report header (company + summary info) — collapsed by default ── */}
       {header && (
-        <div className="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
+        <CollapsibleCard title="Stock Movement Summary Details" className="mt-3">
           <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2">
             <div>
               <div className="text-sm font-bold text-slate-800">{header.company_name}</div>
@@ -196,7 +197,7 @@ export default function StockMovementSummaryReport() {
             <HeaderItem label="Category" value={header.category_name ?? 'All'} />
             <HeaderItem label="Closing Value" value={fmt(header.closing_value)} />
           </div>
-        </div>
+        </CollapsibleCard>
       )}
 
       {/* ── Summary table ── */}

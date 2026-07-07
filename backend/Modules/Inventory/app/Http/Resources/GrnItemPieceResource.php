@@ -41,10 +41,11 @@ class GrnItemPieceResource extends JsonResource
                 'name' => $this->location->location_name,
             ] : null),
             'grn' => $this->whenLoaded('grn', fn () => [
-                'id'       => $this->grn->id,
-                'grn_no'   => $this->grn->grn_no,
-                'grn_date' => $this->grn->grn_date?->toDateString(),
-                'status'   => $this->grn->status->value,
+                'id'            => $this->grn->id,
+                'grn_no'        => $this->grn->grn_no,
+                'grn_date'      => $this->grn->grn_date?->toDateString(),
+                'status'        => $this->grn->status->value,
+                'shipping_code' => $this->grn->shipping_code,
             ]),
         ];
     }

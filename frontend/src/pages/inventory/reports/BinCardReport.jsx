@@ -7,6 +7,7 @@ import { getAllStores } from '../../../api/stores'
 import { getAllProducts } from '../../../api/products'
 import Breadcrumb from '../../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../../components/TableFilter'
+import CollapsibleCard from '../../../components/ui/CollapsibleCard'
 import FilterSearchSelect from '../../../components/ui/FilterSearchSelect'
 import { ExcelBtn, PdfBtn, PrintBtn } from '../../../components/ui/ActionButtons'
 import { useTableFilter } from '../../../hooks/useTableFilter'
@@ -178,9 +179,9 @@ export default function BinCardReport() {
         </div>
       ) : (
         <>
-          {/* ── Report header (company + product info) ── */}
+          {/* ── Report header (company + product info) — collapsed by default ── */}
           {header && (
-            <div className="mt-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
+            <CollapsibleCard title="Bin Card Details" className="mt-3">
               <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-2">
                 <div>
                   <div className="text-sm font-bold text-slate-800">{header.company_name}</div>
@@ -203,7 +204,7 @@ export default function BinCardReport() {
                 <HeaderItem label="Stock In Hand" value={fmt(header.stock_in_hand)} />
                 <HeaderItem label="Reorder Qty / Period" value={`${fmt(header.reorder_qty)} / ${header.reorder_period ?? '—'}`} />
               </div>
-            </div>
+            </CollapsibleCard>
           )}
 
           {/* ── Ledger table ── */}

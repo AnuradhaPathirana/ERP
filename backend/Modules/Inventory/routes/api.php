@@ -31,6 +31,7 @@ use Modules\Inventory\Http\Controllers\SupplierAttachmentController;
 use Modules\Inventory\Http\Controllers\GrnPdfController;
 use Modules\Inventory\Http\Controllers\GrnItemPieceController;
 use Modules\Inventory\Http\Controllers\GrnPieceLabelPdfController;
+use Modules\Inventory\Http\Controllers\PieceLabelController;
 use Modules\Inventory\Http\Controllers\StockController;
 use Modules\Inventory\Http\Controllers\StockReferenceTypeController;
 use Modules\Inventory\Http\Controllers\BinCardExportController;
@@ -254,6 +255,14 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.grns.piece-labels.pdf');
     Route::apiResource('goods-received-notes', GoodsReceivedNoteController::class)
         ->names('inventory.grns');
+
+    // ── Piece Labels (cross-GRN QR label printing) ───────────────────────────
+    Route::get('piece-labels', [PieceLabelController::class, 'index'])
+        ->name('inventory.piece-labels.index');
+    Route::get('piece-labels/shipping-codes', [PieceLabelController::class, 'shippingCodes'])
+        ->name('inventory.piece-labels.shipping-codes');
+    Route::get('piece-labels/pdf', [PieceLabelController::class, 'pdf'])
+        ->name('inventory.piece-labels.pdf');
 
     // ── Supplier Payments ────────────────────────────────────────────────────
     Route::get('supplier-payments/next-payment-no', [SupplierPaymentController::class, 'nextPaymentNo'])
