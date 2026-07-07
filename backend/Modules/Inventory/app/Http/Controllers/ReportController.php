@@ -8,6 +8,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
+use Modules\Inventory\Services\BinCardService;
 
 class ReportController extends Controller
 {
@@ -892,5 +893,23 @@ class ReportController extends Controller
                 'total'        => $paginator->total(),
             ],
         ]);
+    }
+
+    // ── 12. Bin Card (per-product stock ledger with running balance) ─────────
+    // Full ledger for one product (no pagination — the running balance is
+    // sequential and the PDF/CSV exports need the complete set anyway).
+    public function binCard(Request $request, BinCardService $service): JsonResponse
+    {
+        $request->validate([
+            'product_id'  => ['required', 'integer', 'exists:inv_products,id'],
+            'location_id' => ['nullable', 'integer', 'exists:inv_locations,id'],
+            'store_id'    => ['nullable', 'integer', 'exists:inv_stores,id'],
+            'date_from'   => ['nullable', 'date'],
+            'date_to'     => ['nullable', 'date', 'after_or_equal:date_from'],
+        ]);
+
+        return response()->json($service->build(
+            $request->only(['product_id', 'location_id', 'store_id', 'date_from', 'date_to'])
+        ));
     }
 }

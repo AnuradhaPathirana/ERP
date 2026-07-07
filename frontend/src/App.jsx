@@ -65,6 +65,7 @@ const OutstandingPOsReport     = lazy(() => import('./pages/inventory/reports/Ou
 const GrnReport                = lazy(() => import('./pages/inventory/reports/GrnReport'))
 const SupplierSummaryReport    = lazy(() => import('./pages/inventory/reports/SupplierSummaryReport'))
 const LandedCostsReport        = lazy(() => import('./pages/inventory/reports/LandedCostsReport'))
+const BinCardReport            = lazy(() => import('./pages/inventory/reports/BinCardReport'))
 
 const UserManagementPage    = lazy(() => import('./pages/admin/UserManagementPage'))
 const RolesPage             = lazy(() => import('./pages/admin/RolesPage'))
@@ -187,6 +188,7 @@ export default function App() {
         <Route path="/inventory/reports/grn"               element={<Lazy component={GrnReport} />} />
         <Route path="/inventory/reports/supplier-summary"  element={<Lazy component={SupplierSummaryReport} />} />
         <Route path="/inventory/reports/landed-costs"      element={<Lazy component={LandedCostsReport} />} />
+        <Route path="/inventory/reports/bin-card"          element={<Lazy component={BinCardReport} />} />
       </Route>
 
       {/* Fallback */}

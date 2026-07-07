@@ -32,6 +32,8 @@ use Modules\Inventory\Http\Controllers\GrnPdfController;
 use Modules\Inventory\Http\Controllers\GrnItemPieceController;
 use Modules\Inventory\Http\Controllers\GrnPieceLabelPdfController;
 use Modules\Inventory\Http\Controllers\StockController;
+use Modules\Inventory\Http\Controllers\StockReferenceTypeController;
+use Modules\Inventory\Http\Controllers\BinCardExportController;
 use Modules\Inventory\Http\Controllers\CostingController;
 use Modules\Inventory\Http\Controllers\CostingExpenseTypeController;
 use Modules\Inventory\Http\Controllers\ReportController;
@@ -173,6 +175,8 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.stock.product');
     Route::get('stock/by-store', [StockController::class, 'byStore'])
         ->name('inventory.stock.by-store');
+    Route::get('stock-reference-types/all', [StockReferenceTypeController::class, 'all'])
+        ->name('inventory.stock-reference-types.all');
 
     // ── Purchasing ────────────────────────────────────────────────────────────
 
@@ -287,6 +291,9 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         Route::get('grn',               [ReportController::class, 'grn'])->name('grn');
         Route::get('supplier-summary',  [ReportController::class, 'supplierSummary'])->name('supplier-summary');
         Route::get('landed-costs',      [ReportController::class, 'landedCosts'])->name('landed-costs');
+        Route::get('bin-card',          [ReportController::class, 'binCard'])->name('bin-card');
+        Route::get('bin-card/pdf',      [BinCardExportController::class, 'pdf'])->name('bin-card.pdf');
+        Route::get('bin-card/csv',      [BinCardExportController::class, 'csv'])->name('bin-card.csv');
     });
 
     // GRN Attachments

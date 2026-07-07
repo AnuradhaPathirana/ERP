@@ -18,6 +18,7 @@ use Modules\Inventory\Models\GrnItemPiece;
 use Modules\Inventory\Models\ProductLocationStore;
 use Modules\Inventory\Models\PurchaseOrder;
 use Modules\Inventory\Models\PurchaseOrderItem;
+use Modules\Inventory\Models\StockReferenceType;
 use Modules\Inventory\Models\StockTransaction;
 
 class GoodsReceivedNoteService
@@ -320,7 +321,7 @@ class GoodsReceivedNoteService
                         // Create stock transaction per batch slice
                         $stockTransaction = StockTransaction::create([
                             'transaction_date' => now(),
-                            'reference_type'   => 'grn',
+                            'reference_type'   => StockReferenceType::CODE_GRN,
                             'reference_id'     => $grn->id,
                             'product_id'       => $item->product_id,
                             'store_id'         => $grn->store_id,
@@ -354,7 +355,7 @@ class GoodsReceivedNoteService
                     // Non-batch product: single stock transaction as before
                     $stockTransaction = StockTransaction::create([
                         'transaction_date' => now(),
-                        'reference_type'   => 'grn',
+                        'reference_type'   => StockReferenceType::CODE_GRN,
                         'reference_id'     => $grn->id,
                         'product_id'       => $item->product_id,
                         'store_id'         => $grn->store_id,

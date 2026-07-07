@@ -12,6 +12,7 @@ class InventoryDatabaseSeeder extends Seeder
             CostingExpenseTypeSeeder::class,
 
             // ── Step 1: no dependencies ──────────────────────────────────────
+            StockReferenceTypesSeeder::class,
             IndustriesSeeder::class,
             UnitCategoriesSeeder::class,
             StoreTypesSeeder::class,

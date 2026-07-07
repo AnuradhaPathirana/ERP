@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { BarChart2 } from 'lucide-react'
 import { getStockMovementsReport } from '../../../api/reports'
+import { getAllStockReferenceTypes } from '../../../api/stockReferenceTypes'
 import { getAllLocations } from '../../../api/locations'
 import { getAllStores } from '../../../api/stores'
 import { getAllProducts } from '../../../api/products'
@@ -28,17 +29,19 @@ const INITIAL_FILTERS = {
   date_to: '',
 }
 
-const REF_TYPES = [
-  { value: 'GoodsReceivedNote', label: 'Goods Received Note' },
-  { value: 'Adjustment', label: 'Adjustment' },
-]
-
 export default function StockMovementsReport() {
   const [page, setPage] = useState(1)
   const resetPage = () => setPage(1)
 
   const { open, toggle, draft, setDraft, applied, apply, clear, activeCount } =
     useTableFilter(INITIAL_FILTERS)
+
+  const { data: refTypesData } = useQuery({
+    queryKey: ['stock-reference-types-all'],
+    queryFn: getAllStockReferenceTypes,
+    staleTime: Infinity,
+  })
+  const refTypeLabels = Object.fromEntries((refTypesData ?? []).map((t) => [t.code, t.label]))
 
   const { data: locationsData } = useQuery({
     queryKey: ['locations-all'],
@@ -115,7 +118,7 @@ export default function StockMovementsReport() {
         <FilterField label="Reference Type">
           <select className={FILTER_SELECT_CLS} value={draft.reference_type} onChange={(e) => setDraft((d) => ({ ...d, reference_type: e.target.value }))}>
             <option value="">All types</option>
-            {REF_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+            {(refTypesData ?? []).map((t) => <option key={t.code} value={t.code}>{t.label}</option>)}
           </select>
         </FilterField>
         <FilterField label="Date From">
@@ -162,7 +165,7 @@ export default function StockMovementsReport() {
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{row.transaction_date?.slice(0, 16)}</td>
                         <td className="px-3 py-2 font-mono text-slate-600">{row.product_code}</td>
                         <td className="px-3 py-2 font-medium text-slate-800">{row.product_name}</td>
-                        <td className="px-3 py-2 text-slate-500">{row.reference_type?.replace(/([A-Z])/g, ' $1').trim()}</td>
+                        <td className="px-3 py-2 text-slate-500">{refTypeLabels[row.reference_type] ?? row.reference_type}</td>
                         <td className="px-3 py-2 font-mono text-slate-500">{row.reference_id}</td>
                         <td className="px-3 py-2 font-mono text-slate-500">{row.batch_no || <span className="italic text-slate-300">—</span>}</td>
                         <td className={`px-3 py-2 text-right font-semibold ${Number(row.qty_in) > 0 ? 'text-green-700' : 'text-slate-300'}`}>

@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeftRight,
   BarChart2,
+  BookOpen,
   Box,
   Building2,
   Bus,
@@ -70,6 +71,7 @@ const NAV_ITEMS = [
         children: [
           { label: 'Stock Levels',       to: '/inventory/reports/stock-levels',       icon: BarChart2,      permissionGuard: 'view_reports' },
           { label: 'Stock Movements',    to: '/inventory/reports/stock-movements',    icon: ArrowLeftRight, permissionGuard: 'view_reports' },
+          { label: 'Bin Card',           to: '/inventory/reports/bin-card',           icon: BookOpen,       permissionGuard: 'view_reports' },
           { label: 'Low Stock Alert',    to: '/inventory/reports/low-stock',          icon: AlertTriangle,  permissionGuard: 'view_reports' },
           { label: 'Stock Valuation',    to: '/inventory/reports/stock-valuation',    icon: DollarSign,     permissionGuard: 'view_reports' },
           { label: 'Batch / Expiry',     to: '/inventory/reports/batch-expiry',       icon: FlaskConical,   permissionGuard: 'view_reports' },

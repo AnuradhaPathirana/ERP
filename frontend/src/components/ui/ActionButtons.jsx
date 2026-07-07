@@ -1,4 +1,4 @@
-import { Download, Edit2, Eye, Printer, Trash2 } from 'lucide-react'
+import { Download, Edit2, Eye, FileSpreadsheet, Printer, Trash2 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 
 const VIEW_CLS =
@@ -11,6 +11,8 @@ const PRINT_CLS =
   'inline-flex items-center justify-center rounded-lg p-1.5 bg-slate-100 text-slate-600 hover:bg-slate-200 active:bg-slate-300 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
 const PDF_CLS =
   'inline-flex items-center justify-center rounded-lg p-1.5 bg-orange-50 text-orange-600 hover:bg-orange-100 active:bg-orange-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
+const EXCEL_CLS =
+  'inline-flex items-center justify-center rounded-lg p-1.5 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 active:bg-emerald-200 transition-colors disabled:opacity-40 disabled:cursor-not-allowed'
 
 export function ViewBtn({ to, onClick, title = 'View', size = 14 }) {
   const icon = <Eye size={size} strokeWidth={2} />
@@ -58,6 +60,14 @@ export function PdfBtn({ onClick, disabled, title = 'Download PDF', size = 14 })
   return (
     <button type="button" title={title} onClick={onClick} disabled={disabled} className={PDF_CLS}>
       <Download size={size} strokeWidth={2} />
+    </button>
+  )
+}
+
+export function ExcelBtn({ onClick, disabled, title = 'Download Excel (CSV)', size = 14 }) {
+  return (
+    <button type="button" title={title} onClick={onClick} disabled={disabled} className={EXCEL_CLS}>
+      <FileSpreadsheet size={size} strokeWidth={2} />
     </button>
   )
 }

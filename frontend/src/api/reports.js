@@ -34,3 +34,12 @@ export const getSupplierSummaryReport = (page = 1, filters = {}) =>
 
 export const getLandedCostsReport = (page = 1, filters = {}) =>
   api.get(`${base}/landed-costs`, { params: { page, ...filters } }).then((r) => r.data)
+
+export const getBinCardReport = (filters = {}) =>
+  api.get(`${base}/bin-card`, { params: filters }).then((r) => r.data)
+
+export const downloadBinCardPdf = (filters = {}) =>
+  api.get(`${base}/bin-card/pdf`, { params: filters, responseType: 'blob' }).then((r) => r.data)
+
+export const downloadBinCardCsv = (filters = {}) =>
+  api.get(`${base}/bin-card/csv`, { params: filters, responseType: 'blob' }).then((r) => r.data)
