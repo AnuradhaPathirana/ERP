@@ -173,6 +173,15 @@ class GoodsReceivedNoteService
         return $this->generateGrnNo();
     }
 
+    /** True when no other (non-trashed) GRN already uses the shipping code. */
+    public function isShippingCodeAvailable(string $shippingCode, ?int $excludeId = null): bool
+    {
+        return !GoodsReceivedNote::query()
+            ->where('shipping_code', $shippingCode)
+            ->when($excludeId !== null, fn ($query) => $query->whereKeyNot($excludeId))
+            ->exists();
+    }
+
     /**
      * Return the most-recent unit_price recorded in any GRN for each requested product.
      *
@@ -488,8 +497,10 @@ class GoodsReceivedNoteService
         $oldItemIds = $grn->items()->pluck('id');
         if ($oldItemIds->isNotEmpty()) {
             GrnItemBatch::whereIn('grn_item_id', $oldItemIds)->delete();
-            GrnItemPiece::whereIn('grn_item_id', $oldItemIds)->delete();
         }
+        // By grn_id (not item ids) so pieces orphaned from earlier item syncs can't
+        // linger and collide on piece_code when the GRN is confirmed.
+        GrnItemPiece::where('grn_id', $grn->id)->delete();
         $grn->items()->delete();
 
         $poItem = PurchaseOrderItem::whereIn(

@@ -18,7 +18,7 @@ class GoodsReceivedNoteController extends Controller
 {
     public function __construct(private readonly GoodsReceivedNoteService $service)
     {
-        $this->middleware('permission:view_grns')->only(['index', 'show', 'poOutstandingItems', 'poOutstandingItemsMultiple', 'nextGrnNo', 'lastGrn', 'lastProductPrices']);
+        $this->middleware('permission:view_grns')->only(['index', 'show', 'poOutstandingItems', 'poOutstandingItemsMultiple', 'nextGrnNo', 'lastGrn', 'lastProductPrices', 'checkShippingCode']);
         $this->middleware('permission:create_grns')->only(['store']);
         $this->middleware('permission:edit_grns')->only(['update']);
         $this->middleware('permission:confirm_grns')->only(['confirm']);
@@ -107,6 +107,19 @@ class GoodsReceivedNoteController extends Controller
     public function nextGrnNo(): JsonResponse
     {
         return response()->json(['data' => ['grn_no' => $this->service->nextGrnNo()]]);
+    }
+
+    /** GET /goods-received-notes/check-shipping-code?shipping_code=X&exclude_id=Y — realtime uniqueness check */
+    public function checkShippingCode(Request $request): JsonResponse
+    {
+        $shippingCode = trim((string) $request->query('shipping_code', ''));
+        $excludeId    = $request->filled('exclude_id') ? (int) $request->query('exclude_id') : null;
+
+        return response()->json([
+            'data' => [
+                'available' => $shippingCode !== '' && $this->service->isShippingCodeAvailable($shippingCode, $excludeId),
+            ],
+        ]);
     }
 
     /** GET /goods-received-notes/last — latest confirmed GRN system-wide */

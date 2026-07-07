@@ -43,3 +43,12 @@ export const downloadBinCardPdf = (filters = {}) =>
 
 export const downloadBinCardCsv = (filters = {}) =>
   api.get(`${base}/bin-card/csv`, { params: filters, responseType: 'blob' }).then((r) => r.data)
+
+export const getStockMovementSummaryReport = (filters = {}) =>
+  api.get(`${base}/movement-summary`, { params: filters }).then((r) => r.data)
+
+export const downloadStockMovementSummaryPdf = (filters = {}) =>
+  api.get(`${base}/movement-summary/pdf`, { params: filters, responseType: 'blob' }).then((r) => r.data)
+
+export const downloadStockMovementSummaryCsv = (filters = {}) =>
+  api.get(`${base}/movement-summary/csv`, { params: filters, responseType: 'blob' }).then((r) => r.data)

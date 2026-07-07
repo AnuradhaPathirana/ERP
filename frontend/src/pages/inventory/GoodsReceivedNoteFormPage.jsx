@@ -4,6 +4,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, ChevronDown, ClipboardList, Download, FileText, Layers, PackageCheck, Plus, Printer, QrCode, ShoppingCart, Trash2, Weight, X } from 'lucide-react'
 import {
+  checkShippingCode,
   confirmGoodsReceivedNote,
   createGoodsReceivedNote,
   downloadGrnPdf,
@@ -414,6 +415,12 @@ export default function GoodsReceivedNoteFormPage() {
   const [touched,     setTouched]     = useState({})
   const [itemTouched, setItemTouched] = useState({})
 
+  /* ── Shipping code uniqueness (debounced server check) ────── */
+  // status: 'idle' | 'checking' | 'available' | 'taken'
+  const [shippingCodeCheck, setShippingCodeCheck] = useState({ code: '', status: 'idle' })
+  const shippingCodeTimerRef    = useRef(null)
+  const originalShippingCodeRef = useRef('')
+
   /* ── Product search state (manual rows) ───────────────────── */
   const [productSearch, setProductSearch] = useState({ key: null, query: '', results: [], open: false })
   const searchTimerRef = useRef(null)
@@ -575,6 +582,7 @@ export default function GoodsReceivedNoteFormPage() {
     setGrnNoPreview(grn.grn_no ?? '')
     setTouched({})
     setItemTouched({})
+    originalShippingCodeRef.current = (grn.shipping_code ?? '').trim()
     setForm({
       supplier_id:      String(grn.supplier_id   ?? ''),
       grn_date:         grn.grn_date             ?? today,
@@ -628,6 +636,34 @@ export default function GoodsReceivedNoteFormPage() {
       hydrateColorOptions(mappedItems)
     }
   }, [existingGRN])
+
+  /* ── Shipping code uniqueness — debounced realtime check ──── */
+  useEffect(() => {
+    const code = form.shipping_code.trim()
+    if (shippingCodeTimerRef.current) clearTimeout(shippingCodeTimerRef.current)
+
+    // Empty (required rule covers it) or unchanged in edit mode — nothing to check
+    if (!code || (isEdit && code === originalShippingCodeRef.current)) {
+      setShippingCodeCheck({ code, status: 'idle' })
+      return
+    }
+
+    setShippingCodeCheck({ code, status: 'checking' })
+    shippingCodeTimerRef.current = setTimeout(() => {
+      checkShippingCode(code, isEdit ? id : null)
+        .then((available) => {
+          setShippingCodeCheck((prev) =>
+            prev.code === code ? { code, status: available ? 'available' : 'taken' } : prev
+          )
+        })
+        .catch(() => {
+          // Network/permission hiccup — stay silent, backend validation still enforces it
+          setShippingCodeCheck((prev) => (prev.code === code ? { code, status: 'idle' } : prev))
+        })
+    }, 400)
+
+    return () => clearTimeout(shippingCodeTimerRef.current)
+  }, [form.shipping_code, isEdit, id])
 
   /* ── Last GRN ─────────────────────────────────────────────── */
   const { data: lastGrnData } = useQuery({
@@ -1058,6 +1094,10 @@ export default function GoodsReceivedNoteFormPage() {
       showError('Please fill in all required fields highlighted in red.')
       return
     }
+    if (shippingCodeCheck.status === 'taken') {
+      showError('This shipping code is already used by another GRN. Please enter a unique one.')
+      return
+    }
     const validItems = items.filter((r) => r.product_id && parseFloat(r.quantity_received) > 0)
     if (!validItems.length) {
       showError('Please add at least one item with a product and quantity received.')
@@ -1145,8 +1185,16 @@ export default function GoodsReceivedNoteFormPage() {
     ])
   )
 
+  // Realtime uniqueness error (shown immediately, no touch needed)
+  const shippingCodeTakenErr =
+    shippingCodeCheck.status === 'taken' ? 'This shipping code is already used by another GRN.' : null
+
   // Merge client errors with server errors (client takes priority)
-  const getErr = (field) => clientErrors[field] ?? errors[field]?.[0] ?? null
+  const getErr = (field) =>
+    clientErrors[field]
+    ?? (field === 'shipping_code' ? shippingCodeTakenErr : null)
+    ?? errors[field]?.[0]
+    ?? null
 
   // Deprecated alias kept for any remaining usages
   const err = getErr
@@ -1167,6 +1215,18 @@ export default function GoodsReceivedNoteFormPage() {
     if (field === 'qty')   return parseFloat(row.quantity_received) > 0 ? null : 'Required'
     if (field === 'price') return row.unit_price !== '' && parseFloat(row.unit_price) >= 0 ? null : 'Required'
     return null
+  }
+
+  // "Add Rolls" needs Qty Received first — roll weights must sum to it
+  const openRollModal = (idx) => {
+    const row = items[idx]
+    if (!(parseFloat(row.quantity_received) > 0)) {
+      touchItemField(row._key, 'qty')
+      showError('Please enter Qty Received before adding rolls.')
+      focusCell(row._key, 'qty')
+      return
+    }
+    setRollModalIdx(idx)
   }
 
   // Rows sharing the same product + color — nudge the user to merge them instead of blocking save
@@ -1336,6 +1396,12 @@ export default function GoodsReceivedNoteFormPage() {
                 onChange={(e) => setForm((f) => ({ ...f, shipping_code: e.target.value }))}
                 onBlur={() => touch('shipping_code')}
               />
+              {!getErr('shipping_code') && shippingCodeCheck.status === 'checking' && (
+                <p className="mt-0.5 text-[10px] text-slate-400">Checking availability…</p>
+              )}
+              {!getErr('shipping_code') && shippingCodeCheck.status === 'available' && (
+                <p className="mt-0.5 text-[10px] text-emerald-600">Shipping code is available</p>
+              )}
             </FieldRow>
 
             {/* ── Attachments — spans remaining 3 cols on xl ─────── */}
@@ -1707,7 +1773,7 @@ export default function GoodsReceivedNoteFormPage() {
                           <button
                             ref={setCellRef(row._key, 'rolls')}
                             type="button"
-                            onClick={() => setRollModalIdx(idx)}
+                            onClick={() => openRollModal(idx)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
                             }}

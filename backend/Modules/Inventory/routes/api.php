@@ -34,6 +34,7 @@ use Modules\Inventory\Http\Controllers\GrnPieceLabelPdfController;
 use Modules\Inventory\Http\Controllers\StockController;
 use Modules\Inventory\Http\Controllers\StockReferenceTypeController;
 use Modules\Inventory\Http\Controllers\BinCardExportController;
+use Modules\Inventory\Http\Controllers\StockMovementSummaryExportController;
 use Modules\Inventory\Http\Controllers\CostingController;
 use Modules\Inventory\Http\Controllers\CostingExpenseTypeController;
 use Modules\Inventory\Http\Controllers\ReportController;
@@ -237,6 +238,8 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.grns.next-grn-no');
     Route::get('goods-received-notes/last', [GoodsReceivedNoteController::class, 'lastGrn'])
         ->name('inventory.grns.last');
+    Route::get('goods-received-notes/check-shipping-code', [GoodsReceivedNoteController::class, 'checkShippingCode'])
+        ->name('inventory.grns.check-shipping-code');
     Route::get('goods-received-notes/last-product-prices', [GoodsReceivedNoteController::class, 'lastProductPrices'])
         ->name('inventory.grns.last-product-prices');
     Route::get('goods-received-notes/po-items-multi', [GoodsReceivedNoteController::class, 'poOutstandingItemsMultiple'])
@@ -294,6 +297,9 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         Route::get('bin-card',          [ReportController::class, 'binCard'])->name('bin-card');
         Route::get('bin-card/pdf',      [BinCardExportController::class, 'pdf'])->name('bin-card.pdf');
         Route::get('bin-card/csv',      [BinCardExportController::class, 'csv'])->name('bin-card.csv');
+        Route::get('movement-summary',     [ReportController::class, 'stockMovementSummary'])->name('movement-summary');
+        Route::get('movement-summary/pdf', [StockMovementSummaryExportController::class, 'pdf'])->name('movement-summary.pdf');
+        Route::get('movement-summary/csv', [StockMovementSummaryExportController::class, 'csv'])->name('movement-summary.csv');
     });
 
     // GRN Attachments

@@ -6,6 +6,7 @@ namespace Modules\Inventory\Http\Requests;
 
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 use Modules\Inventory\Models\UnitType;
 
 class UpdateGoodsReceivedNoteRequest extends FormRequest
@@ -23,7 +24,12 @@ class UpdateGoodsReceivedNoteRequest extends FormRequest
             'grn_date'         => ['required', 'date'],
             'transaction_date' => ['nullable', 'date'],
             'reference_no'     => ['nullable', 'string', 'max:100'],
-            'shipping_code'    => ['required', 'string', 'max:100'],
+            'shipping_code'    => [
+                'required', 'string', 'max:100',
+                Rule::unique('inv_goods_received_notes', 'shipping_code')
+                    ->ignore($this->route('goods_received_note'))
+                    ->whereNull('deleted_at'),
+            ],
             'store_id'         => ['required', 'integer', 'exists:inv_stores,id'],
             'location_id'      => ['required', 'integer', 'exists:inv_locations,id'],
             'remarks'          => ['nullable', 'string'],
@@ -56,6 +62,14 @@ class UpdateGoodsReceivedNoteRequest extends FormRequest
             'items.*.rolls'              => ['nullable', 'array'],
             'items.*.rolls.*.roll_no'    => ['required_with:items.*.rolls', 'string', 'max:100'],
             'items.*.rolls.*.weight'     => ['required_with:items.*.rolls', 'numeric', 'min:0.0001'],
+        ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return [
+            'shipping_code.unique' => 'This shipping code is already used by another GRN.',
         ];
     }
 

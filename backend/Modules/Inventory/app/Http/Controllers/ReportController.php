@@ -9,6 +9,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
 use Modules\Inventory\Services\BinCardService;
+use Modules\Inventory\Services\StockMovementSummaryService;
 
 class ReportController extends Controller
 {
@@ -910,6 +911,24 @@ class ReportController extends Controller
 
         return response()->json($service->build(
             $request->only(['product_id', 'location_id', 'store_id', 'date_from', 'date_to'])
+        ));
+    }
+
+    // ── 13. Stock Movement Summary (location wise, per product) ──────────────
+    // One row per product: opening / purchase (GRN) / sales / closing, qty + value.
+    // No pagination — the PDF/CSV exports need the complete set anyway.
+    public function stockMovementSummary(Request $request, StockMovementSummaryService $service): JsonResponse
+    {
+        $request->validate([
+            'location_id' => ['nullable', 'integer', 'exists:inv_locations,id'],
+            'store_id'    => ['nullable', 'integer', 'exists:inv_stores,id'],
+            'category_id' => ['nullable', 'integer', 'exists:inv_categories,id'],
+            'date_from'   => ['nullable', 'date'],
+            'date_to'     => ['nullable', 'date', 'after_or_equal:date_from'],
+        ]);
+
+        return response()->json($service->build(
+            $request->only(['location_id', 'store_id', 'category_id', 'date_from', 'date_to'])
         ));
     }
 }

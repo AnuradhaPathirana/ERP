@@ -34,6 +34,12 @@ export const getNextGrnNo = () =>
 export const getLastGrn = () =>
   api.get('/api/v1/goods-received-notes/last').then((r) => r.data.data)
 
+/** Realtime shipping-code uniqueness check — resolves true when available */
+export const checkShippingCode = (shippingCode, excludeId = null) =>
+  api.get('/api/v1/goods-received-notes/check-shipping-code', {
+    params: { shipping_code: shippingCode, ...(excludeId ? { exclude_id: excludeId } : {}) },
+  }).then((r) => r.data.data.available)
+
 /** Download GRN as PDF — returns a Blob */
 export const downloadGrnPdf = (id) =>
   api.get(`/api/v1/goods-received-notes/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data)
