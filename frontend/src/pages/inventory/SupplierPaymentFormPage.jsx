@@ -104,16 +104,18 @@ export default function SupplierPaymentFormPage() {
     enabled:  isEdit,
   })
 
+  // Live pickers only matter while the payment is still editable — a confirmed payment
+  // renders from its saved snapshot instead (see the row-building effects below).
   const { data: outstandingGrns = EMPTY_ARRAY } = useQuery({
     queryKey: ['outstanding-grns', form.supplier_id],
     queryFn:  () => getOutstandingGrns(form.supplier_id),
-    enabled:  Boolean(form.supplier_id) && !isAdvance,
+    enabled:  Boolean(form.supplier_id) && !isAdvance && status === 'draft',
   })
 
   const { data: openCreditNotes = EMPTY_ARRAY } = useQuery({
     queryKey: ['open-credit-notes', form.supplier_id],
     queryFn:  () => getOpenCreditNotes(form.supplier_id),
-    enabled:  Boolean(form.supplier_id),
+    enabled:  Boolean(form.supplier_id) && status === 'draft',
   })
 
   // Seed header + advance state from an existing draft
@@ -140,10 +142,30 @@ export default function SupplierPaymentFormPage() {
     })))
   }, [existing])
 
-  // Merge live outstanding GRNs with any allocations already saved on this draft
+  // Build the GRN rows. Confirmed payments render purely from the saved allocation
+  // snapshot — their GRNs are paid off, so the live "outstanding" list no longer
+  // contains them. Drafts merge the live outstanding list with any saved allocations.
   useEffect(() => {
-    const savedByGrn = new Map((existing?.data?.allocations ?? []).map((a) => [a.reference_id, a]))
-    setRows(outstandingGrns.map((g) => {
+    const allocations = existing?.data?.allocations ?? []
+
+    if (existing?.data && existing.data.status !== 'draft') {
+      setRows(allocations.map((a) => ({
+        grn_id:       a.reference_id,
+        grn_no:       a.grn_no ?? `#${a.reference_id}`,
+        grn_date:     a.grn_date,
+        po_no:        a.po_no,
+        reference_no: a.reference_no,
+        due_date:     a.due_date ?? '',
+        amount:       a.outstanding_before,
+        checked:      true,
+        discount:     String(a.discount),
+        payAmount:    String(a.payment_amount),
+      })))
+      return
+    }
+
+    const savedByGrn = new Map(allocations.map((a) => [a.reference_id, a]))
+    const liveRows = outstandingGrns.map((g) => {
       const saved = savedByGrn.get(g.grn_id)
       return {
         grn_id:       g.grn_id,
@@ -158,11 +180,50 @@ export default function SupplierPaymentFormPage() {
         // Defaults to full payment (outstanding − discount); user can reduce it for a partial payment.
         payAmount:    saved ? String(saved.payment_amount) : String(g.outstanding),
       }
-    }))
+    })
+
+    // Draft allocations whose GRN vanished from the live list (paid off by another
+    // confirmed payment meanwhile) must stay visible so the user can review/remove them.
+    const liveIds = new Set(outstandingGrns.map((g) => g.grn_id))
+    const orphanRows = allocations
+      .filter((a) => !liveIds.has(a.reference_id))
+      .map((a) => ({
+        grn_id:       a.reference_id,
+        grn_no:       a.grn_no ?? `#${a.reference_id}`,
+        grn_date:     a.grn_date,
+        po_no:        a.po_no,
+        reference_no: a.reference_no,
+        due_date:     a.due_date ?? '',
+        amount:       0, // nothing left outstanding on this GRN
+        checked:      true,
+        discount:     String(a.discount),
+        payAmount:    String(a.payment_amount),
+      }))
+
+    setRows([...liveRows, ...orphanRows])
   }, [outstandingGrns, existing])
 
-  // Merge live open credit notes with any setoffs already saved on this draft
+  // Build the Set Off rows. Confirmed payments render from the saved setoffs — the
+  // consumed credit notes are exhausted, so the live "open" list no longer has them.
+  // Drafts merge the live open credit notes with any setoffs already saved.
   useEffect(() => {
+    if (existing?.data && existing.data.status !== 'draft') {
+      setCreditNoteRows((existing.data.setoffs ?? []).map((s) => ({
+        id:                 s.credit_note_id ?? `setoff-${s.id}`,
+        credit_note_no:     s.credit_note?.credit_note_no ?? '—',
+        credit_type:        s.setoff_type,
+        credit_type_label:  s.credit_note?.credit_type_label ?? s.setoff_type_label,
+        created_at:         s.credit_note?.created_at,
+        amount:             s.credit_note?.amount ?? s.amount,
+        // Reconstruct the balance as it stood before this payment consumed it, so the
+        // "Remaining" column (balance − setoff) shows the credit note's current balance.
+        remaining_balance:  (s.credit_note?.remaining_balance ?? 0) + s.amount,
+        checked:            true,
+        setoff_amount:      String(s.amount),
+      })))
+      return
+    }
+
     const savedByCn = new Map((existing?.data?.setoffs ?? []).map((s) => [s.credit_note_id, s]))
     setCreditNoteRows(openCreditNotes.map((cn) => {
       const saved = savedByCn.get(cn.id)
@@ -256,6 +317,7 @@ export default function SupplierPaymentFormPage() {
       const savedId = res?.data?.id ?? id
       navigate(`/inventory/supplier-payments/${savedId}/edit`)
       queryClient.invalidateQueries({ queryKey: ['supplier-payments'] })
+      queryClient.invalidateQueries({ queryKey: ['supplier-payment', String(savedId)] })
     },
     onError: (e) => {
       const data = e.response?.data

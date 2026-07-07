@@ -16,6 +16,7 @@ class SupplierPaymentAllocationResource extends JsonResource
             'id'                  => $this->id,
             'reference_type'      => $this->reference_type,
             'reference_id'        => $this->reference_id,
+            'grn_no'              => $this->grn_no,
             'grn_date'            => $this->grn_date?->toDateString(),
             'po_no'               => $this->po_no,
             'reference_no'        => $this->reference_no,

@@ -61,6 +61,7 @@ class SupplierPaymentService
     {
         $payment = SupplierPayment::with(['allocations', 'setoffs.creditNote', 'settlements'])->findOrFail($id);
         $this->attachSupplierSnapshots([$payment]);
+        $this->attachGrnNumbers($payment);
 
         return $payment;
     }
@@ -161,6 +162,7 @@ class SupplierPaymentService
 
             $payment->load(['allocations', 'setoffs.creditNote', 'settlements']);
             $this->attachSupplierSnapshots([$payment]);
+            $this->attachGrnNumbers($payment);
 
             return $payment;
         });
@@ -188,6 +190,7 @@ class SupplierPaymentService
 
             $payment->load(['allocations', 'setoffs.creditNote', 'settlements']);
             $this->attachSupplierSnapshots([$payment]);
+            $this->attachGrnNumbers($payment);
 
             return $payment;
         });
@@ -623,6 +626,34 @@ class SupplierPaymentService
         }
 
         return $total;
+    }
+
+    /**
+     * Attach the live grn_no to loaded allocation rows (display only — the allocation
+     * snapshot doesn't persist it). Allocations are never saved after this runs.
+     */
+    private function attachGrnNumbers(SupplierPayment $payment): void
+    {
+        $grnIds = $payment->allocations
+            ->where('reference_type', 'grn')
+            ->pluck('reference_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($grnIds)) {
+            return;
+        }
+
+        $grnNos = DB::table('inv_goods_received_notes')
+            ->whereIn('id', $grnIds)
+            ->pluck('grn_no', 'id');
+
+        foreach ($payment->allocations as $allocation) {
+            if ($allocation->reference_type === 'grn') {
+                $allocation->setAttribute('grn_no', $grnNos[$allocation->reference_id] ?? null);
+            }
+        }
     }
 
     /** @param array<SupplierPayment> $payments */
