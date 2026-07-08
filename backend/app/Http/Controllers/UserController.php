@@ -15,6 +15,14 @@ class UserController extends Controller
 {
     public function __construct(private readonly UserService $service) {}
 
+    /** GET /users/all — lightweight lookup for document dropdowns (any authenticated user) */
+    public function all(): JsonResponse
+    {
+        return response()->json([
+            'data' => User::orderBy('name')->get(['id', 'name']),
+        ]);
+    }
+
     public function index(): JsonResponse
     {
         $paginator = $this->service->paginate();

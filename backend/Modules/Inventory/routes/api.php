@@ -42,6 +42,7 @@ use Modules\Inventory\Http\Controllers\ReportController;
 use Modules\Inventory\Http\Controllers\SupplierPaymentController;
 use Modules\Inventory\Http\Controllers\SupplierCreditNoteController;
 use Modules\Inventory\Http\Controllers\PaymentModeController;
+use Modules\Inventory\Http\Controllers\SalesOrderController;
 
 Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(function (): void {
     // Named routes before apiResource so static segments are not swallowed by {unit_category}
@@ -285,6 +286,22 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.payment-modes.all');
     Route::apiResource('payment-modes', PaymentModeController::class)
         ->names('inventory.payment-modes');
+
+    // ── Sales Orders ─────────────────────────────────────────────────────────
+    Route::get('sales-orders/next-so-no', [SalesOrderController::class, 'nextSoNo'])
+        ->name('inventory.sales-orders.next-so-no');
+    Route::get('sales-orders/order-sources', [SalesOrderController::class, 'orderSources'])
+        ->name('inventory.sales-orders.order-sources');
+    Route::get('sales-orders/scan-piece/{pieceCode}', [SalesOrderController::class, 'scanPiece'])
+        ->name('inventory.sales-orders.scan-piece');
+    Route::get('sales-orders/product-price/{productId}', [SalesOrderController::class, 'productPrice'])
+        ->name('inventory.sales-orders.product-price');
+    Route::get('sales-orders/available-pieces/{productId}', [SalesOrderController::class, 'availablePieces'])
+        ->name('inventory.sales-orders.available-pieces');
+    Route::patch('sales-orders/{sales_order}/status', [SalesOrderController::class, 'updateStatus'])
+        ->name('inventory.sales-orders.update-status');
+    Route::apiResource('sales-orders', SalesOrderController::class)
+        ->names('inventory.sales-orders');
 
     // ── GRN Piece QR scan resolve ────────────────────────────────────────────
     Route::get('pieces/{pieceCode}', [GrnItemPieceController::class, 'show'])

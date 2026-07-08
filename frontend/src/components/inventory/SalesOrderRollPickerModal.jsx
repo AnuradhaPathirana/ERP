@@ -1,0 +1,268 @@
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Boxes, RefreshCw, Search, Wand2, X } from 'lucide-react'
+import { getAvailablePieces } from '../../api/salesOrders'
+
+const fmt = (n, d = 2) => Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })
+
+/**
+ * Roll picker for manual (non-QR) sales order lines.
+ * Lists the product's in-stock rolls; selected rolls are allocated to the
+ * order exactly like scanned ones. Auto-pick ticks rolls FIFO until the
+ * entered target weight is covered.
+ */
+export default function SalesOrderRollPickerModal({
+  product,            // { id, name, product_code }
+  initialPieces,      // rolls already on this line: [{piece_code, weight, roll_no, grn_unit_price, attribute_id, color}] — pre-checked
+  initialAttributeId, // colour chosen on the line — opens the picker pre-filtered to that colour
+  disabledCodes,      // roll codes on OTHER lines of this order (greyed out)
+  onApply,            // (pieces: [{piece_code, weight, roll_no, grn_unit_price, attribute_id, color}]) => void
+  onClose,
+}) {
+  const [selected, setSelected]         = useState(() => new Set((initialPieces ?? []).map((p) => p.piece_code)))
+  const [filter, setFilter]             = useState('')
+  const [colorFilter, setColorFilter]   = useState(initialAttributeId != null && initialAttributeId !== '' ? String(initialAttributeId) : '')
+  const [targetKg, setTargetKg]         = useState('')
+  const [colorError, setColorError]     = useState('')
+
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ['so-available-pieces', product.id],
+    queryFn:  () => getAvailablePieces(product.id),
+    staleTime: 0,
+  })
+
+  const disabled = useMemo(() => new Set(disabledCodes ?? []), [disabledCodes])
+
+  // When editing a saved order, this line's rolls are 'allocated' server-side and
+  // absent from the available list — merge them in so they stay visible/pickable.
+  const rolls = useMemo(() => {
+    const fetched = data?.pieces ?? []
+    const extra = (initialPieces ?? [])
+      .filter((p) => !fetched.some((r) => r.piece_code === p.piece_code))
+      .map((p) => ({ ...p, grn_no: null, store: null, location: null }))
+    return [...extra, ...fetched]
+  }, [data, initialPieces])
+
+  // Colour filter is keyed by attribute_id (stable), labelled by name
+  const colorOptions = useMemo(() => {
+    const map = new Map()
+    rolls.forEach((p) => {
+      if (p.attribute_id != null) map.set(String(p.attribute_id), p.color || `Colour #${p.attribute_id}`)
+    })
+    return [...map.entries()].map(([id, name]) => ({ id, name }))
+  }, [rolls])
+
+  const matchesColor = (p) => !colorFilter || String(p.attribute_id ?? '') === colorFilter
+
+  const visible = rolls.filter((p) => {
+    if (!matchesColor(p)) return false
+    if (!filter.trim()) return true
+    return (p.roll_no ?? '').toLowerCase().includes(filter.toLowerCase()) ||
+      p.piece_code.toLowerCase().includes(filter.toLowerCase())
+  })
+
+  const selectedRolls  = rolls.filter((p) => selected.has(p.piece_code))
+  const selectedWeight = selectedRolls.reduce((s, p) => s + (parseFloat(p.weight) || 0), 0)
+
+  const toggle = (code) => {
+    if (disabled.has(code)) return
+    setColorError('')
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(code)) next.delete(code)
+      else next.add(code)
+      return next
+    })
+  }
+
+  const autoPick = () => {
+    const target = parseFloat(targetKg)
+    if (!(target > 0)) return
+    setSelected((prev) => {
+      const next = new Set(prev)
+      let total = rolls
+        .filter((p) => next.has(p.piece_code))
+        .reduce((s, p) => s + (parseFloat(p.weight) || 0), 0)
+      for (const p of rolls) { // FIFO — list is already oldest-first
+        if (total >= target) break
+        if (next.has(p.piece_code) || disabled.has(p.piece_code)) continue
+        if (!matchesColor(p)) continue
+        next.add(p.piece_code)
+        total += parseFloat(p.weight) || 0
+      }
+      return next
+    })
+  }
+
+  const handleApply = () => {
+    const distinctColors = new Set(selectedRolls.map((p) => p.attribute_id ?? null))
+    if (distinctColors.size > 1) {
+      setColorError('Select rolls of one colour per line — apply this colour first, then pick the other colour on a new line.')
+      return
+    }
+    onApply(selectedRolls.map((p) => ({
+      piece_code:     p.piece_code,
+      weight:         p.weight,
+      roll_no:        p.roll_no ?? '',
+      grn_unit_price: p.grn_unit_price,
+      attribute_id:   p.attribute_id ?? null,
+      color:          p.color ?? '',
+    })))
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="flex max-h-[90vh] w-full max-w-3xl flex-col rounded-xl border border-slate-200 bg-white shadow-2xl">
+
+        {/* Header */}
+        <div className="flex items-center justify-between rounded-t-xl border-b border-indigo-100 bg-indigo-50 px-4 py-2">
+          <div className="flex items-center gap-2">
+            <Boxes size={14} className="text-indigo-600" />
+            <div>
+              <h2 className="text-xs font-bold text-indigo-700">Select Rolls — {product.name}</h2>
+              <p className="text-[10px] text-indigo-400">
+                <span className="font-mono">{product.product_code}</span>
+                {data && <> · {data.count} roll{data.count !== 1 ? 's' : ''} in stock · {fmt(data.total_weight)} total</>}
+              </p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose} className="rounded p-1 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-600 transition-colors">
+            <X size={14} />
+          </button>
+        </div>
+
+        {/* Toolbar: filter + auto-pick */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 px-4 py-2">
+          <div className="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5">
+            <Search size={11} className="shrink-0 text-slate-400" />
+            <input
+              type="text"
+              value={filter}
+              onChange={(e) => setFilter(e.target.value)}
+              placeholder="Filter by roll no or piece code…"
+              className="w-48 bg-transparent text-xs text-slate-700 outline-none placeholder-slate-400"
+            />
+          </div>
+          {colorOptions.length > 0 && (
+            <select
+              value={colorFilter}
+              onChange={(e) => setColorFilter(e.target.value)}
+              className={`rounded border px-1.5 py-0.5 text-xs outline-none transition-all focus:border-indigo-400 cursor-pointer ${colorFilter ? 'border-indigo-300 bg-indigo-50 font-semibold text-indigo-700' : 'border-slate-200 bg-slate-50 text-slate-700'}`}
+            >
+              <option value="">All colours</option>
+              {colorOptions.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Auto-pick</span>
+            <input
+              type="number" min="0" step="0.01" placeholder="Target kg"
+              value={targetKg}
+              onChange={(e) => setTargetKg(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); autoPick() } }}
+              className="block w-24 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white"
+            />
+            <button
+              type="button"
+              onClick={autoPick}
+              title="Tick the oldest rolls (FIFO) until the target weight is covered"
+              className="flex items-center gap-1 rounded border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[10px] font-bold text-indigo-600 hover:bg-indigo-100 transition-colors"
+            >
+              <Wand2 size={10} /> Pick
+            </button>
+          </div>
+        </div>
+
+        {/* Roll list */}
+        <div className="min-h-32 flex-1 overflow-y-auto">
+          {isLoading && (
+            <div className="flex items-center justify-center gap-2 py-10 text-xs text-slate-400">
+              <RefreshCw size={12} className="animate-spin" /> Loading rolls…
+            </div>
+          )}
+          {isError && <div className="py-10 text-center text-xs text-red-500">Failed to load available rolls.</div>}
+          {!isLoading && !isError && rolls.length === 0 && (
+            <div className="py-10 text-center text-xs text-slate-400">No rolls in stock for this product.</div>
+          )}
+          {!isLoading && !isError && rolls.length > 0 && (
+            <table className="w-full text-xs">
+              <thead className="sticky top-0 bg-slate-50">
+                <tr className="border-b border-slate-200 text-left">
+                  <th className="w-8 px-3 py-1.5"></th>
+                  <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Roll No</th>
+                  <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Piece Code</th>
+                  <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Colour</th>
+                  <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Weight</th>
+                  <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN</th>
+                  <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Store / Location</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {visible.map((p) => {
+                  const isDisabled = disabled.has(p.piece_code)
+                  const isChecked  = selected.has(p.piece_code)
+                  return (
+                    <tr
+                      key={p.piece_code}
+                      onClick={() => toggle(p.piece_code)}
+                      className={`transition-colors ${isDisabled ? 'opacity-40 cursor-not-allowed' : 'cursor-pointer hover:bg-indigo-50/40'} ${isChecked ? 'bg-indigo-50/60' : ''}`}
+                    >
+                      <td className="px-3 py-1">
+                        <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border-2 transition-all ${isChecked ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300 bg-white'}`}>
+                          {isChecked && (
+                            <svg className="h-2 w-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                          )}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1 font-medium text-slate-700">{p.roll_no || '—'}</td>
+                      <td className="px-2 py-1 font-mono text-slate-500">{p.piece_code}</td>
+                      <td className="px-2 py-1 text-slate-600">{p.color || <span className="italic text-slate-300">—</span>}</td>
+                      <td className="px-2 py-1 text-right tabular-nums text-slate-600">{fmt(p.weight, 4)}</td>
+                      <td className="px-2 py-1 font-mono text-[10px] text-slate-400">{p.grn_no || '—'}</td>
+                      <td className="px-2 py-1 text-slate-500">
+                        {[p.store, p.location].filter(Boolean).join(' / ') || '—'}
+                        {isDisabled && <span className="ml-1 text-[9px] font-semibold text-amber-500">on this order</span>}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Footer */}
+        {colorError && (
+          <div className="border-t border-red-100 bg-red-50 px-4 py-1.5 text-xs font-medium text-red-600">{colorError}</div>
+        )}
+        <div className="flex items-center justify-between gap-2 rounded-b-xl border-t border-slate-100 bg-slate-50/60 px-4 py-2">
+          <div className="flex items-center gap-3 text-xs">
+            <span className="text-slate-500">
+              Selected: <span className="font-bold text-slate-700">{selectedRolls.length} roll{selectedRolls.length !== 1 ? 's' : ''}</span>
+            </span>
+            <span className="rounded bg-indigo-100 px-2 py-0.5 font-bold text-indigo-700 tabular-nums">{fmt(selectedWeight)} kg</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition-all hover:bg-slate-50 active:scale-95"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleApply}
+              className="rounded bg-indigo-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-indigo-700 active:scale-95"
+            >
+              Apply Selection
+            </button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  )
+}

@@ -27,6 +27,7 @@ class AuthService
 
         return [
             'token'          => $token,
+            'user_id'        => $user->id,
             'user_name'      => $user->name,
             'user_email'     => $user->email,
             'active_modules' => $user->active_modules ?? [],

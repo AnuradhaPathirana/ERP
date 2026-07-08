@@ -17,6 +17,12 @@ Route::middleware(['auth:sanctum', 'super_admin'])->group(function (): void {
     Route::put('/settings/{key}', [GlobalSettingController::class, 'update']);
 });
 
+// ── Any authenticated user ─────────────────────────────────────────────────────
+Route::middleware('auth:sanctum')->group(function (): void {
+    // Lightweight user lookup for document dropdowns (sales person, order taken by)
+    Route::get('users/all', [UserController::class, 'all'])->name('users.all');
+});
+
 // ── Client-admin and above ─────────────────────────────────────────────────────
 Route::middleware(['auth:sanctum', 'client_admin'])->group(function (): void {
     Route::apiResource('users', UserController::class);

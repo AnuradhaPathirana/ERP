@@ -96,11 +96,25 @@ class CustomerController extends Controller
         return response()->json(['available' => !$taken]);
     }
 
-    /** Flat list for <select> dropdowns — no pagination, id + name only. */
+    /** Flat list for <select> dropdowns — no pagination, lookup fields only. */
     public function all(): JsonResponse
     {
         $items = $this->service->all()
-            ->map(fn (CustomerMaster $c) => ['id' => $c->id, 'name' => $c->customer_name])
+            ->map(fn (CustomerMaster $c) => [
+                'id'            => $c->id,
+                'name'          => $c->customer_name,
+                'customer_code' => $c->customer_code,
+                'customer_type' => $c->customer_type,
+                'shipping_address' => implode(', ', array_filter([
+                    $c->shipping_address_line1,
+                    $c->shipping_address_line2,
+                    $c->shipping_address_line3,
+                    $c->shipping_city,
+                    $c->shipping_state_province,
+                    $c->shipping_zip_postal,
+                    $c->shipping_country,
+                ])),
+            ])
             ->values()
             ->all();
 

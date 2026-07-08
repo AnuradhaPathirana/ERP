@@ -34,6 +34,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'purchase_orders',
         'costings',
         'payment_modes',
+        'sales_orders',
     ];
 
     /** Purchasing permissions that don't follow the standard CRUD pattern. */

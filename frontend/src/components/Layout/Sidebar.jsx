@@ -67,6 +67,7 @@ const NAV_ITEMS = [
       { label: 'Supplier Payments', to: '/inventory/supplier-payments',    icon: DollarSign,    permissionGuard: 'view_supplier_payments' },
       { label: 'Supplier Credit Notes', to: '/inventory/supplier-credit-notes', icon: CreditCard, permissionGuard: 'view_supplier_credit_notes' },
       { label: 'Costings',          to: '/inventory/costings',             icon: Receipt,       permissionGuard: 'view_costings' },
+      { label: 'Sales Orders',      to: '/inventory/sales-orders',         icon: ShoppingCart,  permissionGuard: 'view_sales_orders' },
       {
         label: 'Reports',
         icon: BarChart2,

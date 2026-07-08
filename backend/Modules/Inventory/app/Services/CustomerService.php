@@ -74,11 +74,23 @@ class CustomerService
         $customer->delete();
     }
 
-    /** Lightweight list for dropdowns — id + customer_name only. */
+    /** Lightweight list for dropdowns — lookup fields only. */
     public function all(): Collection
     {
         return CustomerMaster::orderBy('customer_name')
-            ->get(['id', 'customer_name']);
+            ->get([
+                'id',
+                'customer_name',
+                'customer_code',
+                'customer_type',
+                'shipping_address_line1',
+                'shipping_address_line2',
+                'shipping_address_line3',
+                'shipping_city',
+                'shipping_state_province',
+                'shipping_zip_postal',
+                'shipping_country',
+            ]);
     }
 
     private function toAttributes(CustomerData $data): array

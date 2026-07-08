@@ -9,6 +9,10 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class GrnItemPiece extends Model
 {
+    public const STATUS_DRAFT     = 'draft';
+    public const STATUS_IN_STOCK  = 'in_stock';
+    public const STATUS_ALLOCATED = 'allocated'; // reserved by a sales order
+
     protected $table = 'inv_grn_item_pieces';
 
     protected $fillable = [
