@@ -7,6 +7,8 @@ namespace Modules\Inventory\Http\Requests;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Modules\Inventory\Models\AttributeType;
+use Modules\Inventory\Models\ProductAttribute;
 use Modules\Inventory\Models\UnitType;
 
 class UpdateGoodsReceivedNoteRequest extends FormRequest
@@ -78,6 +80,7 @@ class UpdateGoodsReceivedNoteRequest extends FormRequest
         $validator->after(function (Validator $validator): void {
             $items = (array) $this->input('items', []);
 
+            // ── Roll weight validation ────────────────────────────────────
             $unitIds = collect($items)->pluck('unit_id')->filter()->unique()->values();
             $weightUnitIds = UnitType::with('category:id,name')
                 ->whereIn('id', $unitIds)
@@ -100,6 +103,24 @@ class UpdateGoodsReceivedNoteRequest extends FormRequest
                         "items.{$index}.rolls",
                         "Sum of roll weights ({$entered}) must equal quantity received ({$required})."
                     );
+                }
+            }
+
+            // ── Color attribute validation ─────────────────────────────────
+            $productIds   = collect($items)->pluck('product_id')->filter()->unique()->map('intval')->values()->all();
+            $colorTypeIds = AttributeType::whereRaw('LOWER(attribute_type_name) IN (?, ?)', ['color', 'colour'])
+                ->pluck('id');
+            $colorProducts = ProductAttribute::whereIn('product_id', $productIds)
+                ->whereIn('attribute_type_id', $colorTypeIds)
+                ->pluck('product_id')
+                ->unique()
+                ->map('intval')
+                ->all();
+
+            foreach ($items as $index => $item) {
+                $productId = (int) ($item['product_id'] ?? 0);
+                if (in_array($productId, $colorProducts, true) && empty($item['attribute_id'])) {
+                    $validator->errors()->add("items.{$index}.attribute_id", 'Color is required for this item.');
                 }
             }
         });

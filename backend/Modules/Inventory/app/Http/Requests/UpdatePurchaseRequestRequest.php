@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Modules\Inventory\Http\Requests;
 
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Modules\Inventory\Models\AttributeType;
+use Modules\Inventory\Models\ProductAttribute;
 
 class UpdatePurchaseRequestRequest extends FormRequest
 {
@@ -40,5 +43,24 @@ class UpdatePurchaseRequestRequest extends FormRequest
             'items.*.estimated_unit_price' => ['nullable', 'numeric', 'min:0'],
             'items.*.remarks'              => ['nullable', 'string', 'max:255'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $items        = (array) $this->input('items', []);
+            $productIds   = collect($items)->pluck('product_id')->filter()->unique()->map('intval')->values()->all();
+            $colorTypeIds = AttributeType::whereRaw('LOWER(attribute_type_name) IN (?, ?)', ['color', 'colour'])->pluck('id');
+            $colorProducts = ProductAttribute::whereIn('product_id', $productIds)
+                ->whereIn('attribute_type_id', $colorTypeIds)
+                ->pluck('product_id')->unique()->map('intval')->all();
+
+            foreach ($items as $index => $item) {
+                $productId = (int) ($item['product_id'] ?? 0);
+                if (in_array($productId, $colorProducts, true) && empty($item['attribute_id'])) {
+                    $validator->errors()->add("items.{$index}.attribute_id", 'Color is required for this item.');
+                }
+            }
+        });
     }
 }

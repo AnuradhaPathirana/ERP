@@ -474,26 +474,34 @@ export default function GoodsReceivedNoteFormPage() {
   // (non-PO) rows, since PO-linked rows inherit their color from the PO item.
   const { data: attributeTypes = [] } = useQuery({ queryKey: ['attribute-types-all'], queryFn: getAllAttributeTypes })
   const { data: allAttributes  = [] } = useQuery({ queryKey: ['attributes-all'],      queryFn: getAllAttributes })
-  const colorOptionsCache = useRef({})
+  const colorOptionsCache    = useRef({})
+  const attributeTypesRef    = useRef(attributeTypes)
+  const allAttributesRef     = useRef(allAttributes)
+  const itemsRef             = useRef(items)
+  const attrRehydratedRef    = useRef(false)
+  attributeTypesRef.current  = attributeTypes
+  allAttributesRef.current   = allAttributes
+  itemsRef.current           = items
 
   const loadColorOptions = (productId) => {
     if (!productId) return Promise.resolve([])
-    if (colorOptionsCache.current[productId]) return colorOptionsCache.current[productId]
+    const typesReady = attributeTypesRef.current.length > 0
+    if (typesReady && colorOptionsCache.current[productId]) return colorOptionsCache.current[productId]
 
     const promise = getProduct(productId)
       .then((res) => {
         const colorTypeIds = new Set(
-          attributeTypes.filter((t) => isColorAttributeTypeName(t.attribute_type_name)).map((t) => String(t.id))
+          attributeTypesRef.current.filter((t) => isColorAttributeTypeName(t.attribute_type_name)).map((t) => String(t.id))
         )
         return (res.data.product_attributes ?? [])
           .filter((pa) => colorTypeIds.has(String(pa.attribute_type_id)))
-          .map((pa) => allAttributes.find((a) => String(a.id) === String(pa.attribute_id)))
+          .map((pa) => allAttributesRef.current.find((a) => String(a.id) === String(pa.attribute_id)))
           .filter(Boolean)
           .map((a) => ({ id: a.id, name: a.attribute_name }))
       })
       .catch(() => [])
 
-    colorOptionsCache.current[productId] = promise
+    if (typesReady) colorOptionsCache.current[productId] = promise
     return promise
   }
 
@@ -506,6 +514,21 @@ export default function GoodsReceivedNoteFormPage() {
       })
     })
   }
+
+  // Re-hydrate once attribute data arrives (fixes edit-mode race where hydrateColorOptions
+  // ran before attributeTypes loaded, leaving color_options empty and validation skipped).
+  useEffect(() => {
+    if (attributeTypes.length === 0 || allAttributes.length === 0) return
+    if (attrRehydratedRef.current) return
+    attrRehydratedRef.current = true
+    colorOptionsCache.current = {}
+    itemsRef.current.filter((r) => r.product_id && !r.po_item_id).forEach((row) => {
+      loadColorOptions(row.product_id).then((options) => {
+        setItems((prev) => prev.map((r) => r._key === row._key ? { ...r, color_options: options } : r))
+      })
+    })
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attributeTypes.length, allAttributes.length])
 
   const { data: locations = [] } = useQuery({
     queryKey: ['locations-all'],
@@ -1115,6 +1138,17 @@ export default function GoodsReceivedNoteFormPage() {
       return
     }
 
+    const itemsMissingColor = validItems.filter((r) => r.color_options?.length > 0 && !r.attribute_id)
+    if (itemsMissingColor.length) {
+      setItemTouched((t) => {
+        const next = { ...t }
+        itemsMissingColor.forEach((r) => { next[r._key] = { ...next[r._key], color: true } })
+        return next
+      })
+      showError('Color is required for all line items.')
+      return
+    }
+
     const payload = {
       supplier_id:      form.supplier_id      || null,
       grn_date:         form.grn_date,
@@ -1214,6 +1248,7 @@ export default function GoodsReceivedNoteFormPage() {
     if (field === 'uom')   return row.unit_id ? null : 'Required'
     if (field === 'qty')   return parseFloat(row.quantity_received) > 0 ? null : 'Required'
     if (field === 'price') return row.unit_price !== '' && parseFloat(row.unit_price) >= 0 ? null : 'Required'
+    if (field === 'color') return (row.color_options?.length > 0 && !row.attribute_id) ? 'Required' : null
     return null
   }
 
@@ -1687,16 +1722,23 @@ export default function GoodsReceivedNoteFormPage() {
                             manual rows have no PO item to inherit from, so pick it directly here. */}
                         <td className="px-2 py-1">
                           {isManual ? (
-                            <FormDropdown
-                              compact
-                              cellRef={setCellRef(row._key, 'color')}
-                              value={row.attribute_id}
-                              groups={[{ label: null, items: row.color_options.map((c) => ({ value: String(c.id), label: c.name })) }]}
-                              onChange={(val) => setRowField(idx, 'attribute_id', val)}
-                              onNext={() => focusCell(row._key, 'uom')}
-                              placeholder={!row.product_id ? '—' : row.color_options.length === 0 ? 'No colors' : '—'}
-                              disabled={!row.product_id || row.color_options.length === 0}
-                            />
+                            <>
+                              <FormDropdown
+                                compact
+                                cellRef={setCellRef(row._key, 'color')}
+                                value={row.attribute_id}
+                                groups={[{ label: null, items: row.color_options.map((c) => ({ value: String(c.id), label: c.name })) }]}
+                                onChange={(val) => { setRowField(idx, 'attribute_id', val); touchItemField(row._key, 'color') }}
+                                onNext={() => focusCell(row._key, 'uom')}
+                                onBlur={() => touchItemField(row._key, 'color')}
+                                placeholder={!row.product_id ? '—' : row.color_options.length === 0 ? 'No colors' : '—'}
+                                disabled={!row.product_id || row.color_options.length === 0}
+                                error={!!getItemErr(row._key, 'color')}
+                              />
+                              {getItemErr(row._key, 'color') && (
+                                <p className="mt-0.5 text-[10px] text-red-500 leading-none">Required</p>
+                              )}
+                            </>
                           ) : (
                             <span className="text-slate-600">{row.attribute_name || <span className="text-slate-300">—</span>}</span>
                           )}
