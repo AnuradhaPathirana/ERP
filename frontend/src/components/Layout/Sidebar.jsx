@@ -16,6 +16,7 @@ import {
   Clock,
   CreditCard,
   DollarSign,
+  FileText,
   FlaskConical,
   FolderTree,
   LayoutDashboard,
@@ -68,6 +69,8 @@ const NAV_ITEMS = [
       { label: 'Supplier Credit Notes', to: '/inventory/supplier-credit-notes', icon: CreditCard, permissionGuard: 'view_supplier_credit_notes' },
       { label: 'Costings',          to: '/inventory/costings',             icon: Receipt,       permissionGuard: 'view_costings' },
       { label: 'Sales Orders',      to: '/inventory/sales-orders',         icon: ShoppingCart,  permissionGuard: 'view_sales_orders' },
+      { label: 'Delivery Orders',   to: '/inventory/delivery-orders',      icon: Truck,         permissionGuard: 'view_delivery_orders' },
+      { label: 'Invoices',          to: '/inventory/invoices',             icon: FileText,      permissionGuard: 'view_invoices' },
       {
         label: 'Reports',
         icon: BarChart2,

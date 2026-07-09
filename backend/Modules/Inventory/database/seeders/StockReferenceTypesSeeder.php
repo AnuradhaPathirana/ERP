@@ -19,6 +19,7 @@ class StockReferenceTypesSeeder extends Seeder
             ['code' => StockReferenceType::CODE_SUPPLIER_RETURN,  'label' => 'Supplier Return',  'sort_order' => 5],
             ['code' => StockReferenceType::CODE_STOCK_ADJUSTMENT, 'label' => 'Stock Adjustment', 'sort_order' => 6],
             ['code' => StockReferenceType::CODE_STOCK_TRANSFER,   'label' => 'Stock Transfer',   'sort_order' => 7],
+            ['code' => StockReferenceType::CODE_SALES_DELIVERY,   'label' => 'Sales Delivery',   'sort_order' => 8],
         ];
 
         foreach ($types as $type) {

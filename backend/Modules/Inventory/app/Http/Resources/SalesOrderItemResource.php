@@ -20,6 +20,7 @@ class SalesOrderItemResource extends JsonResource
             'attribute_id' => $this->attribute_id,
             'is_scanned'   => $this->is_scanned,
             'quantity'     => (float) $this->quantity,
+            'quantity_delivered' => (float) $this->quantity_delivered,
             'unit_price'   => (float) $this->unit_price,
             'discount'     => (float) $this->discount,
             'tax'          => (float) $this->tax,

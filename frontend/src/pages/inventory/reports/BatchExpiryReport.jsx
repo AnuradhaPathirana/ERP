@@ -105,7 +105,7 @@ export default function BatchExpiryReport() {
           <FilterSearchSelect
             value={draft.product_id}
             onChange={(val) => setDraft((d) => ({ ...d, product_id: val }))}
-            options={productOptions}
+            options={productOptions} wide
             placeholder="All products"
           />
         </FilterField>

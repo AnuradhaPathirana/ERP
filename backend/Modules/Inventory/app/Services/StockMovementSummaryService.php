@@ -58,12 +58,12 @@ class StockMovementSummaryService
                  c.category_name,
                  {$openingSql} as opening_qty,
                  SUM(CASE WHEN {$periodSql} AND st.reference_type = ? THEN st.qty_in ELSE 0 END) as purchase_qty,
-                 SUM(CASE WHEN {$periodSql} AND st.reference_type = ? THEN st.qty_out ELSE 0 END) as sales_qty,
+                 SUM(CASE WHEN {$periodSql} AND st.reference_type IN (?, ?) THEN st.qty_out ELSE 0 END) as sales_qty,
                  SUM(CASE WHEN {$periodSql} THEN st.qty_in - st.qty_out ELSE 0 END) as period_net",
                 [
                     ...$openingBindings,
                     ...$periodBindings, StockReferenceType::CODE_GRN,
-                    ...$periodBindings, StockReferenceType::CODE_INVOICE,
+                    ...$periodBindings, StockReferenceType::CODE_INVOICE, StockReferenceType::CODE_SALES_DELIVERY,
                     ...$periodBindings,
                 ]
             )

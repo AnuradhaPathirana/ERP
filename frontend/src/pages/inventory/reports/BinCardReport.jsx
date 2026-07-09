@@ -145,7 +145,7 @@ export default function BinCardReport() {
           <FilterSearchSelect
             value={draft.product_id}
             onChange={(val) => setDraft((d) => ({ ...d, product_id: val }))}
-            options={productOptions}
+            options={productOptions} wide
             placeholder="Select product…"
           />
         </FilterField>

@@ -12,6 +12,7 @@ class GrnItemPiece extends Model
     public const STATUS_DRAFT     = 'draft';
     public const STATUS_IN_STOCK  = 'in_stock';
     public const STATUS_ALLOCATED = 'allocated'; // reserved by a sales order
+    public const STATUS_DELIVERED = 'delivered'; // shipped out via a delivery order
 
     protected $table = 'inv_grn_item_pieces';
 

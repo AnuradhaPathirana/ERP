@@ -310,6 +310,15 @@ class GoodsReceivedNoteService
 
             $grn->load(['items.product', 'items.batchAssignments.batch', 'items.pieces']);
 
+            // Every line must be received as rolls — they become the QR-labelled
+            // pieces that sales orders allocate. Catches legacy drafts saved
+            // before rolls became mandatory.
+            foreach ($grn->items as $item) {
+                if ($item->pieces->isEmpty()) {
+                    abort(422, "Add rolls for {$item->product?->name} before confirming — every GRN line must be received as rolls.");
+                }
+            }
+
             // Collect affected PO IDs from items (supports multi-PO GRNs)
             $poItemIds     = $grn->items->pluck('po_item_id')->filter()->unique()->values();
             $affectedPoIds = PurchaseOrderItem::whereIn('id', $poItemIds)

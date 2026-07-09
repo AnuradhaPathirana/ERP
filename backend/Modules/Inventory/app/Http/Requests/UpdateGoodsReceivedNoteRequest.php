@@ -61,9 +61,11 @@ class UpdateGoodsReceivedNoteRequest extends FormRequest
             'items.*.batches.*.country_of_origin'     => ['nullable', 'string', 'max:100'],
             'items.*.batches.*.notes'                 => ['nullable', 'string', 'max:500'],
 
-            'items.*.rolls'              => ['nullable', 'array'],
-            'items.*.rolls.*.roll_no'    => ['required_with:items.*.rolls', 'string', 'max:100'],
-            'items.*.rolls.*.weight'     => ['required_with:items.*.rolls', 'numeric', 'min:0.0001'],
+            // Every GRN line must be received as physical rolls — they become
+            // the QR-labelled pieces that sales orders allocate.
+            'items.*.rolls'              => ['required', 'array', 'min:1'],
+            'items.*.rolls.*.roll_no'    => ['required', 'string', 'max:100'],
+            'items.*.rolls.*.weight'     => ['required', 'numeric', 'min:0.0001'],
         ];
     }
 

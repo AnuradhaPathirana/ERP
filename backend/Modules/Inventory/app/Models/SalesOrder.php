@@ -67,6 +67,16 @@ class SalesOrder extends Model
         return $this->hasMany(SalesOrderPiece::class, 'so_id');
     }
 
+    public function deliveryOrders(): HasMany
+    {
+        return $this->hasMany(DeliveryOrder::class, 'so_id');
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class, 'so_id');
+    }
+
     public function customer(): BelongsTo
     {
         return $this->belongsTo(CustomerMaster::class, 'customer_id');

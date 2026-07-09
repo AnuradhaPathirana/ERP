@@ -43,6 +43,10 @@ use Modules\Inventory\Http\Controllers\SupplierPaymentController;
 use Modules\Inventory\Http\Controllers\SupplierCreditNoteController;
 use Modules\Inventory\Http\Controllers\PaymentModeController;
 use Modules\Inventory\Http\Controllers\SalesOrderController;
+use Modules\Inventory\Http\Controllers\DeliveryOrderController;
+use Modules\Inventory\Http\Controllers\DeliveryOrderPdfController;
+use Modules\Inventory\Http\Controllers\InvoiceController;
+use Modules\Inventory\Http\Controllers\InvoicePdfController;
 
 Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(function (): void {
     // Named routes before apiResource so static segments are not swallowed by {unit_category}
@@ -302,6 +306,32 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.sales-orders.update-status');
     Route::apiResource('sales-orders', SalesOrderController::class)
         ->names('inventory.sales-orders');
+
+    // ── Delivery Orders ──────────────────────────────────────────────────────
+    Route::get('delivery-orders/next-do-no', [DeliveryOrderController::class, 'nextDoNo'])
+        ->name('inventory.delivery-orders.next-do-no');
+    Route::get('delivery-orders/from-so/{soId}', [DeliveryOrderController::class, 'fromSalesOrder'])
+        ->name('inventory.delivery-orders.from-so');
+    Route::patch('delivery-orders/{delivery_order}/status', [DeliveryOrderController::class, 'updateStatus'])
+        ->name('inventory.delivery-orders.update-status');
+    Route::get('delivery-orders/{delivery_order}/pdf', [DeliveryOrderPdfController::class, 'download'])
+        ->name('inventory.delivery-orders.pdf');
+    Route::apiResource('delivery-orders', DeliveryOrderController::class)
+        ->names('inventory.delivery-orders');
+
+    // ── Invoices ─────────────────────────────────────────────────────────────
+    Route::get('invoices/next-invoice-no', [InvoiceController::class, 'nextInvoiceNo'])
+        ->name('inventory.invoices.next-invoice-no');
+    Route::get('invoices/billing-source/so/{soId}', [InvoiceController::class, 'billingSourceForSo'])
+        ->name('inventory.invoices.billing-source-so');
+    Route::get('invoices/billing-source/do/{doId}', [InvoiceController::class, 'billingSourceForDo'])
+        ->name('inventory.invoices.billing-source-do');
+    Route::patch('invoices/{invoice}/status', [InvoiceController::class, 'updateStatus'])
+        ->name('inventory.invoices.update-status');
+    Route::get('invoices/{invoice}/pdf', [InvoicePdfController::class, 'download'])
+        ->name('inventory.invoices.pdf');
+    Route::apiResource('invoices', InvoiceController::class)
+        ->names('inventory.invoices');
 
     // ── GRN Piece QR scan resolve ────────────────────────────────────────────
     Route::get('pieces/{pieceCode}', [GrnItemPieceController::class, 'show'])

@@ -141,7 +141,7 @@ export default function PrintPieceLabelsPage() {
           <FilterSearchSelect
             value={draft.product_id}
             onChange={(val) => setDraft((d) => ({ ...d, product_id: val, attribute_id: '' }))}
-            options={productOptions}
+            options={productOptions} wide
             placeholder="All products"
           />
         </FilterField>

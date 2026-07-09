@@ -4,12 +4,14 @@ import { ChevronDown, Search, X } from 'lucide-react'
 /**
  * Compact searchable dropdown for filter panels.
  * options: [{ value, label }]
+ * wide: opens a wider option pad for long labels (e.g. product names).
  */
 export default function FilterSearchSelect({
   value,
   onChange,
   options = [],
   placeholder = 'All',
+  wide = false,
 }) {
   const [open, setOpen]   = useState(false)
   const [query, setQuery] = useState('')
@@ -60,7 +62,7 @@ export default function FilterSearchSelect({
       </button>
 
       {open && (
-        <div className="absolute left-0 z-50 mt-1 w-full min-w-52 rounded-lg border border-slate-200 bg-white shadow-lg">
+        <div className={`absolute left-0 z-50 mt-1 w-full rounded-lg border border-slate-200 bg-white shadow-lg ${wide ? 'min-w-105 max-w-[90vw]' : 'min-w-52'}`}>
           {/* search input */}
           <div className="border-b border-slate-100 p-1.5">
             <div className="flex items-center gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5">
@@ -101,6 +103,7 @@ export default function FilterSearchSelect({
                   key={o.value}
                   type="button"
                   onClick={() => select(o.value)}
+                  title={o.label}
                   className={`w-full truncate px-3 py-1.5 text-left text-xs transition-colors ${
                     String(value) === String(o.value)
                       ? 'bg-indigo-50 font-semibold text-indigo-700'

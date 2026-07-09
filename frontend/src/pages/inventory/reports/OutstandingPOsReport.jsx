@@ -73,7 +73,7 @@ export default function OutstandingPOsReport() {
           <FilterSearchSelect value={draft.supplier_id} onChange={(val) => setDraft((d) => ({ ...d, supplier_id: val }))} options={supplierOptions} placeholder="All suppliers" />
         </FilterField>
         <FilterField label="Product">
-          <FilterSearchSelect value={draft.product_id} onChange={(val) => setDraft((d) => ({ ...d, product_id: val }))} options={productOptions} placeholder="All products" />
+          <FilterSearchSelect value={draft.product_id} onChange={(val) => setDraft((d) => ({ ...d, product_id: val }))} options={productOptions} wide placeholder="All products" />
         </FilterField>
         <FilterField label="Location">
           <FilterSearchSelect value={draft.location_id} onChange={(val) => setDraft((d) => ({ ...d, location_id: val }))} options={(locationsData ?? []).map((l) => ({ value: l.id, label: l.location_name }))} placeholder="All locations" />

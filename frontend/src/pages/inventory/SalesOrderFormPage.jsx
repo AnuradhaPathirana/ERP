@@ -587,11 +587,14 @@ export default function SalesOrderFormPage() {
       color:          scan.piece.color ?? '',
     }
     setItems((prev) => {
-      // One line per product + colour — a different colour starts a new line
+      // One line per product + colour + GRN price — a different colour OR a roll
+      // from a differently-priced GRN starts a new line so each line sells at
+      // its own receipt cost.
       const existing = prev.find((r) =>
         r.pieces.length > 0 &&
         String(r.product_id) === String(scan.product.id) &&
-        String(r.attribute_id || '') === String(scan.piece.attribute_id ?? ''))
+        String(r.attribute_id || '') === String(scan.piece.attribute_id ?? '') &&
+        Number(r.pieces[0]?.grn_unit_price ?? 0) === Number(scan.grn_unit_price ?? 0))
       if (existing) {
         return prev.map((r) => r._key === existing._key ? { ...r, pieces: [...r.pieces, piece] } : r)
       }
@@ -635,7 +638,8 @@ export default function SalesOrderFormPage() {
 
       mergePieceIntoLines(scan)
       const colorTag = scan.piece.color ? ` (${scan.piece.color})` : ''
-      showSuccess(`${scan.product.name}${colorTag} — ${Number(scan.piece.weight).toLocaleString()} added.`)
+      const priceTag = scan.grn_unit_price ? ` @ ${Number(scan.grn_unit_price).toLocaleString()}` : ''
+      showSuccess(`${scan.product.name}${colorTag} — ${Number(scan.piece.weight).toLocaleString()}${priceTag} added.`)
     } catch (e) {
       showError(e.response?.status === 404 ? `Piece ${code} not found.` : 'Failed to resolve the scanned piece.')
     } finally {
@@ -720,6 +724,9 @@ export default function SalesOrderFormPage() {
     // have rolls in stock (not the full attribute master).
     getAvailablePieces(product.id)
       .then(({ pieces, count, total_weight }) => {
+        if (count === 0) {
+          showWarning(`No rolls available in stock for ${product.name}.`)
+        }
         const stockColors = new Map()
         pieces.forEach((p) => {
           if (p.attribute_id != null) stockColors.set(String(p.attribute_id), p.color || `Colour #${p.attribute_id}`)
@@ -743,18 +750,41 @@ export default function SalesOrderFormPage() {
   }
 
   const applyPickedRolls = (rowKey, pieces) => {
-    setItems((prev) => prev.map((row) =>
-      row._key === rowKey
-        ? {
-            ...row,
-            pieces,
-            unit_price:   row.unit_price || (pieces[0]?.grn_unit_price ? String(pieces[0].grn_unit_price) : row.unit_price),
-            // Colour follows the rolls (picker guarantees a single colour)
-            attribute_id: pieces.length ? (pieces[0].attribute_id != null ? String(pieces[0].attribute_id) : '') : row.attribute_id,
-            color_name:   pieces.length ? (pieces[0].color ?? '') : row.color_name,
-          }
-        : row
-    ))
+    setItems((prev) => {
+      const idx = prev.findIndex((r) => r._key === rowKey)
+      if (idx === -1) return prev
+      const base = prev[idx]
+
+      if (pieces.length === 0) {
+        return prev.map((r) => r._key === rowKey ? { ...r, pieces: [] } : r)
+      }
+
+      // One line per GRN price — rolls from differently-priced GRNs split into
+      // separate lines of the same order, each pre-priced at its own cost.
+      const groups = new Map()
+      for (const piece of pieces) {
+        const key = String(Number(piece.grn_unit_price ?? 0))
+        if (!groups.has(key)) groups.set(key, [])
+        groups.get(key).push(piece)
+      }
+
+      const lines = [...groups.values()].map((groupPieces, i) => ({
+        ...(i === 0 ? base : { ...emptyItem(), ...base, _key: Date.now() + Math.random() + i }),
+        pieces:       groupPieces,
+        // Price always follows the picked rolls' own GRN price (still editable) —
+        // the manual-pick prefill or a stale edit-mode price must not override it.
+        unit_price:   groupPieces[0].grn_unit_price
+          ? String(groupPieces[0].grn_unit_price)
+          : (i === 0 ? base.unit_price : ''),
+        attribute_id: groupPieces[0].attribute_id != null ? String(groupPieces[0].attribute_id) : '',
+        color_name:   groupPieces[0].color ?? '',
+        expanded:     false,
+      }))
+
+      const next = [...prev]
+      next.splice(idx, 1, ...lines)
+      return next
+    })
     setRollPickerKey(null)
     clearFieldError('items')
   }
@@ -922,6 +952,7 @@ export default function SalesOrderFormPage() {
             <th className="py-0.5 pr-2">Piece Code</th>
             <th className="py-0.5 pr-2">Roll No</th>
             <th className="py-0.5 pr-2 text-right">Weight</th>
+            <th className="py-0.5 pr-2 text-right">GRN Price</th>
             <th className="w-6"></th>
           </tr>
         </thead>
@@ -931,6 +962,7 @@ export default function SalesOrderFormPage() {
               <td className="py-0.5 pr-2 font-mono">{p.piece_code}</td>
               <td className="py-0.5 pr-2">{p.roll_no || '—'}</td>
               <td className="py-0.5 pr-2 text-right tabular-nums">{Number(p.weight).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
+              <td className="py-0.5 pr-2 text-right tabular-nums">{p.grn_unit_price ? Number(p.grn_unit_price).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}</td>
               <td className="py-0.5 text-center">
                 <button
                   type="button"
@@ -1011,6 +1043,11 @@ export default function SalesOrderFormPage() {
                         </button>
                       )}
                     </div>
+                    {row.product_id && !isScanned && row.available_count === 0 && (
+                      <span className="mt-0.5 inline-block rounded bg-red-50 px-1.5 py-px text-[9px] font-bold text-red-500">
+                        No rolls available in stock
+                      </span>
+                    )}
                   </td>
                   <td className="px-1.5 py-1">
                     {isScanned ? (

@@ -1,7 +1,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
-  Ban, CheckCircle2, ChevronDown, ChevronRight, Pencil, QrCode, RefreshCw, Truck,
+  Ban, CheckCircle2, ChevronDown, ChevronRight, FileText, Pencil, QrCode, RefreshCw, Truck,
 } from 'lucide-react'
 import { useState } from 'react'
 import { getSalesOrder, updateSalesOrderStatus } from '../../api/salesOrders'
@@ -91,6 +91,23 @@ export default function SalesOrderViewPage() {
         </div>
 
         <div className="flex items-center gap-2">
+          {so.status === 'confirmed' && (
+            <Link
+              to={`/inventory/delivery-orders/create?so=${so.id}`}
+              className="flex items-center gap-1 rounded bg-violet-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-violet-700 active:scale-95"
+            >
+              <Truck size={12} /> Create DO
+            </Link>
+          )}
+          {(so.status === 'confirmed' || so.status === 'completed') && so.billing_mode == null && (
+            <Link
+              to={`/inventory/invoices/create?so=${so.id}`}
+              className="flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 transition-all hover:bg-blue-100 active:scale-95"
+              title="Bill the whole sales order directly (advance invoicing)"
+            >
+              <FileText size={12} /> Create Invoice
+            </Link>
+          )}
           {so.status === 'draft' && (
             <button
               type="button"
@@ -174,6 +191,39 @@ export default function SalesOrderViewPage() {
           </div>
         </div>
 
+        {/* Deliveries & Invoices */}
+        {((so.delivery_orders?.length ?? 0) > 0 || (so.invoices?.length ?? 0) > 0) && (
+          <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+            <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">Deliveries &amp; Invoices</p>
+            <div className="flex flex-wrap gap-1.5">
+              {(so.delivery_orders ?? []).map((d) => (
+                <Link
+                  key={`do-${d.id}`}
+                  to={`/inventory/delivery-orders/${d.id}`}
+                  className="flex items-center gap-1.5 rounded border border-violet-200 bg-violet-50 px-2 py-1 text-[11px] font-semibold text-violet-700 transition-colors hover:bg-violet-100"
+                >
+                  <Truck size={11} />
+                  <span className="font-mono">{d.do_no}</span>
+                  <span className="text-[9px] font-normal text-violet-400">{d.status_label} · {d.delivery_date}</span>
+                </Link>
+              ))}
+              {(so.invoices ?? []).map((inv) => (
+                <Link
+                  key={`inv-${inv.id}`}
+                  to={`/inventory/invoices/${inv.id}`}
+                  className="flex items-center gap-1.5 rounded border border-blue-200 bg-blue-50 px-2 py-1 text-[11px] font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+                >
+                  <FileText size={11} />
+                  <span className="font-mono">{inv.invoice_no}</span>
+                  <span className="text-[9px] font-normal text-blue-400">
+                    {inv.status_label} · {Number(inv.grand_total).toLocaleString(undefined, { minimumFractionDigits: 2 })}{inv.do_id == null ? ' · Direct' : ''}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Items */}
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
@@ -187,6 +237,7 @@ export default function SalesOrderViewPage() {
                   <th className="w-16 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">UOM</th>
                   <th className="w-24 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
                   <th className="w-24 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Quantity</th>
+                  <th className="w-24 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-green-600">Delivered</th>
                   <th className="w-16 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-amber-500">Disc%</th>
                   <th className="w-16 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-sky-500">Tax%</th>
                   <th className="w-28 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-700">Amount</th>
@@ -223,6 +274,11 @@ export default function SalesOrderViewPage() {
                       <td className="px-2 py-1.5 text-slate-500">{it.unit?.name}</td>
                       <td className="px-2 py-1.5 text-right text-slate-600 tabular-nums">{fmt(it.unit_price)}</td>
                       <td className="px-2 py-1.5 text-right text-slate-600 tabular-nums">{Number(it.quantity).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums">
+                        <span className={Number(it.quantity_delivered) >= Number(it.quantity) - 0.0001 && Number(it.quantity) > 0 ? 'font-bold text-green-600' : 'text-slate-500'}>
+                          {Number(it.quantity_delivered ?? 0).toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                        </span>
+                      </td>
                       <td className="px-2 py-1.5 text-right text-amber-600 tabular-nums">{Number(it.discount) > 0 ? Number(it.discount) : '—'}</td>
                       <td className="px-2 py-1.5 text-right text-sky-600 tabular-nums">{Number(it.tax) > 0 ? Number(it.tax) : '—'}</td>
                       <td className="px-2 py-1.5 text-right font-bold text-slate-800 tabular-nums">{fmt(it.line_total)}</td>
@@ -230,7 +286,7 @@ export default function SalesOrderViewPage() {
                     {it.is_scanned && expanded[it.id] && (
                       <tr>
                         <td></td>
-                        <td colSpan={9} className="px-2 pb-2">
+                        <td colSpan={10} className="px-2 pb-2">
                           <div className="rounded border border-indigo-100 bg-indigo-50/40 px-2 py-1">
                             <table className="w-full text-[11px]">
                               <thead>
@@ -246,6 +302,11 @@ export default function SalesOrderViewPage() {
                                     <td className="py-0.5 pr-2 font-mono">{p.piece_code}</td>
                                     <td className="py-0.5 pr-2">{p.roll_no || '—'}</td>
                                     <td className="py-0.5 pr-2 text-right tabular-nums">{Number(p.weight).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
+                                    <td className="py-0.5 pl-2 text-right">
+                                      {p.delivered
+                                        ? <span className="rounded-full bg-green-100 px-1.5 py-px text-[9px] font-bold text-green-700">Delivered</span>
+                                        : <span className="rounded-full bg-indigo-100 px-1.5 py-px text-[9px] font-bold text-indigo-600">Reserved</span>}
+                                    </td>
                                   </tr>
                                 ))}
                               </tbody>
@@ -259,7 +320,7 @@ export default function SalesOrderViewPage() {
               </tbody>
               <tfoot>
                 <tr className="bg-indigo-50 border-t border-indigo-100">
-                  <td colSpan={8} className="px-3 py-1.5">
+                  <td colSpan={9} className="px-3 py-1.5">
                     <div className="flex items-center gap-4 text-xs">
                       <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
                       <span className="text-slate-500">Sub Total: <span className="font-bold text-slate-700">{fmt(so.subtotal)}</span></span>

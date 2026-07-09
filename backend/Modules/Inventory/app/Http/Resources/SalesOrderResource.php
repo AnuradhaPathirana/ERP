@@ -57,6 +57,35 @@ class SalesOrderResource extends JsonResource
                 fn () => SalesOrderItemResource::collection($this->items),
             ),
 
+            'delivery_orders' => $this->whenLoaded('deliveryOrders', fn () =>
+                $this->deliveryOrders->map(fn ($do) => [
+                    'id'            => $do->id,
+                    'do_no'         => $do->do_no,
+                    'status'        => $do->status->value,
+                    'status_label'  => $do->status->label(),
+                    'delivery_date' => $do->delivery_date?->toDateString(),
+                ])->values(),
+            ),
+            'invoices' => $this->whenLoaded('invoices', fn () =>
+                $this->invoices->map(fn ($inv) => [
+                    'id'           => $inv->id,
+                    'invoice_no'   => $inv->invoice_no,
+                    'status'       => $inv->status->value,
+                    'status_label' => $inv->status->label(),
+                    'do_id'        => $inv->do_id,
+                    'grand_total'  => (float) $inv->grand_total,
+                ])->values(),
+            ),
+            // null = not billed yet; 'direct' = advance invoice; 'per_do' = per-delivery invoices
+            'billing_mode' => $this->whenLoaded('invoices', function () {
+                $live = $this->invoices->filter(fn ($inv) => $inv->status->value !== 'cancelled');
+                if ($live->isEmpty()) {
+                    return null;
+                }
+
+                return $live->contains(fn ($inv) => $inv->do_id === null) ? 'direct' : 'per_do';
+            }),
+
             'created_at' => $this->created_at?->toDateTimeString(),
             'updated_at' => $this->updated_at?->toDateTimeString(),
         ];

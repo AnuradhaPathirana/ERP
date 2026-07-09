@@ -76,6 +76,8 @@ class SalesOrderService
             'customer',
             'salesPerson',
             'orderTakenBy',
+            'deliveryOrders',
+            'invoices',
         ])->findOrFail($id);
     }
 

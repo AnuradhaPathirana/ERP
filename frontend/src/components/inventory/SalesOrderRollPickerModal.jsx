@@ -94,6 +94,8 @@ export default function SalesOrderRollPickerModal({
     })
   }
 
+  const distinctPrices = new Set(selectedRolls.map((p) => Number(p.grn_unit_price ?? 0)))
+
   const handleApply = () => {
     const distinctColors = new Set(selectedRolls.map((p) => p.attribute_id ?? null))
     if (distinctColors.size > 1) {
@@ -193,6 +195,7 @@ export default function SalesOrderRollPickerModal({
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Piece Code</th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Colour</th>
                   <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Weight</th>
+                  <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN Price</th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN</th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Store / Location</th>
                 </tr>
@@ -220,6 +223,7 @@ export default function SalesOrderRollPickerModal({
                       <td className="px-2 py-1 font-mono text-slate-500">{p.piece_code}</td>
                       <td className="px-2 py-1 text-slate-600">{p.color || <span className="italic text-slate-300">—</span>}</td>
                       <td className="px-2 py-1 text-right tabular-nums text-slate-600">{fmt(p.weight, 4)}</td>
+                      <td className="px-2 py-1 text-right tabular-nums text-slate-600">{p.grn_unit_price ? fmt(p.grn_unit_price) : '—'}</td>
                       <td className="px-2 py-1 font-mono text-[10px] text-slate-400">{p.grn_no || '—'}</td>
                       <td className="px-2 py-1 text-slate-500">
                         {[p.store, p.location].filter(Boolean).join(' / ') || '—'}
@@ -243,6 +247,11 @@ export default function SalesOrderRollPickerModal({
               Selected: <span className="font-bold text-slate-700">{selectedRolls.length} roll{selectedRolls.length !== 1 ? 's' : ''}</span>
             </span>
             <span className="rounded bg-indigo-100 px-2 py-0.5 font-bold text-indigo-700 tabular-nums">{fmt(selectedWeight)} kg</span>
+            {distinctPrices.size > 1 && (
+              <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                {distinctPrices.size} GRN prices — will split into {distinctPrices.size} lines
+              </span>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <button

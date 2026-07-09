@@ -19,6 +19,7 @@ class SalesOrderPieceResource extends JsonResource
             'weight'         => (float) $this->weight,
             'grn_unit_price' => (float) $this->grn_unit_price,
             'roll_no'        => $this->whenLoaded('piece', fn () => $this->piece?->roll_no),
+            'delivered'      => $this->whenLoaded('piece', fn () => $this->piece?->status === \Modules\Inventory\Models\GrnItemPiece::STATUS_DELIVERED),
         ];
     }
 }

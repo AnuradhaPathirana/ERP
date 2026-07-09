@@ -1149,6 +1149,19 @@ export default function GoodsReceivedNoteFormPage() {
       return
     }
 
+    // Rolls are mandatory — they become the QR-labelled pieces sales orders allocate
+    const itemsMissingRolls = validItems.filter((r) => !(r.rolls?.length > 0))
+    if (itemsMissingRolls.length) {
+      setItemTouched((t) => {
+        const next = { ...t }
+        itemsMissingRolls.forEach((r) => { next[r._key] = { ...next[r._key], rolls: true } })
+        return next
+      })
+      const names = itemsMissingRolls.map((r) => r.product_name).filter(Boolean).join(', ')
+      showError(`Add rolls for every item before saving${names ? ` — missing on: ${names}` : ''}.`)
+      return
+    }
+
     const payload = {
       supplier_id:      form.supplier_id      || null,
       grn_date:         form.grn_date,
@@ -1249,6 +1262,7 @@ export default function GoodsReceivedNoteFormPage() {
     if (field === 'qty')   return parseFloat(row.quantity_received) > 0 ? null : 'Required'
     if (field === 'price') return row.unit_price !== '' && parseFloat(row.unit_price) >= 0 ? null : 'Required'
     if (field === 'color') return (row.color_options?.length > 0 && !row.attribute_id) ? 'Required' : null
+    if (field === 'rolls') return (parseFloat(row.quantity_received) > 0 && !(row.rolls?.length > 0)) ? 'Required' : null
     return null
   }
 
@@ -1810,26 +1824,34 @@ export default function GoodsReceivedNoteFormPage() {
                           </div>
                         </td>
 
-                        {/* Rolls */}
+                        {/* Rolls — mandatory: real-time required state once a qty is entered */}
                         <td className="px-2 py-1">
-                          <button
-                            ref={setCellRef(row._key, 'rolls')}
-                            type="button"
-                            onClick={() => openRollModal(idx)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
-                            }}
-                            className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
-                              row.rolls?.length
-                                ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                                : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
-                            }`}
-                          >
-                            <Weight size={10} />
-                            {row.rolls?.length
-                              ? `${row.rolls.length} roll${row.rolls.length !== 1 ? 's' : ''}`
-                              : 'Add Rolls'}
-                          </button>
+                          <div className="flex flex-col gap-0.5">
+                            <button
+                              ref={setCellRef(row._key, 'rolls')}
+                              type="button"
+                              onClick={() => openRollModal(idx)}
+                              onBlur={() => touchItemField(row._key, 'rolls')}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
+                              }}
+                              className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-[10px] font-semibold transition-colors ${
+                                row.rolls?.length
+                                  ? 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                                  : parseFloat(row.quantity_received) > 0
+                                    ? 'border-red-300 bg-red-50 text-red-600 hover:bg-red-100'
+                                    : 'border-amber-200 bg-amber-50 text-amber-700 hover:bg-amber-100'
+                              }`}
+                            >
+                              <Weight size={10} />
+                              {row.rolls?.length
+                                ? `${row.rolls.length} roll${row.rolls.length !== 1 ? 's' : ''}`
+                                : <>Add Rolls <span className="text-red-500 font-bold">*</span></>}
+                            </button>
+                            {parseFloat(row.quantity_received) > 0 && !(row.rolls?.length > 0) && (
+                              <span className="text-[9px] text-red-500 leading-none">Rolls required</span>
+                            )}
+                          </div>
                         </td>
 
                         {/* Unit Price */}

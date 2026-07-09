@@ -20,6 +20,7 @@ class StockReferenceType extends Model
     public const CODE_SUPPLIER_RETURN  = 'supplier_return';
     public const CODE_STOCK_ADJUSTMENT = 'stock_adjustment';
     public const CODE_STOCK_TRANSFER   = 'stock_transfer';
+    public const CODE_SALES_DELIVERY   = 'sales_delivery';
 
     protected $table = 'inv_stock_reference_types';
 
