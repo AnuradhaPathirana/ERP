@@ -66,6 +66,23 @@ function SectionHeader({ icon: Icon, title, colorClass, extra }) {
   )
 }
 
+/* ── Column toggle checkbox (same markup as the Sales Order form) ── */
+function CheckToggle({ checked, onChange, label, title }) {
+  return (
+    <label className="flex cursor-pointer select-none items-center gap-1.5 group" title={title}>
+      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="sr-only" />
+      <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded border-2 transition-all ${checked ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300 bg-white group-hover:border-indigo-400'}`}>
+        {checked && (
+          <svg className="h-2 w-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        )}
+      </span>
+      <span className="text-[11px] font-semibold text-slate-600 group-hover:text-slate-800 transition-colors">{label}</span>
+    </label>
+  )
+}
+
 function FieldRow({ label, required, error, children }) {
   return (
     <div className="flex flex-col gap-0.5 min-w-0">
@@ -222,10 +239,10 @@ function isColorAttributeTypeName(name) {
 }
 
 /* ── Line item calculator ─────────────────────────────────────── */
-function calcItem(row) {
+function calcItem(row, discountEnabled = true) {
   const qty      = parseFloat(row.quantity_received) || 0
   const price    = parseFloat(row.unit_price)        || 0
-  const discPct  = parseFloat(row.discount)          || 0
+  const discPct  = discountEnabled ? (parseFloat(row.discount) || 0) : 0
   const gross    = qty * price
   const discAmt  = gross * (discPct / 100)
   const taxAmt   = 0 // item-wise tax feature hidden — always inert
@@ -410,6 +427,7 @@ export default function GoodsReceivedNoteFormPage() {
   const [batchModalIdx,      setBatchModalIdx]     = useState(null)
   const [batchConfirmModal,  setBatchConfirmModal] = useState({ open: false, firstIdx: null })
   const [rollModalIdx,       setRollModalIdx]      = useState(null)
+  const [discountEnabled,    setDiscountEnabled]   = useState(false)
 
   /* ── Real-time validation state ───────────────────────────── */
   const [touched,     setTouched]     = useState({})
@@ -657,6 +675,8 @@ export default function GoodsReceivedNoteFormPage() {
       }))
       setItems(mappedItems)
       hydrateColorOptions(mappedItems)
+      // Reveal the discount column automatically when the GRN already carries discounts
+      if (grn.items.some((it) => parseFloat(it.discount) > 0)) setDiscountEnabled(true)
     }
   }, [existingGRN])
 
@@ -1002,7 +1022,7 @@ export default function GoodsReceivedNoteFormPage() {
   /* ── Totals ───────────────────────────────────────────────── */
   const totals = items.reduce(
     (acc, r) => {
-      const { gross, discAmt, taxAmt, amount } = calcItem(r)
+      const { gross, discAmt, taxAmt, amount } = calcItem(r, discountEnabled)
       return { gross: acc.gross + gross, disc: acc.disc + discAmt, tax: acc.tax + taxAmt, total: acc.total + amount }
     },
     { gross: 0, disc: 0, tax: 0, total: 0 },
@@ -1179,7 +1199,7 @@ export default function GoodsReceivedNoteFormPage() {
         unit_id:           r.unit_id ? parseInt(r.unit_id) : null,
         quantity_received: parseFloat(r.quantity_received),
         unit_price:        parseFloat(r.unit_price) || 0,
-        discount:          parseFloat(r.discount)   || 0,
+        discount:          discountEnabled ? (parseFloat(r.discount) || 0) : 0,
         tax:               0, // item-wise tax feature hidden
         batch_no:          r.batch_no    || null,
         expiry_date:       r.expiry_date || null,
@@ -1647,12 +1667,14 @@ export default function GoodsReceivedNoteFormPage() {
             title="Received Items"
             colorClass="text-blue-700 bg-blue-50 border-blue-100"
             extra={
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-3">
                 {loadingItems
                   ? <span className="text-[10px] text-blue-400 italic">Loading items…</span>
                   : items.length > 0
                     ? <span className="text-[10px] text-slate-500">{items.length} line{items.length !== 1 ? 's' : ''}</span>
                     : null}
+                <CheckToggle checked={discountEnabled} onChange={setDiscountEnabled} label="Discount %" title="Show/hide the line discount column" />
+                <div className="h-4 w-px bg-blue-200" />
                 <button
                   type="button"
                   onClick={addManualRow}
@@ -1688,7 +1710,7 @@ export default function GoodsReceivedNoteFormPage() {
                     <th className="w-28 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty Received</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Rolls</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
-                    <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-center">Disc %</th>
+                    {discountEnabled && <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-center">Disc %</th>}
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Batch</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] text-right font-bold uppercase tracking-wider text-slate-500">Total</th>
                     <th className="w-8 px-2 py-1.5"></th>
@@ -1696,7 +1718,7 @@ export default function GoodsReceivedNoteFormPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {items.map((row, idx) => {
-                    const { amount } = calcItem(row)
+                    const { amount } = calcItem(row, discountEnabled)
                     const isManual = !row.po_item_id
                     return (
                       <tr key={row._key} className={`hover:bg-slate-50/60 transition-colors ${isManual ? 'bg-green-50/20' : ''}`}>
@@ -1865,7 +1887,11 @@ export default function GoodsReceivedNoteFormPage() {
                               onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
                               onBlur={() => touchItemField(row._key, 'price')}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'disc') }
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  if (discountEnabled) focusCell(row._key, 'disc')
+                                  else if (row.is_batch) focusCell(row._key, 'batch')
+                                }
                               }}
                             />
                             {getItemErr(row._key, 'price') && (
@@ -1875,21 +1901,23 @@ export default function GoodsReceivedNoteFormPage() {
                         </td>
 
                         {/* Disc% */}
-                        <td className="px-2 py-1">
-                          <input
-                            ref={setCellRef(row._key, 'disc')}
-                            type="number" min="0" max="100" step="0.01" placeholder="0"
-                            className="block w-full rounded border border-amber-200 bg-amber-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-amber-400 focus:bg-white"
-                            value={row.discount}
-                            onChange={(e) => setRowField(idx, 'discount', e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                e.preventDefault()
-                                if (row.is_batch) focusCell(row._key, 'batch')
-                              }
-                            }}
-                          />
-                        </td>
+                        {discountEnabled && (
+                          <td className="px-2 py-1">
+                            <input
+                              ref={setCellRef(row._key, 'disc')}
+                              type="number" min="0" max="100" step="0.01" placeholder="0"
+                              className="block w-full rounded border border-amber-200 bg-amber-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-amber-400 focus:bg-white"
+                              value={row.discount}
+                              onChange={(e) => setRowField(idx, 'discount', e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  if (row.is_batch) focusCell(row._key, 'batch')
+                                }
+                              }}
+                            />
+                          </td>
+                        )}
 
                         {/* Batch */}
                         <td className="px-2 py-1">
@@ -1933,22 +1961,26 @@ export default function GoodsReceivedNoteFormPage() {
                 </tbody>
                 <tfoot>
                   <tr className="border-t border-slate-200 bg-slate-50/50">
-                    <td colSpan={10} />
-                    <td className="px-1.5 py-1.5 text-center text-xs font-bold text-amber-600 tabular-nums">
-                      -{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                    </td>
-                    <td colSpan={1} />
+                    <td colSpan={discountEnabled ? 10 : 11} />
+                    {discountEnabled && (
+                      <>
+                        <td className="px-1.5 py-1.5 text-center text-xs font-bold text-amber-600 tabular-nums">
+                          -{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </td>
+                        <td colSpan={1} />
+                      </>
+                    )}
                     <td className="px-2 py-1.5 text-right text-sm font-black text-slate-800 tabular-nums">
                       {totals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </td>
                     <td />
                   </tr>
                   <tr className="bg-indigo-50 border-t border-indigo-100">
-                    <td colSpan={12} className="px-3 py-1.5">
+                    <td colSpan={discountEnabled ? 12 : 11} className="px-3 py-1.5">
                       <div className="flex items-center gap-4 text-xs">
                         <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
                         <span className="text-slate-500">Gross: <span className="font-bold text-slate-700">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
-                        <span className="text-amber-600">Disc: <span className="font-bold">-{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+                        {discountEnabled && <span className="text-amber-600">Disc: <span className="font-bold">-{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>}
                       </div>
                     </td>
                     <td className="px-3 py-1.5 text-right">

@@ -3,7 +3,8 @@ import { ChevronDown, Search, X } from 'lucide-react'
 
 /**
  * Compact searchable dropdown for filter panels.
- * options: [{ value, label }]
+ * options: [{ value, label, group? }] — when any option carries a `group`,
+ *          the pad renders category headers (a simple tree).
  * wide: opens a wider option pad for long labels (e.g. product names).
  */
 export default function FilterSearchSelect({
@@ -20,9 +21,42 @@ export default function FilterSearchSelect({
 
   const selected = options.find((o) => String(o.value) === String(value))
 
-  const filtered = query.trim()
-    ? options.filter((o) => o.label.toLowerCase().includes(query.toLowerCase()))
+  const q = query.trim().toLowerCase()
+  const filtered = q
+    ? options.filter((o) => o.label.toLowerCase().includes(q) || (o.group || '').toLowerCase().includes(q))
     : options
+
+  // Group filtered options by their `group` label, preserving first-seen order
+  const hasGroups = options.some((o) => o.group)
+  const grouped = []
+  if (hasGroups) {
+    const byGroup = new Map()
+    for (const o of filtered) {
+      const g = o.group || 'Other'
+      if (!byGroup.has(g)) {
+        const items = []
+        byGroup.set(g, items)
+        grouped.push({ group: g, items })
+      }
+      byGroup.get(g).push(o)
+    }
+  }
+
+  const optionBtn = (o) => (
+    <button
+      key={o.value}
+      type="button"
+      onClick={() => select(o.value)}
+      title={o.label}
+      className={`w-full truncate px-3 py-1.5 text-left text-xs transition-colors ${
+        String(value) === String(o.value)
+          ? 'bg-indigo-50 font-semibold text-indigo-700'
+          : 'text-slate-700 hover:bg-slate-50'
+      }`}
+    >
+      {o.label}
+    </button>
+  )
 
   useEffect(() => {
     if (!open) { setQuery(''); return }
@@ -97,22 +131,17 @@ export default function FilterSearchSelect({
 
             {filtered.length === 0 ? (
               <p className="px-3 py-2 text-xs italic text-slate-400">No results found</p>
-            ) : (
-              filtered.map((o) => (
-                <button
-                  key={o.value}
-                  type="button"
-                  onClick={() => select(o.value)}
-                  title={o.label}
-                  className={`w-full truncate px-3 py-1.5 text-left text-xs transition-colors ${
-                    String(value) === String(o.value)
-                      ? 'bg-indigo-50 font-semibold text-indigo-700'
-                      : 'text-slate-700 hover:bg-slate-50'
-                  }`}
-                >
-                  {o.label}
-                </button>
+            ) : hasGroups ? (
+              grouped.map((grp) => (
+                <div key={grp.group}>
+                  <div className="sticky top-0 bg-slate-50 px-3 py-1 text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                    {grp.group}
+                  </div>
+                  {grp.items.map(optionBtn)}
+                </div>
               ))
+            ) : (
+              filtered.map(optionBtn)
             )}
           </div>
         </div>

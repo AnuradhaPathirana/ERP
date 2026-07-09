@@ -2,9 +2,10 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { QrCode } from 'lucide-react'
 import { downloadPieceLabelsPdf, getPieceLabels, getShippingCodes } from '../../api/pieceLabels'
-import { getAllProducts, getProduct } from '../../api/products'
+import { getAllProducts } from '../../api/products'
 import { getAllAttributeTypes } from '../../api/attributeTypes'
 import { getAllAttributes } from '../../api/attributes'
+import { getAllCategories } from '../../api/categories'
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
 import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
@@ -30,6 +31,23 @@ function isColorAttributeTypeName(name) {
   return n === 'color' || n === 'colour'
 }
 
+// Walk parent_category_id up to the root, returning [selectedId, ...ancestorIds].
+// An attribute-type attached to any ancestor category applies to a descendant
+// product (mirrors the scoping used in ProductFormPage). Guards against cycles.
+function getCategoryAncestorIds(categoryId, categories) {
+  const byId = new Map(categories.map((c) => [String(c.id), c]))
+  const ids = []
+  const visited = new Set()
+  let current = categoryId != null ? String(categoryId) : null
+  while (current && byId.has(current) && !visited.has(current)) {
+    visited.add(current)
+    ids.push(current)
+    const parentId = byId.get(current).parent_category_id
+    current = parentId != null ? String(parentId) : null
+  }
+  return ids
+}
+
 const hasAnyFilter = (f) => Boolean(f.product_id || f.shipping_code || f.attribute_id)
 
 // Strip empty filters so the backend's required_without_all validation sees only real values
@@ -50,7 +68,10 @@ export default function PrintPieceLabelsPage() {
   const productOptions = (productsData ?? []).map((p) => ({
     value: p.id,
     label: p.product_code ? `[${p.product_code}] ${p.name}` : p.name,
+    category_id: p.category_id,
   }))
+  const selectedProduct = productOptions.find((p) => String(p.value) === String(draft.product_id))
+  const selectedCategoryId = selectedProduct?.category_id ?? null
 
   const { data: shippingCodesData } = useQuery({
     queryKey: ['piece-label-shipping-codes'],
@@ -61,25 +82,48 @@ export default function PrintPieceLabelsPage() {
 
   const { data: attributeTypes = [] } = useQuery({ queryKey: ['attribute-types-all'], queryFn: getAllAttributeTypes })
   const { data: allAttributes = [] }  = useQuery({ queryKey: ['attributes-all'],      queryFn: getAllAttributes })
-  const colorTypeIds = new Set(
-    attributeTypes.filter((t) => isColorAttributeTypeName(t.attribute_type_name)).map((t) => String(t.id))
-  )
+  const { data: categories = [] }     = useQuery({ queryKey: ['categories-all'],      queryFn: getAllCategories })
 
-  // Colors are scoped to the SELECTED PRODUCT's own "Product Attributes" (same
-  // rule as the GRN form) — no product selected means no colors to offer.
-  const { data: productDetail } = useQuery({
-    queryKey: ['product', draft.product_id],
-    queryFn: () => getProduct(draft.product_id),
-    enabled: Boolean(draft.product_id),
-    staleTime: 5 * 60 * 1000,
-  })
-  const colorOptions = draft.product_id
-    ? (productDetail?.data?.product_attributes ?? [])
-        .filter((pa) => colorTypeIds.has(String(pa.attribute_type_id)))
-        .map((pa) => allAttributes.find((a) => String(a.id) === String(pa.attribute_id)))
-        .filter(Boolean)
-        .map((a) => ({ value: a.id, label: a.attribute_name }))
-    : []
+  // Category chain of the selected product (leaf → root). A colour attribute-type
+  // attached to any of these categories is valid for the product.
+  const selectedCategoryChain = selectedCategoryId != null
+    ? getCategoryAncestorIds(selectedCategoryId, categories)
+    : null
+
+  // Colour attribute-types keyed by id. When a Product is selected we narrow to
+  // the colour types on its category chain; otherwise every colour is offered,
+  // grouped by its category tree (Category → Colour attribute-type → colour).
+  const colorTypeById = new Map(
+    attributeTypes
+      .filter((t) => isColorAttributeTypeName(t.attribute_type_name))
+      .filter((t) => selectedCategoryChain == null || selectedCategoryChain.includes(String(t.category_id)))
+      .map((t) => [String(t.id), t])
+  )
+  const colorOptions = allAttributes
+    .filter((a) => colorTypeById.has(String(a.attribute_type_id)))
+    .map((a) => {
+      const type = colorTypeById.get(String(a.attribute_type_id))
+      return {
+        value: a.id,
+        label: a.attribute_name,
+        group: type?.category_name || type?.attribute_type_name || 'Colours',
+      }
+    })
+    .sort((x, y) => x.group.localeCompare(y.group) || x.label.localeCompare(y.label))
+
+  // Does colour `attributeId` still belong to product `productId`'s category chain?
+  // True when nothing is picked or no product narrows the list.
+  const colorFitsProduct = (attributeId, productId) => {
+    if (!attributeId) return true
+    const prod = productOptions.find((p) => String(p.value) === String(productId))
+    const catId = prod?.category_id ?? null
+    if (catId == null) return true
+    const attr = allAttributes.find((a) => String(a.id) === String(attributeId))
+    if (!attr) return true
+    const type = attributeTypes.find((t) => String(t.id) === String(attr.attribute_type_id))
+    if (type == null || !isColorAttributeTypeName(type.attribute_type_name)) return false
+    return getCategoryAncestorIds(catId, categories).includes(String(type.category_id))
+  }
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['piece-labels', applied],
@@ -140,7 +184,7 @@ export default function PrintPieceLabelsPage() {
         <FilterField label="Product">
           <FilterSearchSelect
             value={draft.product_id}
-            onChange={(val) => setDraft((d) => ({ ...d, product_id: val, attribute_id: '' }))}
+            onChange={(val) => setDraft((d) => ({ ...d, product_id: val, attribute_id: colorFitsProduct(d.attribute_id, val) ? d.attribute_id : '' }))}
             options={productOptions} wide
             placeholder="All products"
           />
@@ -157,8 +201,8 @@ export default function PrintPieceLabelsPage() {
           <FilterSearchSelect
             value={draft.attribute_id}
             onChange={(val) => setDraft((d) => ({ ...d, attribute_id: val }))}
-            options={colorOptions}
-            placeholder={draft.product_id ? 'All colors' : 'Select product first'}
+            options={colorOptions} wide
+            placeholder="All colors"
           />
         </FilterField>
       </TableFilter>

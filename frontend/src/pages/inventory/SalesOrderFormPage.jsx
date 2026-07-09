@@ -859,9 +859,6 @@ export default function SalesOrderFormPage() {
     if (form.expected_date && form.order_date && form.expected_date < form.order_date)
       clientErrors.expected_date = ['Expected date must be on or after the order date.']
 
-    if (!form.customer_type)
-      clientErrors.customer_type = ['Customer type is required.']
-
     if (!form.customer_id)
       clientErrors.customer_id = ['Customer is required.']
 
@@ -1377,7 +1374,7 @@ export default function SalesOrderFormPage() {
           <div className="p-3">
             <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4">
               <div>
-                <label className={LABEL_CLS}>Customer Type <span className="text-red-500 normal-case font-bold">*</span></label>
+                <label className={LABEL_CLS}>Customer Type</label>
                 <select
                   className={err('customer_type') ? SELECT_ERR_CLS : SELECT_CLS}
                   value={form.customer_type}
