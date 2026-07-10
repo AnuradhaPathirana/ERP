@@ -1456,7 +1456,7 @@ export default function GoodsReceivedNoteFormPage() {
                 onChange={(e) => setForm((f) => ({ ...f, remarks: e.target.value }))}
               />
             </FieldRow>
-            <FieldRow label="Shipping Code" required error={getErr('shipping_code')}>
+            <FieldRow label="Shipping/Contract No" required error={getErr('shipping_code')}>
               <input
                 ref={shippingCodeFieldRef}
                 className={inpCls('shipping_code')}
