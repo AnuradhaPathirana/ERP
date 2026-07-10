@@ -188,9 +188,9 @@ export default function RollAssignModal({ item, unit, onApply, onClose }) {
               Enter No Of Pieces above to generate roll cards.
             </div>
           ) : (
-            <div className="flex flex-wrap gap-2.5">
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4">
               {rolls.map((r, idx) => (
-                <div key={r._key} className="w-56 rounded-lg border border-slate-200 bg-white p-2">
+                <div key={r._key} className="rounded-lg border border-slate-200 bg-white p-2">
                   <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-indigo-600">Roll {idx + 1}</span>
 
                   <div className="grid grid-cols-2 gap-1.5">
