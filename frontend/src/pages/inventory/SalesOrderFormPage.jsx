@@ -25,7 +25,7 @@ import { getAllAttributeTypes } from '../../api/attributeTypes'
 import { getAllAttributes } from '../../api/attributes'
 import Breadcrumb from '../../components/Breadcrumb'
 import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
-import { showError, showSuccess, showWarning } from '../../utils/alerts'
+import { confirmAction, showError, showSuccess, showWarning } from '../../utils/alerts'
 
 const CUSTOMER_TYPES = ['Trade', 'Retail', 'Wholesale', 'Corporate']
 
@@ -45,6 +45,8 @@ const TABLE_INPUT =
   'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white'
 const TABLE_INPUT_RO =
   'block w-full rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500 outline-none cursor-not-allowed'
+const TABLE_INPUT_WARN =
+  'block w-full rounded border border-amber-400 bg-amber-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-amber-500 focus:bg-white'
 const TABLE_DROPDOWN_BTN =
   'flex w-full items-center justify-between gap-1 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white cursor-pointer'
 const TABLE_DROPDOWN_BTN_DISABLED =
@@ -315,6 +317,8 @@ function emptyItem() {
     color_options:   [], // manual-line colour choices from the product's own attributes
     available_count: null, // in-stock rolls of the product (null = not fetched yet)
     available_weight: 0,
+    cost_hint:       null, // latest GRN cost — below-cost warning basis on manual lines
+    no_selling_price: false, // product has no price-list selling price configured
     expanded:        false,
   }
 }
@@ -341,6 +345,22 @@ function calcItem(row, discountEnabled, taxEnabled) {
   const taxAmt  = gross * (taxPct / 100)
   const amount  = gross - discAmt + taxAmt
   return { qty, gross, discAmt, taxAmt, amount }
+}
+
+// Below-cost guard basis: the dearest attached roll's GRN cost, or the latest
+// confirmed GRN cost (cost_hint) for manual no-roll lines. Null = unknown.
+function rowCostBasis(row) {
+  if (row.pieces.length > 0) {
+    const costs = row.pieces.map((p) => Number(p.grn_unit_price) || 0).filter((c) => c > 0)
+    return costs.length ? Math.max(...costs) : null
+  }
+  return row.cost_hint != null ? Number(row.cost_hint) : null
+}
+
+function isBelowCost(row) {
+  const price = parseFloat(row.unit_price)
+  const cost  = rowCostBasis(row)
+  return cost != null && price > 0 && price < cost
 }
 
 /** QR labels encode "{frontend_url}/inventory/pieces/{piece_code}" — accept both the raw code and the full URL. */
@@ -583,18 +603,20 @@ export default function SalesOrderFormPage() {
       weight:         scan.piece.weight,
       roll_no:        scan.piece.roll_no ?? '',
       grn_unit_price: scan.grn_unit_price,
+      selling_price:  scan.selling_price ?? null,
+      price_source:   scan.price_source ?? null,
       attribute_id:   scan.piece.attribute_id ?? null,
       color:          scan.piece.color ?? '',
     }
     setItems((prev) => {
-      // One line per product + colour + GRN price — a different colour OR a roll
-      // from a differently-priced GRN starts a new line so each line sells at
-      // its own receipt cost.
+      // One line per product + colour + SELLING price — a roll whose shipment
+      // was costed at a different price starts a new line, so old stock sells
+      // at its old price and new stock at its new price.
       const existing = prev.find((r) =>
         r.pieces.length > 0 &&
         String(r.product_id) === String(scan.product.id) &&
         String(r.attribute_id || '') === String(scan.piece.attribute_id ?? '') &&
-        Number(r.pieces[0]?.grn_unit_price ?? 0) === Number(scan.grn_unit_price ?? 0))
+        Number(r.pieces[0]?.selling_price ?? 0) === Number(scan.selling_price ?? 0))
       if (existing) {
         return prev.map((r) => r._key === existing._key ? { ...r, pieces: [...r.pieces, piece] } : r)
       }
@@ -604,7 +626,8 @@ export default function SalesOrderFormPage() {
         product_code: scan.product.product_code ?? '',
         product_name: scan.product.name ?? '',
         unit_id:      scan.product.unit?.id != null ? String(scan.product.unit.id) : '',
-        unit_price:   scan.grn_unit_price || '',
+        unit_price:   scan.selling_price != null ? String(scan.selling_price) : '',
+        no_selling_price: scan.selling_price == null,
         attribute_id: scan.piece.attribute_id != null ? String(scan.piece.attribute_id) : '',
         color_name:   scan.piece.color ?? '',
         pieces:       [piece],
@@ -638,7 +661,7 @@ export default function SalesOrderFormPage() {
 
       mergePieceIntoLines(scan)
       const colorTag = scan.piece.color ? ` (${scan.piece.color})` : ''
-      const priceTag = scan.grn_unit_price ? ` @ ${Number(scan.grn_unit_price).toLocaleString()}` : ''
+      const priceTag = scan.selling_price != null ? ` @ ${Number(scan.selling_price).toLocaleString()}` : ''
       showSuccess(`${scan.product.name}${colorTag} — ${Number(scan.piece.weight).toLocaleString()}${priceTag} added.`)
     } catch (e) {
       showError(e.response?.status === 404 ? `Piece ${code} not found.` : 'Failed to resolve the scanned piece.')
@@ -708,14 +731,20 @@ export default function SalesOrderFormPage() {
       ))
     })
 
-    // Prefill unit price from the latest confirmed GRN cost price (editable)
+    // Prefill unit price from the product's price-list selling price (editable);
+    // keep the latest GRN cost on the row as the below-cost warning basis.
     getProductSalePrice(product.id)
-      .then(({ unit_price }) => {
-        if (unit_price != null) {
-          setItems((prev) => prev.map((row) =>
-            row._key === rowKey && !row.unit_price ? { ...row, unit_price: String(unit_price) } : row
-          ))
-        }
+      .then(({ unit_price, cost_price }) => {
+        setItems((prev) => prev.map((row) =>
+          row._key === rowKey
+            ? {
+                ...row,
+                unit_price:       !row.unit_price && unit_price != null ? String(unit_price) : row.unit_price,
+                cost_hint:        cost_price ?? null,
+                no_selling_price: unit_price == null,
+              }
+            : row
+        ))
       })
       .catch(() => { /* silent — price stays manual */ })
 
@@ -759,11 +788,12 @@ export default function SalesOrderFormPage() {
         return prev.map((r) => r._key === rowKey ? { ...r, pieces: [] } : r)
       }
 
-      // One line per GRN price — rolls from differently-priced GRNs split into
-      // separate lines of the same order, each pre-priced at its own cost.
+      // One line per colour + SELLING price — rolls from shipments costed at
+      // different prices split into separate lines (old stock at old price,
+      // new stock at new price). Cost stays tracked per roll (grn_unit_price).
       const groups = new Map()
       for (const piece of pieces) {
-        const key = String(Number(piece.grn_unit_price ?? 0))
+        const key = `${piece.attribute_id ?? ''}|${piece.selling_price != null ? Number(piece.selling_price) : 'none'}`
         if (!groups.has(key)) groups.set(key, [])
         groups.get(key).push(piece)
       }
@@ -771,11 +801,9 @@ export default function SalesOrderFormPage() {
       const lines = [...groups.values()].map((groupPieces, i) => ({
         ...(i === 0 ? base : { ...emptyItem(), ...base, _key: Date.now() + Math.random() + i }),
         pieces:       groupPieces,
-        // Price always follows the picked rolls' own GRN price (still editable) —
-        // the manual-pick prefill or a stale edit-mode price must not override it.
-        unit_price:   groupPieces[0].grn_unit_price
-          ? String(groupPieces[0].grn_unit_price)
-          : (i === 0 ? base.unit_price : ''),
+        // Each group sells at its rolls' own shipment price (still editable);
+        // rolls without a resolved price keep the line's existing price.
+        unit_price:   groupPieces[0].selling_price != null ? String(groupPieces[0].selling_price) : base.unit_price,
         attribute_id: groupPieces[0].attribute_id != null ? String(groupPieces[0].attribute_id) : '',
         color_name:   groupPieces[0].color ?? '',
         expanded:     false,
@@ -850,7 +878,7 @@ export default function SalesOrderFormPage() {
     },
   })
 
-  const handleSubmit = (saveStatus) => {
+  const handleSubmit = async (saveStatus) => {
     const clientErrors = {}
 
     if (!form.order_date)
@@ -878,6 +906,21 @@ export default function SalesOrderFormPage() {
       setErrors(clientErrors)
       showError('Please fill in all required fields.')
       return
+    }
+
+    // Warn-but-allow loss guard: selling below the rolls' GRN cost is sometimes
+    // intentional (clearance), so confirm instead of blocking.
+    const belowCostLines = items.filter((r) => r.product_id && isBelowCost(r))
+    if (belowCostLines.length > 0) {
+      const names = belowCostLines.map((r) => r.product_name).filter(Boolean).join(', ')
+      const ok = await confirmAction({
+        title: 'Selling below cost',
+        message: `${belowCostLines.length} line(s) are priced below the GRN cost${names ? ` (${names})` : ''}. Save anyway?`,
+        confirmText: 'Yes, Save',
+        confirmColor: '#d97706',
+        icon: 'warning',
+      })
+      if (!ok) return
     }
 
     setErrors({})
@@ -1086,7 +1129,16 @@ export default function SalesOrderFormPage() {
                           else scanInputRef.current?.focus()
                         }
                       }}
-                      className={TABLE_INPUT} />
+                      className={isBelowCost(row) ? TABLE_INPUT_WARN : TABLE_INPUT} />
+                    {isBelowCost(row) && (
+                      <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">Below cost ({fmt(rowCostBasis(row))})</p>
+                    )}
+                    {row.no_selling_price && !row.unit_price && (
+                      <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">No selling price on product</p>
+                    )}
+                    {row.pieces.length > 0 && row.pieces[0]?.price_source === 'price_list' && (
+                      <p className="mt-0.5 text-[9px] leading-tight text-slate-400" title="This shipment has no confirmed costing — the product price-list price was used">Price-list price (no costing)</p>
+                    )}
                   </td>
                   <td className="px-1.5 py-1">
                     {isScanned ? (
@@ -1255,7 +1307,13 @@ export default function SalesOrderFormPage() {
               </div>
               <div>
                 <label className={LABEL_CLS}>Unit Price</label>
-                <input type="number" min="0" step="0.01" value={row.unit_price} onChange={(e) => setRowField(idx, 'unit_price', e.target.value)} className={TABLE_INPUT} />
+                <input type="number" min="0" step="0.01" value={row.unit_price} onChange={(e) => setRowField(idx, 'unit_price', e.target.value)} className={isBelowCost(row) ? TABLE_INPUT_WARN : TABLE_INPUT} />
+                {isBelowCost(row) && (
+                  <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">Below cost ({fmt(rowCostBasis(row))})</p>
+                )}
+                {row.no_selling_price && !row.unit_price && (
+                  <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">No selling price on product</p>
+                )}
               </div>
               <div>
                 <label className={LABEL_CLS}>Quantity</label>

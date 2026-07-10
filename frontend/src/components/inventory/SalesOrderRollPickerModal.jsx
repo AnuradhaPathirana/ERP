@@ -94,7 +94,9 @@ export default function SalesOrderRollPickerModal({
     })
   }
 
-  const distinctPrices = new Set(selectedRolls.map((p) => Number(p.grn_unit_price ?? 0)))
+  const distinctPrices  = new Set(selectedRolls.map((p) => Number(p.grn_unit_price ?? 0)))
+  const distinctSelling = new Set(selectedRolls.map((p) => Number(p.selling_price ?? 0)))
+  const listPrice       = data?.selling_price ?? null // price-list fallback (per product)
 
   const handleApply = () => {
     const distinctColors = new Set(selectedRolls.map((p) => p.attribute_id ?? null))
@@ -107,6 +109,8 @@ export default function SalesOrderRollPickerModal({
       weight:         p.weight,
       roll_no:        p.roll_no ?? '',
       grn_unit_price: p.grn_unit_price,
+      selling_price:  p.selling_price ?? null,
+      price_source:   p.price_source ?? null,
       attribute_id:   p.attribute_id ?? null,
       color:          p.color ?? '',
     })))
@@ -125,6 +129,11 @@ export default function SalesOrderRollPickerModal({
               <p className="text-[10px] text-indigo-400">
                 <span className="font-mono">{product.product_code}</span>
                 {data && <> · {data.count} roll{data.count !== 1 ? 's' : ''} in stock · {fmt(data.total_weight)} total</>}
+                {listPrice != null && (
+                  <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-px font-bold text-emerald-700 tabular-nums" title="Product price-list price — rolls from costed shipments show their own costing price per row">
+                    List @ {fmt(listPrice)}
+                  </span>
+                )}
               </p>
             </div>
           </div>
@@ -195,7 +204,8 @@ export default function SalesOrderRollPickerModal({
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Piece Code</th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Colour</th>
                   <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Weight</th>
-                  <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN Price</th>
+                  <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN Cost</th>
+                  <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Selling</th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN</th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Store / Location</th>
                 </tr>
@@ -224,6 +234,12 @@ export default function SalesOrderRollPickerModal({
                       <td className="px-2 py-1 text-slate-600">{p.color || <span className="italic text-slate-300">—</span>}</td>
                       <td className="px-2 py-1 text-right tabular-nums text-slate-600">{fmt(p.weight, 4)}</td>
                       <td className="px-2 py-1 text-right tabular-nums text-slate-600">{p.grn_unit_price ? fmt(p.grn_unit_price) : '—'}</td>
+                      <td className={`px-2 py-1 text-right tabular-nums ${p.selling_price != null && Number(p.grn_unit_price) > Number(p.selling_price) ? 'font-semibold text-amber-600' : 'text-emerald-700'}`}
+                          title={p.selling_price != null && Number(p.grn_unit_price) > Number(p.selling_price)
+                            ? 'GRN cost is above this roll\'s selling price — selling at this price makes a loss'
+                            : p.price_source === 'costing' ? 'Confirmed costing price for this shipment' : p.price_source === 'price_list' ? 'Price-list fallback — shipment not costed' : undefined}>
+                        {p.selling_price != null ? fmt(p.selling_price) : '—'}
+                      </td>
                       <td className="px-2 py-1 font-mono text-[10px] text-slate-400">{p.grn_no || '—'}</td>
                       <td className="px-2 py-1 text-slate-500">
                         {[p.store, p.location].filter(Boolean).join(' / ') || '—'}
@@ -247,9 +263,14 @@ export default function SalesOrderRollPickerModal({
               Selected: <span className="font-bold text-slate-700">{selectedRolls.length} roll{selectedRolls.length !== 1 ? 's' : ''}</span>
             </span>
             <span className="rounded bg-indigo-100 px-2 py-0.5 font-bold text-indigo-700 tabular-nums">{fmt(selectedWeight)} kg</span>
-            {distinctPrices.size > 1 && (
-              <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                {distinctPrices.size} GRN prices — will split into {distinctPrices.size} lines
+            {distinctSelling.size > 1 && (
+              <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700" title="Old stock sells at its old price, new stock at its new price">
+                {distinctSelling.size} selling prices — will split into {distinctSelling.size} lines
+              </span>
+            )}
+            {distinctSelling.size <= 1 && distinctPrices.size > 1 && (
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-500" title="Cost stays tracked per roll — the line sells at one price">
+                {distinctPrices.size} different GRN costs on this line
               </span>
             )}
           </div>

@@ -24,11 +24,11 @@ export const getNextSoNo = () =>
 export const getOrderSources = () =>
   api.get('/api/v1/sales-orders/order-sources').then((r) => r.data.data)
 
-/** Resolve a scanned piece QR — returns { piece, product, grn_unit_price, available, unavailable_reason } */
+/** Resolve a scanned piece QR — returns { piece, product, grn_unit_price, selling_price, available, unavailable_reason } */
 export const scanSalesPiece = (pieceCode) =>
   api.get(`/api/v1/sales-orders/scan-piece/${encodeURIComponent(pieceCode)}`).then((r) => r.data.data)
 
-/** Latest confirmed GRN cost price for a manually picked product */
+/** Product pricing for a manually picked product — { unit_price: price-list selling price, cost_price: latest GRN cost } */
 export const getProductSalePrice = (productId) =>
   api.get(`/api/v1/sales-orders/product-price/${productId}`).then((r) => r.data.data)
 

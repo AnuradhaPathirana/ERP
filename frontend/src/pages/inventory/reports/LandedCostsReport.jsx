@@ -24,8 +24,8 @@ const STATUS_STYLES = {
 }
 
 const TYPE_STYLES = {
-  landed_cost: 'bg-blue-100 text-blue-700',
-  other:       'bg-purple-100 text-purple-700',
+  fob: 'bg-blue-100 text-blue-700',
+  cif: 'bg-purple-100 text-purple-700',
 }
 
 const fmt = (n) => Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })
@@ -75,8 +75,8 @@ export default function LandedCostsReport() {
         <FilterField label="Costing Type">
           <select className={FILTER_SELECT_CLS} value={draft.costing_type} onChange={(e) => setDraft((d) => ({ ...d, costing_type: e.target.value }))}>
             <option value="">All types</option>
-            <option value="landed_cost">Landed Cost</option>
-            <option value="other">Other</option>
+            <option value="fob">FOB</option>
+            <option value="cif">CIF</option>
           </select>
         </FilterField>
         <FilterField label="Supplier">
@@ -129,7 +129,7 @@ export default function LandedCostsReport() {
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{row.transaction_date?.slice(0, 10)}</td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${TYPE_STYLES[row.costing_type] ?? 'bg-slate-100 text-slate-500'}`}>
-                            {row.costing_type?.replace('_', ' ')}
+                            {row.costing_type?.toUpperCase()}
                           </span>
                         </td>
                         <td className="px-3 py-2 text-right text-slate-600">{row.grn_count}</td>

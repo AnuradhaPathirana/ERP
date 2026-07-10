@@ -104,12 +104,14 @@ class CostingController extends Controller
         return response()->json(['data' => $this->service->getGrnsBySupplier($supplierId)]);
     }
 
-    /** POST /costings/calculate-preview — stateless, no DB write */
+    /** POST /costings/calculate-preview — stateless per-product breakdown, no DB write */
     public function calculatePreview(Request $request): JsonResponse
     {
-        $input   = $request->only(['raw_material_cost', 'total_additional_expenses', 'value_addition_pct', 'sscl_pct', 'vat_pct']);
-        $summary = $this->service->calculateSummary($input);
+        $input = $request->only([
+            'grn_ids', 'expenses', 'common_charge_amount', 'default_margin_pct',
+            'apply_sscl', 'sscl_pct', 'apply_vat', 'vat_pct', 'items',
+        ]);
 
-        return response()->json(['data' => $summary]);
+        return response()->json(['data' => $this->service->preview($input)]);
     }
 }

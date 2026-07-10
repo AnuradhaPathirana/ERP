@@ -23,6 +23,10 @@ use Modules\Inventory\Models\StockTransaction;
 
 class GoodsReceivedNoteService
 {
+    public function __construct(private readonly ProductPricingService $pricing)
+    {
+    }
+
     /** @param array<string, mixed> $filters */
     public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
@@ -407,6 +411,17 @@ class GoodsReceivedNoteService
                     PurchaseOrderItem::where('id', $item->po_item_id)
                         ->increment('quantity_received', (float) $item->quantity_received);
                 }
+            }
+
+            // Mirror each line's purchase cost onto the product's price list
+            // (last-cost method). Selling prices are never touched — margins
+            // stay the user's decision on the Product form.
+            foreach ($grn->items as $item) {
+                $this->pricing->syncLastCost(
+                    (int) $item->product_id,
+                    $item->unit_id !== null ? (int) $item->unit_id : null,
+                    (float) $item->unit_price,
+                );
             }
 
             // Mark GRN as confirmed

@@ -27,6 +27,7 @@ class DeliveryOrder extends Model
 
     protected $fillable = [
         'do_no',
+        'document_date',
         'so_id',
         'customer_id',
         'driver_id',
@@ -34,6 +35,9 @@ class DeliveryOrder extends Model
         'store_id',
         'location_id',
         'delivery_date',
+        'delivery_mode',
+        'delivery_vehicle',
+        'responsible_person',
         'delivery_address',
         'status',
         'remarks',
@@ -43,6 +47,7 @@ class DeliveryOrder extends Model
     ];
 
     protected $casts = [
+        'document_date' => 'date',
         'delivery_date' => 'date',
         'confirmed_at'  => 'datetime',
         'so_id'         => 'integer',

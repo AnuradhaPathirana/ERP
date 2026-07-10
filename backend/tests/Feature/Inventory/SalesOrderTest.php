@@ -595,8 +595,11 @@ class SalesOrderTest extends TestCase
             ->assertJsonPath('data.pieces.0.attribute_id', $red->id);
     }
 
-    public function test_product_price_returns_latest_confirmed_grn_price_only(): void
+    public function test_product_price_cost_uses_latest_confirmed_grn_only(): void
     {
+        // unit_price is the price-list selling price (null here — no price list);
+        // cost_price is the latest CONFIRMED GRN cost. Full pricing coverage
+        // lives in ProductPricingTest.
         $product = Product::factory()->create();
         $this->makeGrnWithPieces($product, [10], unitPrice: 200);
         // Later draft GRN must be ignored
@@ -605,6 +608,7 @@ class SalesOrderTest extends TestCase
         $this->actingAs($this->user)
             ->getJson("/api/v1/sales-orders/product-price/{$product->id}")
             ->assertOk()
-            ->assertJsonPath('data.unit_price', 200);
+            ->assertJsonPath('data.unit_price', null)
+            ->assertJsonPath('data.cost_price', 200);
     }
 }

@@ -63,13 +63,19 @@
               <td class="meta-label" style="padding-left:0;">DO No :</td>
               <td class="meta-value">{{ $do->do_no }}</td>
               <td class="meta-label">Date :</td>
-              <td class="meta-value">{{ $do->delivery_date?->format('Y-m-d') }}</td>
+              <td class="meta-value">{{ ($do->document_date ?? $do->delivery_date)?->format('Y-m-d') }}</td>
             </tr>
             <tr>
               <td class="meta-label" style="padding-left:0;">SO No :</td>
               <td class="meta-value">{{ $do->salesOrder?->so_no ?? '—' }}</td>
-              <td class="meta-label">Status :</td>
+              <td class="meta-label">Delivery Date :</td>
+              <td class="meta-value">{{ $do->delivery_date?->format('Y-m-d') }}</td>
+            </tr>
+            <tr>
+              <td class="meta-label" style="padding-left:0;">Status :</td>
               <td class="meta-value">{{ $do->status->label() }}</td>
+              <td class="meta-label">Mode :</td>
+              <td class="meta-value">{{ $do->delivery_mode ?? '—' }}</td>
             </tr>
           </table>
         </td>
@@ -87,8 +93,8 @@
         </td>
         <td style="width:52%; vertical-align:top;">
           <div class="party-title">Transport</div>
-          <div class="party-line">Driver: <span class="party-name">{{ $do->driver ? trim($do->driver->first_name . ' ' . $do->driver->last_name) : '—' }}</span></div>
-          <div class="party-line">Vehicle: <span class="party-name">{{ $do->vehicle?->registration_number ?? '—' }}</span></div>
+          <div class="party-line">Vehicle: <span class="party-name">{{ $do->delivery_vehicle ?? $do->vehicle?->registration_number ?? '—' }}</span></div>
+          <div class="party-line">Responsible Person: <span class="party-name">{{ $do->responsible_person ?? ($do->driver ? trim($do->driver->first_name . ' ' . $do->driver->last_name) : '—') }}</span></div>
           @if($do->remarks)
             <div class="party-line">Remarks: {{ $do->remarks }}</div>
           @endif

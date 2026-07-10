@@ -21,20 +21,31 @@ class StoreCostingRequest extends FormRequest
             'costing_type'     => ['required', 'string', 'in:fob,cif'],
             'grn_ids'          => ['required', 'array', 'min:1'],
             'grn_ids.*'        => ['required', 'integer', 'min:1'],
-            'material_cost'    => ['nullable', 'numeric', 'min:0'],
             'bill_of_lading'   => ['nullable', 'string', 'max:100'],
             'expected_date'    => ['nullable', 'date'],
             'transaction_date' => ['nullable', 'date'],
             'note'             => ['nullable', 'string'],
 
-            'value_addition_pct' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            // Single total FOB/CIF charge — spread per unit across all lines.
+            // Preferred over itemised expense rows (kept for backward compat).
+            'common_charge_amount' => ['nullable', 'numeric', 'min:0'],
+
+            'default_margin_pct' => ['nullable', 'numeric', 'min:0', 'max:1000'],
+            'apply_sscl'         => ['nullable', 'boolean'],
             'sscl_pct'           => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'apply_vat'          => ['nullable', 'boolean'],
             'vat_pct'            => ['nullable', 'numeric', 'min:0', 'max:100'],
 
             'expenses'                    => ['nullable', 'array'],
             'expenses.*.expense_type_id'  => ['required_with:expenses', 'integer', 'min:1'],
             'expenses.*.amount'           => ['required_with:expenses', 'numeric', 'min:0'],
             'expenses.*.note'             => ['nullable', 'string', 'max:255'],
+
+            // Per-line overrides of the product breakdown (margin or typed price)
+            'items'                 => ['nullable', 'array'],
+            'items.*.grn_item_id'   => ['required_with:items', 'integer', 'min:1'],
+            'items.*.margin_pct'    => ['nullable', 'numeric', 'min:0', 'max:1000'],
+            'items.*.selling_price' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 
@@ -42,11 +53,11 @@ class StoreCostingRequest extends FormRequest
     public function attributes(): array
     {
         return [
-            'supplier_id'   => 'supplier',
-            'costing_type'  => 'costing type',
-            'grn_ids'       => 'GRN list',
-            'grn_ids.*'     => 'GRN',
-            'material_cost' => 'material cost',
+            'supplier_id'        => 'supplier',
+            'costing_type'       => 'costing type',
+            'grn_ids'            => 'GRN list',
+            'grn_ids.*'          => 'GRN',
+            'default_margin_pct' => 'default margin',
         ];
     }
 }

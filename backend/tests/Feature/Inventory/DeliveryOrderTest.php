@@ -156,11 +156,14 @@ class DeliveryOrderTest extends TestCase
     {
         $response = $this->actingAs($this->user)
             ->postJson('/api/v1/sales-orders', [
-                'order_date'      => '2026-07-09',
-                'customer_id'     => $this->customer->id,
-                'sales_person_id' => $this->user->id,
-                'status'          => 'confirmed',
-                'items'           => [[
+                'order_date'       => '2026-07-09',
+                'transaction_date' => '2026-07-08',
+                'customer_id'      => $this->customer->id,
+                'sales_person_id'  => $this->user->id,
+                'customer_type'    => 'Retail',
+                'order_source'     => 'walk_in',
+                'status'           => 'confirmed',
+                'items'            => [[
                     'product_id'  => $product->id,
                     'unit_price'  => $unitPrice,
                     'piece_codes' => array_map(fn (GrnItemPiece $p) => $p->piece_code, $pieces),
@@ -235,6 +238,57 @@ class DeliveryOrderTest extends TestCase
             ->assertJsonPath('data.status', 'draft')
             ->assertJsonPath('data.items.0.quantity', 30)
             ->assertJsonPath('data.do_no', 'DO-' . now()->year . '-0001');
+    }
+
+    public function test_persists_dispatch_header_fields_and_echoes_so_snapshot(): void
+    {
+        $product = Product::factory()->create();
+        $seed    = $this->makeGrnWithPieces($product, [10.0, 20.0]);
+        $so      = $this->makeConfirmedSoWithRolls($product, $seed['pieces']);
+        $soItem  = $so->items()->first();
+
+        $response = $this->actingAs($this->user)
+            ->postJson('/api/v1/delivery-orders', array_merge(
+                $this->doPayload($so, [[
+                    'so_item_id' => $soItem->id,
+                    'piece_ids'  => [$seed['pieces'][0]->id],
+                ]]),
+                [
+                    'document_date'      => '2026-07-10',
+                    'delivery_mode'      => 'Courier',
+                    'delivery_vehicle'   => 'Lorry — WP CAB 1234',
+                    'responsible_person' => 'John Driver',
+                ],
+            ))
+            ->assertCreated()
+            ->assertJsonPath('data.document_date', '2026-07-10')
+            ->assertJsonPath('data.delivery_mode', 'Courier')
+            ->assertJsonPath('data.delivery_vehicle', 'Lorry — WP CAB 1234')
+            ->assertJsonPath('data.responsible_person', 'John Driver')
+            // Read-only SO snapshot surfaced on the resource
+            ->assertJsonPath('data.sales_order.customer_type', 'Retail')
+            ->assertJsonPath('data.sales_order.sales_person', $this->user->name);
+
+        $this->assertDatabaseHas('inv_delivery_orders', [
+            'id'                 => $response->json('data.id'),
+            'delivery_mode'      => 'Courier',
+            'delivery_vehicle'   => 'Lorry — WP CAB 1234',
+            'responsible_person' => 'John Driver',
+        ]);
+    }
+
+    public function test_from_so_recall_exposes_readonly_header_snapshot(): void
+    {
+        $product = Product::factory()->create();
+        $seed    = $this->makeGrnWithPieces($product, [10.0]);
+        $so      = $this->makeConfirmedSoWithRolls($product, $seed['pieces']);
+
+        $this->actingAs($this->user)
+            ->getJson("/api/v1/delivery-orders/from-so/{$so->id}")
+            ->assertOk()
+            ->assertJsonPath('data.sales_order.customer_type', 'Retail')
+            ->assertJsonPath('data.sales_order.sales_person', $this->user->name)
+            ->assertJsonPath('data.sales_order.customer.name', 'Test Customer');
     }
 
     public function test_rejects_do_from_draft_so(): void

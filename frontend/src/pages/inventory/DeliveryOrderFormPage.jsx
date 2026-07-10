@@ -10,8 +10,6 @@ import {
   updateDeliveryOrder,
 } from '../../api/deliveryOrders'
 import { getSalesOrders } from '../../api/salesOrders'
-import { getAllDrivers } from '../../api/drivers'
-import { getAllVehicles } from '../../api/vehicles'
 import { getAllLocations } from '../../api/locations'
 import { getAllStores } from '../../api/stores'
 import Breadcrumb from '../../components/Breadcrumb'
@@ -29,7 +27,22 @@ const SELECT_CLS =
 const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
 const ERR_CLS   = 'text-[10px] text-red-500 leading-tight'
 
+// Fixed dispatch modes — free selection, no master lookup for now.
+const DELIVERY_MODES = ['Own Vehicle', 'Courier', 'Third-Party', 'Customer Pickup']
+
 const fmt = (n, d = 2) => Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })
+
+/** Read-only snapshot value pulled from the linked sales order. */
+function ReadOnlyField({ label, value }) {
+  return (
+    <div>
+      <label className={LABEL_CLS}>{label}</label>
+      <div className="flex h-[26px] items-center rounded border border-slate-200 bg-slate-100 px-2 text-xs text-slate-600 truncate" title={value || ''}>
+        {value || <span className="italic text-slate-300">—</span>}
+      </div>
+    </div>
+  )
+}
 
 function SectionHeader({ icon: Icon, title, colorClass, extra }) {
   return (
@@ -59,13 +72,15 @@ function RollCheckbox({ checked, onChange, disabled }) {
 }
 
 const EMPTY_FORM = {
-  delivery_date:    new Date().toISOString().slice(0, 10),
-  driver_id:        '',
-  vehicle_id:       '',
-  store_id:         '',
-  location_id:      '',
-  delivery_address: '',
-  remarks:          '',
+  document_date:      new Date().toISOString().slice(0, 10),
+  delivery_date:      new Date().toISOString().slice(0, 10),
+  delivery_mode:      '',
+  delivery_vehicle:   '',
+  responsible_person: '',
+  store_id:           '',
+  location_id:        '',
+  delivery_address:   '',
+  remarks:            '',
 }
 
 export default function DeliveryOrderFormPage() {
@@ -100,8 +115,6 @@ export default function DeliveryOrderFormPage() {
     label: `${so.so_no} — ${so.customer?.name ?? ''}`,
   }))
 
-  const { data: drivers   = [] } = useQuery({ queryKey: ['drivers-all'],   queryFn: getAllDrivers,   staleTime: 5 * 60 * 1000 })
-  const { data: vehicles  = [] } = useQuery({ queryKey: ['vehicles-all'],  queryFn: getAllVehicles,  staleTime: 5 * 60 * 1000 })
   const { data: locations = [] } = useQuery({ queryKey: ['locations-all'], queryFn: getAllLocations, staleTime: 5 * 60 * 1000 })
   const { data: stores    = [] } = useQuery({ queryKey: ['stores-all'],    queryFn: getAllStores,    staleTime: 5 * 60 * 1000 })
 
@@ -145,13 +158,15 @@ export default function DeliveryOrderFormPage() {
     const doc = existingDo.data
     setSoId(String(doc.so_id))
     setForm({
-      delivery_date:    doc.delivery_date ?? EMPTY_FORM.delivery_date,
-      driver_id:        doc.driver_id != null ? String(doc.driver_id) : '',
-      vehicle_id:       doc.vehicle_id != null ? String(doc.vehicle_id) : '',
-      store_id:         doc.store_id != null ? String(doc.store_id) : '',
-      location_id:      doc.location_id != null ? String(doc.location_id) : '',
-      delivery_address: doc.delivery_address ?? '',
-      remarks:          doc.remarks ?? '',
+      document_date:      doc.document_date ?? EMPTY_FORM.document_date,
+      delivery_date:      doc.delivery_date ?? EMPTY_FORM.delivery_date,
+      delivery_mode:      doc.delivery_mode ?? '',
+      delivery_vehicle:   doc.delivery_vehicle ?? '',
+      responsible_person: doc.responsible_person ?? '',
+      store_id:           doc.store_id != null ? String(doc.store_id) : '',
+      location_id:        doc.location_id != null ? String(doc.location_id) : '',
+      delivery_address:   doc.delivery_address ?? '',
+      remarks:            doc.remarks ?? '',
     })
 
     const nextSelection = {}
@@ -260,7 +275,9 @@ export default function DeliveryOrderFormPage() {
     const clientErrors = {}
 
     if (!soId) clientErrors.so_id = ['Select a sales order to deliver.']
+    if (!form.document_date) clientErrors.document_date = ['Date is required.']
     if (!form.delivery_date) clientErrors.delivery_date = ['Delivery date is required.']
+    if (!form.delivery_address.trim()) clientErrors.delivery_address = ['Delivery address is required.']
 
     const items = linesWithAvailability
       .map((line) => {
@@ -288,19 +305,24 @@ export default function DeliveryOrderFormPage() {
 
     setErrors({})
     saveMutation.mutate({
-      so_id:            parseInt(soId),
-      delivery_date:    form.delivery_date,
-      driver_id:        form.driver_id   ? parseInt(form.driver_id)   : null,
-      vehicle_id:       form.vehicle_id  ? parseInt(form.vehicle_id)  : null,
-      store_id:         form.store_id    ? parseInt(form.store_id)    : null,
-      location_id:      form.location_id ? parseInt(form.location_id) : null,
-      delivery_address: form.delivery_address.trim() || null,
-      remarks:          form.remarks.trim() || null,
+      so_id:              parseInt(soId),
+      document_date:      form.document_date || null,
+      delivery_date:      form.delivery_date,
+      delivery_mode:      form.delivery_mode || null,
+      delivery_vehicle:   form.delivery_vehicle.trim() || null,
+      responsible_person: form.responsible_person.trim() || null,
+      store_id:           form.store_id    ? parseInt(form.store_id)    : null,
+      location_id:        form.location_id ? parseInt(form.location_id) : null,
+      delivery_address:   form.delivery_address.trim() || null,
+      remarks:            form.remarks.trim() || null,
       items,
     })
   }
 
   const err = (f) => errors[f]?.[0]
+
+  // Read-only header snapshot pulled from the linked sales order.
+  const soSnap = soSource?.sales_order
 
   if (isEdit && loadingDo) {
     return (
@@ -340,7 +362,23 @@ export default function DeliveryOrderFormPage() {
         <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
           <SectionHeader icon={CalendarDays} title="Delivery Details" colorClass="text-indigo-700 bg-indigo-50 border-indigo-100" />
           <div className="space-y-2 p-3">
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
+            <div className="grid grid-cols-2 gap-x-3 gap-y-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+              {/* Document meta */}
+              <div>
+                <label className={LABEL_CLS}>Date <span className="text-red-500 normal-case font-bold">*</span></label>
+                <input type="date" className={err('document_date') ? INPUT_ERR_CLS : INPUT_CLS} value={form.document_date} onChange={setField('document_date')} />
+                {err('document_date') && <p className={ERR_CLS}>{err('document_date')}</p>}
+              </div>
+              <ReadOnlyField label="Transaction Date" value={soSnap?.transaction_date} />
+              <div>
+                <label className={LABEL_CLS}>Delivery Order Number</label>
+                <input
+                  readOnly
+                  className={INPUT_RO_CLS}
+                  value={isEdit ? (existingDo?.data?.do_no ?? '') : (loadingDoNo ? 'Generating…' : (nextDoNo ?? ''))}
+                  title={isEdit ? '' : 'Preview — the final number is assigned at save time'}
+                />
+              </div>
               <div>
                 <label className={LABEL_CLS}>Sales Order <span className="text-red-500 normal-case font-bold">*</span></label>
                 {isEdit ? (
@@ -355,41 +393,39 @@ export default function DeliveryOrderFormPage() {
                 )}
                 {err('so_id') && <p className={ERR_CLS}>{err('so_id')}</p>}
               </div>
-              <div>
-                <label className={LABEL_CLS}>DO Number</label>
-                <input
-                  readOnly
-                  className={INPUT_RO_CLS}
-                  value={isEdit ? (existingDo?.data?.do_no ?? '') : (loadingDoNo ? 'Generating…' : (nextDoNo ?? ''))}
-                  title={isEdit ? '' : 'Preview — the final number is assigned at save time'}
-                />
-              </div>
+
+              {/* Sales-order snapshot (read-only) */}
+              <ReadOnlyField label="Customer Type" value={soSnap?.customer_type} />
+              <ReadOnlyField label="Customer Name" value={soSnap?.customer?.name} />
+              <ReadOnlyField label="Sales Person" value={soSnap?.sales_person} />
+              <ReadOnlyField label="Order Taken By" value={soSnap?.order_taken_by} />
+              <ReadOnlyField label="Order Source" value={soSnap?.order_source} />
+
+              {/* Dispatch details */}
               <div>
                 <label className={LABEL_CLS}>Delivery Date <span className="text-red-500 normal-case font-bold">*</span></label>
                 <input type="date" className={err('delivery_date') ? INPUT_ERR_CLS : INPUT_CLS} value={form.delivery_date} onChange={setField('delivery_date')} />
                 {err('delivery_date') && <p className={ERR_CLS}>{err('delivery_date')}</p>}
               </div>
               <div>
-                <label className={LABEL_CLS}>Driver</label>
-                <FilterSearchSelect
-                  value={form.driver_id}
-                  onChange={(val) => setForm((f) => ({ ...f, driver_id: val }))}
-                  options={drivers.map((d) => ({ value: String(d.id), label: d.name || d.driver_code }))}
-                  placeholder="Select driver…"
-                />
+                <label className={LABEL_CLS}>Delivery Mode</label>
+                <select className={SELECT_CLS} value={form.delivery_mode} onChange={setField('delivery_mode')}>
+                  <option value="">— Select —</option>
+                  {DELIVERY_MODES.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
               </div>
               <div>
-                <label className={LABEL_CLS}>Vehicle</label>
-                <FilterSearchSelect
-                  value={form.vehicle_id}
-                  onChange={(val) => setForm((f) => ({ ...f, vehicle_id: val }))}
-                  options={vehicles.map((v) => ({ value: String(v.id), label: v.label || v.registration_number }))}
-                  placeholder="Select vehicle…"
-                />
+                <label className={LABEL_CLS}>Delivery Vehicle &amp; Number</label>
+                <input className={INPUT_CLS} placeholder="e.g. Lorry — WP CAB 1234" value={form.delivery_vehicle} onChange={setField('delivery_vehicle')} />
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Responsible Person</label>
+                <input className={INPUT_CLS} placeholder="Person in charge" value={form.responsible_person} onChange={setField('responsible_person')} />
               </div>
               <div className="col-span-2">
-                <label className={LABEL_CLS}>Delivery Address</label>
-                <input className={INPUT_CLS} placeholder="Delivery address" value={form.delivery_address} onChange={setField('delivery_address')} />
+                <label className={LABEL_CLS}>Delivery Address <span className="text-red-500 normal-case font-bold">*</span></label>
+                <input className={err('delivery_address') ? INPUT_ERR_CLS : INPUT_CLS} placeholder="Delivery address" value={form.delivery_address} onChange={setField('delivery_address')} />
+                {err('delivery_address') && <p className={ERR_CLS}>{err('delivery_address')}</p>}
               </div>
               <div>
                 <label className={LABEL_CLS}>Remarks</label>

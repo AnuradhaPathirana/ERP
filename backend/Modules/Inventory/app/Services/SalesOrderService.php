@@ -8,9 +8,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Modules\Inventory\DTOs\SalesOrderData;
-use Modules\Inventory\Enums\GrnStatus;
 use Modules\Inventory\Enums\SalesOrderStatus;
-use Modules\Inventory\Models\GoodsReceivedNoteItem;
 use Modules\Inventory\Models\GrnItemPiece;
 use Modules\Inventory\Models\Product;
 use Modules\Inventory\Models\SalesOrder;
@@ -26,6 +24,10 @@ use Modules\Inventory\Models\SalesOrderPiece;
  */
 class SalesOrderService
 {
+    public function __construct(private readonly ProductPricingService $pricing)
+    {
+    }
+
     /** @param array<string, mixed> $filters */
     public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
@@ -206,6 +208,7 @@ class SalesOrderService
 
         $product   = $piece->product;
         $available = $piece->status === GrnItemPiece::STATUS_IN_STOCK;
+        $resolved  = $this->pricing->resolvePieceSellingPrice($piece);
 
         $reason = null;
         if (!$available) {
@@ -240,7 +243,12 @@ class SalesOrderService
                     'name' => $piece->grnItem->unit->name,
                 ] : null,
             ] : null,
+            // Cost of this roll's shipment — snapshot basis, NOT the sale price.
             'grn_unit_price'     => (float) ($piece->grnItem?->unit_price ?? 0),
+            // Shipment-specific sale price: confirmed-costing price for this
+            // roll's GRN line, price-list fallback (null = neither configured).
+            'selling_price'      => $resolved['price'] ?? null,
+            'price_source'       => $resolved['source'] ?? null,
             'available'          => $available,
             'unavailable_reason' => $reason,
         ];
@@ -254,6 +262,13 @@ class SalesOrderService
      */
     public function availablePieces(int $productId): array
     {
+        // Rolls of the same GRN line share a price — resolve once per grn_item.
+        $priceCache = [];
+        $resolve = function (GrnItemPiece $piece) use (&$priceCache): array {
+            $key = (string) ($piece->grn_item_id ?? '0');
+            return $priceCache[$key] ??= $this->pricing->resolvePieceSellingPrice($piece);
+        };
+
         $pieces = GrnItemPiece::with(['grnItem.attribute', 'grn', 'store', 'location'])
             ->where('product_id', $productId)
             ->where('status', GrnItemPiece::STATUS_IN_STOCK)
@@ -270,27 +285,33 @@ class SalesOrderService
                 'store'          => $piece->store?->store_name,
                 'location'       => $piece->location?->location_name ?? $piece->location?->name,
                 'grn_unit_price' => (float) ($piece->grnItem?->unit_price ?? 0),
+                // Shipment-specific sale price (confirmed costing → price list)
+                'selling_price'  => $resolve($piece)['price'],
+                'price_source'   => $resolve($piece)['source'],
                 'attribute_id'   => $piece->grnItem?->attribute_id,
                 'color'          => $piece->grnItem?->attribute?->attribute_name,
             ])
             ->values();
 
         return [
-            'pieces'       => $pieces->all(),
-            'count'        => $pieces->count(),
-            'total_weight' => (float) $pieces->sum('weight'),
+            'pieces'        => $pieces->all(),
+            'count'         => $pieces->count(),
+            'total_weight'  => (float) $pieces->sum('weight'),
+            // Price-list sale price (per product) — fallback shown when a roll
+            // has no confirmed costing.
+            'selling_price' => $this->pricing->sellingPriceFor($productId),
         ];
     }
 
-    /** Latest confirmed-GRN cost price for manual product picks. */
-    public function latestConfirmedPrice(int $productId): ?float
+    /**
+     * Prices for a manual product pick — selling_price as the sale-price
+     * default, cost_price (latest confirmed GRN) for the below-cost guard.
+     *
+     * @return array{selling_price: ?float, cost_price: ?float}
+     */
+    public function productPricing(int $productId): array
     {
-        $price = GoodsReceivedNoteItem::where('product_id', $productId)
-            ->whereHas('grn', fn ($q) => $q->where('status', GrnStatus::Confirmed->value))
-            ->orderByDesc('id')
-            ->value('unit_price');
-
-        return $price !== null ? (float) $price : null;
+        return $this->pricing->pricingFor($productId);
     }
 
     private function buildSoNo(bool $lock): string

@@ -105,11 +105,17 @@ class SalesOrderController extends Controller
         return response()->json(['data' => $this->service->availablePieces($productId)]);
     }
 
-    /** GET /sales-orders/product-price/{productId} — latest confirmed GRN cost price */
+    /**
+     * GET /sales-orders/product-price/{productId} — price-list selling price
+     * (sale-price default) + latest confirmed GRN cost (below-cost guard).
+     */
     public function productPrice(int $productId): JsonResponse
     {
+        $pricing = $this->service->productPricing($productId);
+
         return response()->json(['data' => [
-            'unit_price' => $this->service->latestConfirmedPrice($productId),
+            'unit_price' => $pricing['selling_price'],
+            'cost_price' => $pricing['cost_price'],
         ]]);
     }
 }

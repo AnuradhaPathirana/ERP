@@ -31,13 +31,16 @@ class Costing extends Model
         'total_additional_expenses',
         'raw_material_cost',
         'total_landed_cost',
+        'default_margin_pct',
         'value_addition_pct',
         'value_addition_amount',
         'fob_cif_cost',
         'sscl_pct',
+        'apply_sscl',
         'sscl_amount',
         'gross_fob_cif_value',
         'vat_pct',
+        'apply_vat',
         'vat_amount',
         'total_price_with_vat',
         'status',
@@ -58,6 +61,9 @@ class Costing extends Model
         'total_additional_expenses' => 'decimal:4',
         'raw_material_cost'         => 'decimal:4',
         'total_landed_cost'         => 'decimal:4',
+        'default_margin_pct'        => 'decimal:2',
+        'apply_sscl'                => 'boolean',
+        'apply_vat'                 => 'boolean',
         'value_addition_pct'        => 'decimal:2',
         'value_addition_amount'     => 'decimal:4',
         'fob_cif_cost'              => 'decimal:4',
@@ -82,5 +88,10 @@ class Costing extends Model
     public function expenses(): HasMany
     {
         return $this->hasMany(CostingExpense::class, 'costing_id');
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(CostingItem::class, 'costing_id');
     }
 }

@@ -28,6 +28,11 @@ class CostingResource extends JsonResource
             'transaction_date' => $this->transaction_date?->toDateString(),
             'note'             => $this->note,
 
+            // Pricing controls
+            'default_margin_pct' => (float) $this->default_margin_pct,
+            'apply_sscl'         => (bool) $this->apply_sscl,
+            'apply_vat'          => (bool) $this->apply_vat,
+
             // Summary fields
             'total_additional_expenses' => (float) $this->total_additional_expenses,
             'raw_material_cost'         => (float) $this->raw_material_cost,
@@ -68,6 +73,8 @@ class CostingResource extends JsonResource
                         : null,
                 ] : null,
             ])),
+
+            'items' => CostingItemResource::collection($this->whenLoaded('items')),
 
             'expenses' => $this->whenLoaded('expenses', fn () => $this->expenses->map(fn ($e) => [
                 'id'              => $e->id,

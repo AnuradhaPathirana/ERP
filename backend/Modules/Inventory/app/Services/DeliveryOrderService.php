@@ -82,7 +82,8 @@ class DeliveryOrderService
             'items.unit',
             'items.attribute',
             'items.pieces.piece',
-            'salesOrder',
+            'salesOrder.salesPerson',
+            'salesOrder.orderTakenBy',
             'customer',
             'driver',
             'vehicle',
@@ -105,8 +106,10 @@ class DeliveryOrderService
      */
     public function fromSalesOrder(int $soId): array
     {
-        $so = SalesOrder::with(['items.product', 'items.unit', 'items.attribute', 'customer'])
-            ->findOrFail($soId);
+        $so = SalesOrder::with([
+            'items.product', 'items.unit', 'items.attribute',
+            'customer', 'salesPerson', 'orderTakenBy',
+        ])->findOrFail($soId);
 
         if ($so->status !== SalesOrderStatus::Confirmed) {
             abort(422, 'Delivery orders can only be created from confirmed sales orders.');
@@ -166,10 +169,17 @@ class DeliveryOrderService
                 'id'               => $so->id,
                 'so_no'            => $so->so_no,
                 'status'           => $so->status->value,
+                'customer_type'    => $so->customer_type,
+                'order_source'     => $so->order_source,
+                'order_date'       => $so->order_date?->toDateString(),
+                'transaction_date' => $so->transaction_date?->toDateString(),
+                'sales_person'     => $so->salesPerson?->name,
+                'order_taken_by'   => $so->orderTakenBy?->name,
                 'delivery_address' => $so->delivery_address,
                 'customer'         => $so->customer ? [
-                    'id'   => $so->customer->id,
-                    'name' => $so->customer->customer_name,
+                    'id'            => $so->customer->id,
+                    'name'          => $so->customer->customer_name,
+                    'customer_type' => $so->customer->customer_type,
                 ] : null,
             ],
             'items' => $items,
@@ -186,18 +196,22 @@ class DeliveryOrderService
             }
 
             $do = DeliveryOrder::create([
-                'do_no'            => $this->buildDoNo(lock: true),
-                'so_id'            => $so->id,
-                'customer_id'      => $so->customer_id,
-                'driver_id'        => $data->driverId,
-                'vehicle_id'       => $data->vehicleId,
-                'store_id'         => $data->storeId,
-                'location_id'      => $data->locationId,
-                'delivery_date'    => $data->deliveryDate,
-                'delivery_address' => $data->deliveryAddress ?? $so->delivery_address,
-                'status'           => DeliveryOrderStatus::Draft,
-                'remarks'          => $data->remarks,
-                'created_by'       => Auth::id(),
+                'do_no'              => $this->buildDoNo(lock: true),
+                'document_date'      => $data->documentDate ?? now()->toDateString(),
+                'so_id'              => $so->id,
+                'customer_id'        => $so->customer_id,
+                'driver_id'          => $data->driverId,
+                'vehicle_id'         => $data->vehicleId,
+                'store_id'           => $data->storeId,
+                'location_id'        => $data->locationId,
+                'delivery_date'      => $data->deliveryDate,
+                'delivery_mode'      => $data->deliveryMode,
+                'delivery_vehicle'   => $data->deliveryVehicle,
+                'responsible_person' => $data->responsiblePerson,
+                'delivery_address'   => $data->deliveryAddress ?? $so->delivery_address,
+                'status'             => DeliveryOrderStatus::Draft,
+                'remarks'            => $data->remarks,
+                'created_by'         => Auth::id(),
             ]);
 
             $this->syncItems($do, $data->items);
@@ -219,13 +233,17 @@ class DeliveryOrderService
             }
 
             $do->update([
-                'driver_id'        => $data->driverId,
-                'vehicle_id'       => $data->vehicleId,
-                'store_id'         => $data->storeId,
-                'location_id'      => $data->locationId,
-                'delivery_date'    => $data->deliveryDate,
-                'delivery_address' => $data->deliveryAddress,
-                'remarks'          => $data->remarks,
+                'document_date'      => $data->documentDate ?? $do->document_date,
+                'driver_id'          => $data->driverId,
+                'vehicle_id'         => $data->vehicleId,
+                'store_id'           => $data->storeId,
+                'location_id'        => $data->locationId,
+                'delivery_date'      => $data->deliveryDate,
+                'delivery_mode'      => $data->deliveryMode,
+                'delivery_vehicle'   => $data->deliveryVehicle,
+                'responsible_person' => $data->responsiblePerson,
+                'delivery_address'   => $data->deliveryAddress,
+                'remarks'            => $data->remarks,
             ]);
 
             $this->syncItems($do, $data->items);

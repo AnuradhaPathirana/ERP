@@ -5,16 +5,15 @@ import {
   Calculator,
   CheckCircle,
   ClipboardList,
-  DollarSign,
   Package,
-  Receipt,
+  RotateCcw,
   Save,
+  Table2,
   X,
 } from 'lucide-react'
 import {
   confirmCosting,
   createCosting,
-  getCostingExpenseTypes,
   getCosting,
   getNextDocumentNo,
   getNextReferenceNo,
@@ -24,6 +23,7 @@ import {
 import { getAllSuppliers } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
 import { confirmAction, showError, showSuccess } from '../../utils/alerts'
+import { CURRENCY } from '../../utils/currency'
 
 /* ── Style tokens ───────────────────────────────────────────── */
 const INPUT_CLS  = 'block w-full rounded border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15'
@@ -32,6 +32,7 @@ const SELECT_CLS = 'block w-full rounded border-2 border-slate-200 bg-slate-50 p
 const LABEL_CLS  = 'text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap'
 const ERR_CLS    = 'mt-0.5 text-[10px] text-red-500'
 const TABLE_INP  = 'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white'
+const PCT_INP    = 'w-12 rounded border-2 border-slate-200 bg-slate-50 px-1 py-0.5 text-right text-xs outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400'
 
 function SectionHeader({ icon: Icon, title, colorClass = 'text-indigo-700 bg-indigo-50 border-indigo-100', extra }) {
   return (
@@ -54,30 +55,111 @@ function FieldRow({ label, required, error, children }) {
   )
 }
 
-/* ── Canonical calculation (mirrors backend CostingService::compute) ── */
-function calcSummary({ rawMaterialCost, expenses, valueAdditionPct, ssclPct, vatPct }) {
-  const totalAdditional    = expenses.reduce((s, e) => s + (parseFloat(e.amount) || 0), 0)
-  const totalLanded        = rawMaterialCost + totalAdditional
-  const valueAdditionAmt   = totalLanded * (valueAdditionPct / 100)
-  const fobCifCost         = totalLanded + valueAdditionAmt
-  const ssclAmount         = fobCifCost * (ssclPct / 100)
-  const grossFobCif        = fobCifCost + ssclAmount
-  const vatAmount          = grossFobCif * (vatPct / 100)
-  const totalWithVat       = grossFobCif + vatAmount
-  return { totalAdditional, totalLanded, valueAdditionAmt, fobCifCost, ssclAmount, grossFobCif, vatAmount, totalWithVat }
+function CheckToggle({ checked, onChange, label, disabled }) {
+  return (
+    <label className={`flex items-center gap-1 select-none ${disabled ? 'cursor-default opacity-70' : 'cursor-pointer'}`}>
+      <span className={`flex h-3.5 w-3.5 items-center justify-center rounded border-2 transition-all ${checked ? 'border-indigo-500 bg-indigo-500' : 'border-slate-300 bg-white'}`}
+        onClick={() => !disabled && onChange(!checked)}>
+        {checked && (
+          <svg className="h-2 w-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+          </svg>
+        )}
+      </span>
+      <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500" onClick={() => !disabled && onChange(!checked)}>{label}</span>
+    </label>
+  )
 }
 
 function fmt(n) {
   return Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
 
+/** Money amount with a muted currency tag — every price reads "1,520.00 Rs". */
+function Money({ value }) {
+  return <>{fmt(value)}<span className="ml-0.5 text-[9px] font-normal text-slate-400">{CURRENCY}</span></>
+}
+
+/** Quantity with its own unit symbol (Kg, m, Pcs…), honouring the unit's prefix/suffix position. */
+function QtyUnit({ value, symbol, position }) {
+  if (!symbol) return <>{fmt(value)}</>
+  const tag = <span className="text-[9px] font-normal text-slate-400">{symbol}</span>
+  return position === 'prefix'
+    ? <>{tag}<span className="ml-0.5">{fmt(value)}</span></>
+    : <>{fmt(value)}<span className="ml-0.5">{tag}</span></>
+}
+
+/* ── Canonical per-line calculation (mirrors CostingService::computeBreakdown) ──
+ * portion = Σexpenses ÷ Σqty ; landed = grn unit_price + portion
+ * selling = landed + margin → +SSCL% → +VAT% (cascading toggles)
+ * A typed selling price is FINAL — the pieces back-compute from it.       */
+function calcBreakdown(lines, totalExpenses, cfg, overrides) {
+  const totalQty = lines.reduce((s, l) => s + (parseFloat(l.quantity) || 0), 0)
+  const portion  = totalQty > 0 ? totalExpenses / totalQty : 0
+  const mult     = (cfg.applySscl ? 1 + cfg.ssclPct / 100 : 1) * (cfg.applyVat ? 1 + cfg.vatPct / 100 : 1)
+
+  const items = lines.map((line) => {
+    const unitPrice = parseFloat(line.unit_price) || 0
+    const landed    = unitPrice + portion
+    const ov        = overrides[line.id] ?? {}
+    const typed     = ov.selling_price !== undefined && ov.selling_price !== '' ? parseFloat(ov.selling_price) : null
+    const linePct   = ov.margin_pct !== undefined && ov.margin_pct !== '' ? parseFloat(ov.margin_pct) : null
+
+    let marginAmount, ssclAmount, vatAmount, selling, overridden
+    if (typed !== null && !Number.isNaN(typed)) {
+      selling      = typed
+      const base   = mult > 0 ? selling / mult : selling
+      marginAmount = base - landed
+      ssclAmount   = cfg.applySscl ? base * (cfg.ssclPct / 100) : 0
+      vatAmount    = cfg.applyVat ? (base + ssclAmount) * (cfg.vatPct / 100) : 0
+      overridden   = true
+    } else {
+      const pct    = linePct ?? cfg.defaultMarginPct
+      marginAmount = landed * (pct / 100)
+      const base   = landed + marginAmount
+      ssclAmount   = cfg.applySscl ? base * (cfg.ssclPct / 100) : 0
+      const after  = base + ssclAmount
+      vatAmount    = cfg.applyVat ? after * (cfg.vatPct / 100) : 0
+      selling      = after + vatAmount
+      overridden   = false
+    }
+
+    return {
+      ...line,
+      charge_portion:      portion,
+      landed_unit_cost:    landed,
+      margin_pct:          linePct,
+      margin_amount:       marginAmount,
+      sscl_amount:         ssclAmount,
+      vat_amount:          vatAmount,
+      selling_price:       selling,
+      is_price_overridden: overridden,
+    }
+  })
+
+  const sum = (key) => items.reduce((s, i) => s + (parseFloat(i.quantity) || 0) * i[key], 0)
+
+  return {
+    items,
+    totals: {
+      qty:           totalQty,
+      portion,
+      purchaseValue: sum('unit_price'),
+      landedValue:   sum('landed_unit_cost'),
+      marginValue:   sum('margin_amount'),
+      ssclValue:     sum('sscl_amount'),
+      vatValue:      sum('vat_amount'),
+      sellingValue:  sum('selling_price'),
+    },
+  }
+}
+
 /* ════════════════════════════════════════════════════════════ */
 export default function CostingFormPage() {
   const { id }   = useParams()
-  const isEdit   = Boolean(id)
+  const isEdit   = Boolean(id) && !window.location.pathname.match(/^\/inventory\/costings\/\d+$/)
   const navigate = useNavigate()
   const today    = new Date().toISOString().slice(0, 10)
-  const isView   = window.location.pathname.match(/^\/inventory\/costings\/\d+$/)
 
   const CRUMBS = [
     { label: 'Inventory', to: '/inventory/products' },
@@ -87,16 +169,18 @@ export default function CostingFormPage() {
 
   /* ── Core form state ──────────────────────────────────────── */
   const [form, setForm] = useState({
-    supplier_id:      '',
-    costing_type:     'fob',
-    material_cost:    '',
-    bill_of_lading:   '',
-    expected_date:    '',
-    transaction_date: today,
-    note:             '',
-    value_addition_pct: 10,
-    sscl_pct:           2.5,
-    vat_pct:            18,
+    supplier_id:          '',
+    costing_type:         'fob',
+    bill_of_lading:       '',
+    expected_date:        '',
+    transaction_date:     today,
+    note:                 '',
+    common_charge_amount: '', // one total FOB/CIF charge, spread per unit
+    default_margin_pct:   '',
+    apply_sscl:           false,
+    sscl_pct:             2.5,
+    apply_vat:            false,
+    vat_pct:              18,
   })
   const [docNoPreview, setDocNoPreview] = useState('')
   const [refNoPreview, setRefNoPreview] = useState('')
@@ -111,32 +195,35 @@ export default function CostingFormPage() {
   // the "available" API excludes GRNs that belong to confirmed costings.
   const linkedGrnsRef = useRef([])
 
-  /* ── Expense rows (one per expense type for current costing_type) ── */
-  const [expenseRows, setExpenseRows] = useState([]) // { expense_type_id, name, amount, note }
+  /* ── Per-line overrides of the product breakdown ──────────── */
+  // { [grn_item_id]: { margin_pct?: string, selling_price?: string } }
+  const [lineOverrides, setLineOverrides] = useState({})
 
-  /* ── Derived totals ───────────────────────────────────────── */
+  /* ── Derived data ─────────────────────────────────────────── */
   const filteredGrns  = grnSearch
     ? supplierGrns.filter((g) => g.grn_no?.toLowerCase().includes(grnSearch.toLowerCase()))
     : supplierGrns
   const selectedGrns  = supplierGrns.filter((g) => selectedGrnIds.has(g.id))
   const grnTotal      = selectedGrns.reduce((s, g) => s + (parseFloat(g.total_amount) || 0), 0)
-  const totalItemsCount = selectedGrns.reduce((s, g) => s + (parseFloat(g.total_items) || 0), 0)
+  const totalExpenses = parseFloat(form.common_charge_amount) || 0
 
-  // Summary uses material_cost (editable field) as raw material cost — not the GRN sum.
-  // GRN selection auto-fills material_cost, but the user can override it.
-  const summary = calcSummary({
-    rawMaterialCost:  parseFloat(form.material_cost) || 0,
-    expenses:         expenseRows,
-    valueAdditionPct: parseFloat(form.value_addition_pct) || 0,
+  // Every item line of the selected GRNs — the breakdown's raw input
+  const grnLines = selectedGrns.flatMap((g) =>
+    (g.items ?? []).map((it) => ({ ...it, grn_no: g.grn_no, grn_id: g.id }))
+  )
+
+  const breakdown = calcBreakdown(grnLines, totalExpenses, {
+    defaultMarginPct: parseFloat(form.default_margin_pct) || 0,
+    applySscl:        form.apply_sscl,
     ssclPct:          parseFloat(form.sscl_pct) || 0,
+    applyVat:         form.apply_vat,
     vatPct:           parseFloat(form.vat_pct) || 0,
-  })
+  }, lineOverrides)
+  const { items: breakdownItems, totals } = breakdown
 
-  /* ── Auto-fill Material Cost from GRN selection (create mode only) ── */
-  useEffect(() => {
-    if (isEdit) return
-    setField('material_cost', grnTotal > 0 ? grnTotal : '')
-  }, [grnTotal])
+  // Show a unit on quantity totals only when every line shares the same one
+  const qtySymbols = new Set(breakdownItems.map((i) => i.unit_symbol).filter(Boolean))
+  const qtyUnit    = qtySymbols.size === 1 ? [...qtySymbols][0] : ''
 
   /* ── Fetch suppliers list ─────────────────────────────────── */
   const { data: suppliers = [] } = useQuery({
@@ -147,10 +234,10 @@ export default function CostingFormPage() {
 
   /* ── Fetch auto-gen numbers on create ─────────────────────── */
   useEffect(() => {
-    if (isEdit) return
+    if (id) return
     getNextDocumentNo().then(setDocNoPreview).catch(() => setDocNoPreview('Auto-generated'))
     getNextReferenceNo().then(setRefNoPreview).catch(() => setRefNoPreview('Auto-generated'))
-  }, [isEdit])
+  }, [id])
 
   /* ── Load GRNs when supplier changes ─────────────────────── */
   useEffect(() => {
@@ -160,8 +247,6 @@ export default function CostingFormPage() {
     getSupplierGrns(form.supplier_id)
       .then((grns) => {
         if (cancelled) return
-        // Merge in already-linked GRNs (excluded from "available" list by the API
-        // because they belong to a confirmed costing — but we still need to show them here)
         const freshIds = new Set(grns.map((g) => g.id))
         const combined = [...grns, ...linkedGrnsRef.current.filter((g) => !freshIds.has(g.id))]
         setSupplierGrns(combined)
@@ -170,22 +255,6 @@ export default function CostingFormPage() {
       .finally(() => { if (!cancelled) setLoadingGrns(false) })
     return () => { cancelled = true }
   }, [form.supplier_id])
-
-  /* ── Load expense types when costing_type changes ─────────── */
-  useEffect(() => {
-    if (!form.costing_type) return
-    let cancelled = false
-    getCostingExpenseTypes(form.costing_type)
-      .then((types) => {
-        if (cancelled) return
-        setExpenseRows((prev) => types.map((t) => {
-          const existing = prev.find((r) => r.expense_type_id === t.id)
-          return { expense_type_id: t.id, name: t.name, amount: existing?.amount ?? '', note: existing?.note ?? '' }
-        }))
-      })
-      .catch(() => { if (!cancelled) showError('Could not load expense types.') })
-    return () => { cancelled = true }
-  }, [form.costing_type])
 
   /* ── Load existing costing in edit/view mode ──────────────── */
   const { data: existingData } = useQuery({
@@ -200,25 +269,40 @@ export default function CostingFormPage() {
     setDocNoPreview(c.document_no)
     setRefNoPreview(c.reference_no)
     setForm({
-      supplier_id:        String(c.supplier_id),
-      costing_type:       c.costing_type,
-      material_cost:      c.material_cost,
-      bill_of_lading:     c.bill_of_lading ?? '',
-      expected_date:      c.expected_date ?? '',
-      transaction_date:   c.transaction_date ?? today,
-      note:               c.note ?? '',
-      value_addition_pct: c.value_addition_pct,
-      sscl_pct:           c.sscl_pct,
-      vat_pct:            c.vat_pct,
+      supplier_id:          String(c.supplier_id),
+      costing_type:         c.costing_type,
+      bill_of_lading:       c.bill_of_lading ?? '',
+      expected_date:        c.expected_date ?? '',
+      transaction_date:     c.transaction_date ?? today,
+      note:                 c.note ?? '',
+      common_charge_amount: c.total_additional_expenses ? String(c.total_additional_expenses) : '',
+      default_margin_pct:   c.default_margin_pct ?? '',
+      apply_sscl:           Boolean(c.apply_sscl),
+      sscl_pct:             c.sscl_pct,
+      apply_vat:            Boolean(c.apply_vat),
+      vat_pct:              c.vat_pct,
     })
 
-    // Rebuild selected GRNs from linked data
     const linkedGrnIds = (c.costing_grns ?? []).map((cg) => cg.grn_id)
     setSelectedGrnIds(new Set(linkedGrnIds))
 
-    // Store already-linked GRNs in a ref BEFORE setting supplier_id.
-    // The supplier_id useEffect will merge these into the fresh GRN list,
-    // because the API excludes GRNs that belong to confirmed costings.
+    // Rebuild each linked GRN's item lines from the stored breakdown so the
+    // table works even when the "available" API no longer returns the GRN.
+    const itemsByGrn = new Map()
+    for (const item of c.items ?? []) {
+      if (!itemsByGrn.has(item.grn_id)) itemsByGrn.set(item.grn_id, [])
+      itemsByGrn.get(item.grn_id).push({
+        id:            item.grn_item_id,
+        product_id:    item.product_id,
+        product_name:  item.product_name,
+        product_code:  item.product_code,
+        color:         item.color,
+        quantity:      item.quantity,
+        unit_price:    item.unit_price,
+        unit_symbol:   item.unit_symbol,
+        unit_position: item.unit_position,
+      })
+    }
     linkedGrnsRef.current = (c.costing_grns ?? [])
       .filter((cg) => cg.grn)
       .map((cg) => ({
@@ -228,19 +312,16 @@ export default function CostingFormPage() {
         po_no:        null,
         total_amount: cg.grn.total_amount,
         total_items:  cg.grn.total_items ?? 0,
+        items:        itemsByGrn.get(cg.grn_id) ?? [],
       }))
 
-    // Rebuild expense rows
-    if (c.expenses?.length) {
-      setExpenseRows(
-        c.expenses.map((e) => ({
-          expense_type_id: e.expense_type_id,
-          name:            e.expense_type?.name ?? `Expense ${e.expense_type_id}`,
-          amount:          e.amount,
-          note:            e.note ?? '',
-        }))
-      )
+    // Restore per-line overrides (typed price wins over line margin)
+    const overrides = {}
+    for (const item of c.items ?? []) {
+      if (item.is_price_overridden) overrides[item.grn_item_id] = { selling_price: String(item.selling_price) }
+      else if (item.margin_pct != null) overrides[item.grn_item_id] = { margin_pct: String(item.margin_pct) }
     }
+    setLineOverrides(overrides)
   }, [existingData])
 
   /* ── GRN checkbox toggle ──────────────────────────────────── */
@@ -267,15 +348,27 @@ export default function CostingFormPage() {
     })
   }
 
-  /* ── Field updater ────────────────────────────────────────── */
+  /* ── Field updaters ───────────────────────────────────────── */
   function setField(name, value) {
     setForm((f) => ({ ...f, [name]: value }))
     setErrors((e) => ({ ...e, [name]: undefined }))
   }
 
-  /* ── Expense row updater ──────────────────────────────────── */
-  function setExpenseField(idx, field, value) {
-    setExpenseRows((rows) => rows.map((r, i) => i === idx ? { ...r, [field]: value } : r))
+  // Editing a line margin clears its typed price (they're mutually exclusive)
+  function setLineMargin(grnItemId, value) {
+    setLineOverrides((prev) => ({ ...prev, [grnItemId]: { margin_pct: value } }))
+  }
+
+  function setLineSelling(grnItemId, value) {
+    setLineOverrides((prev) => ({ ...prev, [grnItemId]: { selling_price: value } }))
+  }
+
+  function resetLine(grnItemId) {
+    setLineOverrides((prev) => {
+      const next = { ...prev }
+      delete next[grnItemId]
+      return next
+    })
   }
 
   /* ── Build payload ────────────────────────────────────────── */
@@ -284,17 +377,25 @@ export default function CostingFormPage() {
       supplier_id:        parseInt(form.supplier_id),
       costing_type:       form.costing_type,
       grn_ids:            [...selectedGrnIds],
-      material_cost:      parseFloat(form.material_cost) || 0,
       bill_of_lading:     form.bill_of_lading || null,
       expected_date:      form.expected_date || null,
       transaction_date:   form.transaction_date || null,
-      note:               form.note || null,
-      value_addition_pct: parseFloat(form.value_addition_pct) || 10,
-      sscl_pct:           parseFloat(form.sscl_pct) || 2.5,
-      vat_pct:            parseFloat(form.vat_pct) || 18,
-      expenses:           expenseRows
-        .filter((r) => parseFloat(r.amount) > 0)
-        .map((r) => ({ expense_type_id: r.expense_type_id, amount: parseFloat(r.amount), note: r.note || null })),
+      note:                 form.note || null,
+      common_charge_amount: parseFloat(form.common_charge_amount) || 0,
+      default_margin_pct:   parseFloat(form.default_margin_pct) || 0,
+      apply_sscl:           form.apply_sscl,
+      sscl_pct:             parseFloat(form.sscl_pct) || 0,
+      apply_vat:            form.apply_vat,
+      vat_pct:              parseFloat(form.vat_pct) || 0,
+      expenses:             [],
+      items: Object.entries(lineOverrides)
+        .filter(([grnItemId]) => grnLines.some((l) => String(l.id) === String(grnItemId)))
+        .map(([grnItemId, ov]) => ({
+          grn_item_id:   parseInt(grnItemId),
+          margin_pct:    ov.margin_pct !== undefined && ov.margin_pct !== '' ? parseFloat(ov.margin_pct) : null,
+          selling_price: ov.selling_price !== undefined && ov.selling_price !== '' ? parseFloat(ov.selling_price) : null,
+        }))
+        .filter((o) => o.margin_pct !== null || o.selling_price !== null),
     }
   }
 
@@ -325,7 +426,7 @@ export default function CostingFormPage() {
 
   const confirmMutation = useMutation({
     mutationFn: () => confirmCosting(id),
-    onSuccess: () => { showSuccess('Costing confirmed.'); navigate('/inventory/costings') },
+    onSuccess: () => { showSuccess('Costing confirmed — product selling prices updated.'); navigate('/inventory/costings') },
     onError: (err) => showError(err.response?.data?.message ?? 'Confirmation failed.'),
   })
 
@@ -338,7 +439,7 @@ export default function CostingFormPage() {
   async function handleConfirm() {
     const ok = await confirmAction({
       title: 'Confirm Costing?',
-      message: 'This will <strong>lock the costing</strong> and finalize all landed cost calculations. This action cannot be undone.',
+      message: 'This will <strong>lock the costing</strong> and <strong>update the selling prices</strong> of these products. Sales orders will price this shipment\'s rolls at the costing prices. This action cannot be undone.',
       confirmText: 'Yes, Confirm',
     })
     if (ok) confirmMutation.mutate()
@@ -346,6 +447,7 @@ export default function CostingFormPage() {
 
   const isConfirmed = existingData?.data?.status === 'confirmed'
   const readOnly    = isConfirmed || (!isEdit && Boolean(id))
+  const anyTax      = form.apply_sscl || form.apply_vat
 
   /* ════════════════════════════════════════════════════════════ */
   return (
@@ -385,6 +487,7 @@ export default function CostingFormPage() {
                   onChange={(e) => {
                     linkedGrnsRef.current = []
                     setSelectedGrnIds(new Set())
+                    setLineOverrides({})
                     setField('supplier_id', e.target.value)
                   }}
                   disabled={readOnly}
@@ -397,9 +500,6 @@ export default function CostingFormPage() {
               </FieldRow>
               <FieldRow label="Bill of Lading">
                 <input type="text" className={INPUT_CLS} placeholder="BL-XXXXXXXX" value={form.bill_of_lading} onChange={(e) => setField('bill_of_lading', e.target.value)} disabled={readOnly} />
-              </FieldRow>
-              <FieldRow label="Material Cost">
-                <input type="number" min="0" step="0.01" className={INPUT_CLS} placeholder="0.00" value={form.material_cost} onChange={(e) => setField('material_cost', e.target.value)} disabled={readOnly} />
               </FieldRow>
               <FieldRow label="Note">
                 <input type="text" className={INPUT_CLS} placeholder="Optional note…" value={form.note} onChange={(e) => setField('note', e.target.value)} disabled={readOnly} />
@@ -423,8 +523,8 @@ export default function CostingFormPage() {
                     className="rounded border border-amber-200 bg-white px-2 py-0.5 text-[10px] text-slate-700 placeholder-slate-400 outline-none focus:border-amber-400 focus:ring-1 focus:ring-amber-300/40 w-36"
                   />
                   <div className="flex items-center gap-3 text-[10px] text-slate-500">
-                    <span>Total Items: <span className="font-bold text-slate-700">{fmt(totalItemsCount)}</span></span>
-                    <span>GRN Total: <span className="font-bold text-indigo-700">{fmt(grnTotal)}</span></span>
+                    <span>Total Qty: <span className="font-bold text-slate-700">{fmt(totals.qty)}{qtyUnit && ` ${qtyUnit}`}</span></span>
+                    <span>GRN Total: <span className="font-bold text-indigo-700">{fmt(grnTotal)} {CURRENCY}</span></span>
                   </div>
                 </div>
               }
@@ -489,7 +589,7 @@ export default function CostingFormPage() {
                         <td className="px-3 py-1.5 text-slate-500">{grn.grn_date}</td>
                         <td className="px-3 py-1.5 text-slate-400">{grn.po_no || '—'}</td>
                         <td className="px-3 py-1.5 text-slate-500">{fmt(grn.total_items)}</td>
-                        <td className="px-3 py-1.5 text-right font-medium text-slate-700">{fmt(grn.total_amount)}</td>
+                        <td className="px-3 py-1.5 text-right font-medium text-slate-700"><Money value={grn.total_amount} /></td>
                       </tr>
                     ))
                   )}
@@ -498,90 +598,113 @@ export default function CostingFormPage() {
             </div>
           </div>
 
-          {/* Section 3 — Costing Type + Expenses */}
+          {/* Section 3 — Product Breakdown (the heart of the costing) */}
           <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
             <SectionHeader
-              icon={DollarSign}
-              title="Additional Expenses"
-              colorClass="text-emerald-700 bg-emerald-50 border-emerald-100"
+              icon={Table2}
+              title="Product Price Breakdown"
+              colorClass="text-indigo-700 bg-indigo-50 border-indigo-100"
               extra={
-                !readOnly && (
-                  <div className="flex overflow-hidden rounded-md border-2 border-slate-200 text-[10px] font-bold">
-                    <button
-                      type="button"
-                      onClick={() => setField('costing_type', 'fob')}
-                      className={`px-3 py-1 transition-colors ${form.costing_type === 'fob' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                    >
-                      FOB
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setField('costing_type', 'cif')}
-                      className={`border-l-2 border-slate-200 px-3 py-1 transition-colors ${form.costing_type === 'cif' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
-                    >
-                      CIF
-                    </button>
-                  </div>
-                )
+                <span className="text-[10px] text-slate-400">
+                  GRN Price + Charges = Landed → + Margin{form.apply_sscl ? ' → +SSCL' : ''}{form.apply_vat ? ' → +VAT' : ''} = Selling
+                </span>
               }
             />
-            {readOnly && (
-              <div className="px-3 py-2 border-b border-slate-100">
-                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-bold ${form.costing_type === 'fob' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                  {form.costing_type?.toUpperCase()}
-                </span>
-              </div>
-            )}
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
-                    <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Expense</th>
-                    <th className="w-36 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Amount</th>
-                    <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Note</th>
+                    <th className="px-2 py-2 font-semibold uppercase tracking-wider text-slate-500">Product</th>
+                    <th className="px-2 py-2 font-semibold uppercase tracking-wider text-slate-500">Colour</th>
+                    <th className="px-2 py-2 font-semibold uppercase tracking-wider text-slate-500">GRN</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Qty</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">GRN Price</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">+Charges</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Landed</th>
+                    <th className="w-20 px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Margin %</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Margin</th>
+                    {anyTax && <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Tax</th>}
+                    <th className="w-24 px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Selling / Unit ({CURRENCY})</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Line Total</th>
+                    {!readOnly && <th className="w-7 px-1 py-2" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {expenseRows.length === 0 ? (
-                    <tr>
-                      <td colSpan={3} className="px-4 py-8 text-center text-slate-400">
-                        {form.costing_type ? 'No expense types configured for this costing type.' : 'Select a costing type to load expenses.'}
-                      </td>
-                    </tr>
+                  {breakdownItems.length === 0 ? (
+                    <tr><td colSpan={anyTax ? 13 : 12} className="px-4 py-8 text-center text-slate-400">Select GRNs above — every received product line appears here with its price build-up.</td></tr>
                   ) : (
-                    expenseRows.map((row, idx) => (
-                      <tr key={row.expense_type_id} className="hover:bg-slate-50">
-                        <td className="px-3 py-1.5 font-medium text-slate-700">{row.name}</td>
-                        <td className="px-3 py-1.5">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            placeholder="0.00"
-                            className={TABLE_INP}
-                            value={row.amount}
-                            onChange={(e) => setExpenseField(idx, 'amount', e.target.value)}
-                            disabled={readOnly}
-                          />
-                        </td>
-                        <td className="px-3 py-1.5">
-                          <input
-                            type="text"
-                            placeholder="Optional note…"
-                            className={TABLE_INP}
-                            value={row.note}
-                            onChange={(e) => setExpenseField(idx, 'note', e.target.value)}
-                            disabled={readOnly}
-                          />
-                        </td>
-                      </tr>
-                    ))
+                    breakdownItems.map((item) => {
+                      const ov = lineOverrides[item.id] ?? {}
+                      const hasOverride = (ov.margin_pct !== undefined && ov.margin_pct !== '') || (ov.selling_price !== undefined && ov.selling_price !== '')
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50">
+                          <td className="px-2 py-1 font-medium text-slate-700">
+                            {item.product_name || `Product #${item.product_id}`}
+                            {item.product_code && <span className="ml-1 font-mono text-[9px] text-slate-400">{item.product_code}</span>}
+                          </td>
+                          <td className="px-2 py-1 text-slate-500">{item.color || '—'}</td>
+                          <td className="px-2 py-1 font-mono text-[10px] text-slate-400">{item.grn_no}</td>
+                          <td className="px-2 py-1 text-right tabular-nums text-slate-600"><QtyUnit value={item.quantity} symbol={item.unit_symbol} position={item.unit_position} /></td>
+                          <td className="px-2 py-1 text-right tabular-nums text-slate-600"><Money value={item.unit_price} /></td>
+                          <td className="px-2 py-1 text-right tabular-nums text-emerald-600">+<Money value={item.charge_portion} /></td>
+                          <td className="px-2 py-1 text-right font-medium tabular-nums text-slate-700"><Money value={item.landed_unit_cost} /></td>
+                          <td className="px-2 py-1">
+                            <input
+                              type="number" min="0" step="0.01"
+                              placeholder={String(form.default_margin_pct || 0)}
+                              className={`${TABLE_INP} text-right`}
+                              value={ov.margin_pct ?? ''}
+                              onChange={(e) => setLineMargin(item.id, e.target.value)}
+                              disabled={readOnly || item.is_price_overridden}
+                              title={item.is_price_overridden ? 'Selling price typed directly — margin is back-computed' : 'Line margin % (blank = costing default)'}
+                            />
+                          </td>
+                          <td className={`px-2 py-1 text-right tabular-nums ${item.margin_amount < 0 ? 'font-semibold text-red-600' : 'text-slate-600'}`}><Money value={item.margin_amount} /></td>
+                          {anyTax && (
+                            <td className="px-2 py-1 text-right tabular-nums text-amber-600" title={`SSCL ${fmt(item.sscl_amount)} ${CURRENCY} + VAT ${fmt(item.vat_amount)} ${CURRENCY}`}>
+                              <Money value={item.sscl_amount + item.vat_amount} />
+                            </td>
+                          )}
+                          <td className="px-2 py-1">
+                            <div className="relative">
+                              <input
+                                type="number" min="0" step="0.01"
+                                className={`${TABLE_INP} text-right font-semibold ${item.is_price_overridden ? 'border-amber-400 bg-amber-50' : ''}`}
+                                value={ov.selling_price ?? Number(item.selling_price.toFixed(2))}
+                                onChange={(e) => setLineSelling(item.id, e.target.value)}
+                                disabled={readOnly}
+                                title={item.is_price_overridden ? 'Typed final price — margin back-computed' : 'Computed selling price (type to override)'}
+                              />
+                              {item.is_price_overridden && <span className="absolute -left-1 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-amber-500" title="Price overridden" />}
+                            </div>
+                          </td>
+                          <td className="px-2 py-1 text-right font-medium tabular-nums text-indigo-700"><Money value={item.quantity * item.selling_price} /></td>
+                          {!readOnly && (
+                            <td className="px-1 py-1 text-center">
+                              {hasOverride && (
+                                <button type="button" onClick={() => resetLine(item.id)} title="Reset to costing default" className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+                                  <RotateCcw size={10} />
+                                </button>
+                              )}
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    })
                   )}
-                  {expenseRows.length > 0 && (
-                    <tr className="bg-slate-50 border-t border-slate-200">
-                      <td className="px-3 py-1.5 font-bold text-slate-700">Total Additional Expenses</td>
-                      <td className="px-3 py-1.5 font-bold text-indigo-700">{fmt(summary.totalAdditional)}</td>
+                  {breakdownItems.length > 0 && (
+                    <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold">
+                      <td className="px-2 py-1.5 text-slate-700" colSpan={3}>Totals</td>
+                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-700"><QtyUnit value={totals.qty} symbol={qtyUnit} position="suffix" /></td>
+                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-700"><Money value={totals.purchaseValue} /></td>
+                      <td className="px-2 py-1.5 text-right tabular-nums text-emerald-700">+<Money value={totalExpenses} /></td>
+                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-800"><Money value={totals.landedValue} /></td>
                       <td />
+                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-700"><Money value={totals.marginValue} /></td>
+                      {anyTax && <td className="px-2 py-1.5 text-right tabular-nums text-amber-700"><Money value={totals.ssclValue + totals.vatValue} /></td>}
+                      <td />
+                      <td className="px-2 py-1.5 text-right tabular-nums text-indigo-700"><Money value={totals.sellingValue} /></td>
+                      {!readOnly && <td />}
                     </tr>
                   )}
                 </tbody>
@@ -595,79 +718,112 @@ export default function CostingFormPage() {
         <div className="w-72 shrink-0">
           <div className="sticky top-4 flex flex-col gap-2">
           <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
-            <SectionHeader icon={Calculator} title="Costing Summary" colorClass="text-violet-700 bg-violet-50 border-violet-100" />
+            <SectionHeader icon={Calculator} title="Pricing Summary" colorClass="text-violet-700 bg-violet-50 border-violet-100" />
             <div className="p-3 flex flex-col gap-0">
 
-              {/* Summary rows */}
-              <SummaryRow label="Total Additional Expenses" value={summary.totalAdditional} valueClass="text-slate-700" />
-              <SummaryRow label="Raw Material Cost" value={parseFloat(form.material_cost) || 0} valueClass="text-slate-700" />
-              <div className="border-t border-slate-200 my-1" />
-              <SummaryRow label="Total Landed Cost" value={summary.totalLanded} valueClass="font-bold text-slate-800" />
+              <SummaryRow label="Total Quantity" value={totals.qty} valueClass="text-slate-700" unit={qtyUnit} />
+              <SummaryRow label="Total Purchase Value" value={totals.purchaseValue} valueClass="text-slate-700" unit={CURRENCY} />
 
-              <div className="flex items-center justify-between py-0.5">
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Value Addition</span>
-                  <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    className="w-12 rounded border-2 border-slate-200 bg-slate-50 px-1 py-0.5 text-right text-xs outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                    value={form.value_addition_pct}
-                    onChange={(e) => setField('value_addition_pct', e.target.value)}
-                    disabled={readOnly}
-                  />
-                  <span className="text-[10px] text-slate-400">%</span>
+              {/* FOB / CIF total charge — one figure, spread per unit */}
+              <div className="mt-1 rounded-md border border-emerald-100 bg-emerald-50/60 p-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex overflow-hidden rounded-md border-2 border-slate-200 text-[10px] font-bold">
+                    <button
+                      type="button"
+                      onClick={() => !readOnly && setField('costing_type', 'fob')}
+                      className={`px-2.5 py-0.5 transition-colors ${form.costing_type === 'fob' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'} ${readOnly ? 'cursor-default' : ''}`}
+                    >
+                      FOB
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => !readOnly && setField('costing_type', 'cif')}
+                      className={`border-l-2 border-slate-200 px-2.5 py-0.5 transition-colors ${form.costing_type === 'cif' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'} ${readOnly ? 'cursor-default' : ''}`}
+                    >
+                      CIF
+                    </button>
+                  </div>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
+                    Total {form.costing_type?.toUpperCase()} Charges ({CURRENCY})
+                  </span>
                 </div>
-                <span className="text-xs text-amber-600">{fmt(summary.valueAdditionAmt)}</span>
+                <input
+                  type="number" min="0" step="0.01"
+                  placeholder="0.00"
+                  className="mt-1.5 block w-full rounded border-2 border-emerald-200 bg-white px-2 py-1 text-right text-sm font-bold tabular-nums text-slate-800 outline-none transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                  value={form.common_charge_amount}
+                  onChange={(e) => setField('common_charge_amount', e.target.value)}
+                  disabled={readOnly}
+                  title={`Total ${form.costing_type?.toUpperCase()} + transport + other charges for this shipment — spread evenly per unit`}
+                />
+                <div className="mt-1 flex items-center justify-between text-[10px]">
+                  <span className="text-slate-500">Charge / Unit</span>
+                  <span className="font-bold text-emerald-700"><Money value={totals.portion} /></span>
+                </div>
               </div>
 
               <div className="border-t border-slate-200 my-1" />
-              <SummaryRow label={`${form.costing_type?.toUpperCase() || 'FOB/CIF'} Cost`} value={summary.fobCifCost} valueClass="font-bold text-slate-800" />
+              <SummaryRow label="Total Landed Cost" value={totals.landedValue} valueClass="font-bold text-slate-800" unit={CURRENCY} />
 
-              <div className="flex items-center justify-between py-0.5">
+              {/* Default margin */}
+              <div className="flex items-center justify-between py-1">
                 <div className="flex items-center gap-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">SSCL</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Default Margin</span>
                   <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    className="w-12 rounded border-2 border-slate-200 bg-slate-50 px-1 py-0.5 text-right text-xs outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                    type="number" min="0" step="0.1"
+                    className={PCT_INP}
+                    value={form.default_margin_pct}
+                    onChange={(e) => setField('default_margin_pct', e.target.value)}
+                    disabled={readOnly}
+                    placeholder="0"
+                  />
+                  <span className="text-[10px] text-slate-400">%</span>
+                </div>
+                <span className="text-xs text-slate-600"><Money value={totals.marginValue} /></span>
+              </div>
+
+              {/* SSCL toggle */}
+              <div className="flex items-center justify-between py-1">
+                <div className="flex items-center gap-1.5">
+                  <CheckToggle checked={form.apply_sscl} onChange={(v) => setField('apply_sscl', v)} label="SSCL" disabled={readOnly} />
+                  <input
+                    type="number" min="0" max="100" step="0.1"
+                    className={PCT_INP}
                     value={form.sscl_pct}
                     onChange={(e) => setField('sscl_pct', e.target.value)}
-                    disabled={readOnly}
+                    disabled={readOnly || !form.apply_sscl}
                   />
                   <span className="text-[10px] text-slate-400">%</span>
                 </div>
-                <span className="text-xs text-amber-600">{fmt(summary.ssclAmount)}</span>
+                <span className={`text-xs ${form.apply_sscl ? 'text-amber-600' : 'text-slate-300'}`}><Money value={totals.ssclValue} /></span>
               </div>
 
-              <div className="border-t border-slate-200 my-1" />
-              <SummaryRow label={`Gross ${form.costing_type?.toUpperCase() || 'FOB/CIF'} Value`} value={summary.grossFobCif} valueClass="font-bold text-slate-800" />
-
-              <div className="flex items-center justify-between py-0.5">
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">VAT</span>
+              {/* VAT toggle */}
+              <div className="flex items-center justify-between py-1">
+                <div className="flex items-center gap-1.5">
+                  <CheckToggle checked={form.apply_vat} onChange={(v) => setField('apply_vat', v)} label="VAT" disabled={readOnly} />
                   <input
-                    type="number"
-                    min="0"
-                    max="100"
-                    step="0.1"
-                    className="w-12 rounded border-2 border-slate-200 bg-slate-50 px-1 py-0.5 text-right text-xs outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
+                    type="number" min="0" max="100" step="0.1"
+                    className={PCT_INP}
                     value={form.vat_pct}
                     onChange={(e) => setField('vat_pct', e.target.value)}
-                    disabled={readOnly}
+                    disabled={readOnly || !form.apply_vat}
                   />
                   <span className="text-[10px] text-slate-400">%</span>
                 </div>
-                <span className="text-xs text-amber-600">{fmt(summary.vatAmount)}</span>
+                <span className={`text-xs ${form.apply_vat ? 'text-amber-600' : 'text-slate-300'}`}><Money value={totals.vatValue} /></span>
               </div>
+
+              {anyTax && (
+                <p className="mt-0.5 rounded bg-amber-50 px-2 py-1 text-[9px] leading-tight text-amber-700">
+                  Selling prices include {form.apply_sscl && 'SSCL'}{form.apply_sscl && form.apply_vat && ' + '}{form.apply_vat && 'VAT'} — this will be noted on invoices.
+                </p>
+              )}
 
               <div className="border-t-2 border-indigo-200 mt-1 pt-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">Total Price with VAT</span>
-                  <span className="text-base font-black text-indigo-700">{fmt(summary.totalWithVat)}</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">Total Selling Value</span>
+                  <span className="text-base font-black text-indigo-700">{fmt(totals.sellingValue)} <span className="text-[10px] font-bold text-indigo-400">{CURRENCY}</span></span>
                 </div>
               </div>
 
@@ -700,7 +856,7 @@ export default function CostingFormPage() {
             )}
             {isConfirmed && (
               <div className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-green-100 px-3 py-2 text-xs font-semibold text-green-700">
-                <CheckCircle size={13} /> Confirmed
+                <CheckCircle size={13} /> Confirmed — selling prices live
               </div>
             )}
             <button
@@ -721,11 +877,14 @@ export default function CostingFormPage() {
   )
 }
 
-function SummaryRow({ label, value, valueClass = '' }) {
+function SummaryRow({ label, value, valueClass = '', unit }) {
   return (
     <div className="flex items-center justify-between py-0.5">
       <span className="text-[10px] text-slate-500">{label}</span>
-      <span className={`text-xs ${valueClass}`}>{Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+      <span className={`text-xs ${valueClass}`}>
+        {Number(value || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        {unit && <span className="ml-0.5 text-[9px] font-normal text-slate-400">{unit}</span>}
+      </span>
     </div>
   )
 }

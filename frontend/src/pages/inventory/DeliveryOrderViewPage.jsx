@@ -185,11 +185,18 @@ export default function DeliveryOrderViewPage() {
         {/* Details */}
         <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 md:grid-cols-4 lg:grid-cols-6">
+            <Field label="Date" value={doc.document_date} />
             <Field label="Sales Order" value={doc.sales_order?.so_no} mono />
             <Field label="Customer" value={doc.customer?.name} />
+            <Field label="Customer Type" value={doc.sales_order?.customer_type} />
+            <Field label="Sales Person" value={doc.sales_order?.sales_person} />
+            <Field label="Order Taken By" value={doc.sales_order?.order_taken_by} />
+            <Field label="Order Source" value={doc.sales_order?.order_source} />
+            <Field label="Transaction Date" value={doc.sales_order?.transaction_date} />
             <Field label="Delivery Date" value={doc.delivery_date} />
-            <Field label="Driver" value={doc.driver?.name} />
-            <Field label="Vehicle" value={doc.vehicle?.registration_number} />
+            <Field label="Delivery Mode" value={doc.delivery_mode} />
+            <Field label="Delivery Vehicle & Number" value={doc.delivery_vehicle} />
+            <Field label="Responsible Person" value={doc.responsible_person} />
             <Field label="Confirmed At" value={doc.confirmed_at?.slice(0, 16)} />
             <div className="col-span-2">
               <Field label="Delivery Address" value={doc.delivery_address} />
