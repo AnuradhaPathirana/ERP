@@ -2170,11 +2170,12 @@ export default function GoodsReceivedNoteFormPage() {
         />
       )}
 
-      {/* Roll Assignment Modal */}
+      {/* Roll Assignment Modal — roll measures are entered in the item's own
+          UOM (kg, m, yd…) and must always sum to Qty Received */}
       {rollModalIdx !== null && items[rollModalIdx] && (
         <RollAssignModal
           item={items[rollModalIdx]}
-          isWeightUnit={unitTypes.find((u) => u.id === Number(items[rollModalIdx].unit_id))?.unit_category_name === 'Weight'}
+          unit={unitTypes.find((u) => u.id === Number(items[rollModalIdx].unit_id)) ?? null}
           onApply={(rolls) => {
             const rowKey = items[rollModalIdx]._key
             setItems((prev) => prev.map((row, i) => i === rollModalIdx ? { ...row, rolls } : row))

@@ -3,7 +3,7 @@ import { AlertTriangle, Weight, X } from 'lucide-react'
 import { confirmAction } from '../../utils/alerts'
 
 const INPUT = 'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-1 focus:ring-indigo-500/20'
-const LABEL = 'block text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-0.5'
+const LABEL = 'block whitespace-nowrap text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-0.5'
 
 const SHORTCUTS = [
   { keys: ['Enter'], desc: 'Roll No → focus Weight, then Weight → focus next Roll No' },
@@ -18,7 +18,14 @@ function computeAutoRollNo(start, index) {
   return String(value).padStart(trimmed.length, '0')
 }
 
-export default function RollAssignModal({ item, isWeightUnit, onApply, onClose }) {
+export default function RollAssignModal({ item, unit, onApply, onClose }) {
+  // Rolls are measured in the item's own UOM — kg, m, yd, pcs… The balance
+  // (Σ roll measures = Qty Received) holds for every unit, not just Weight.
+  const unitSymbol   = unit?.symbol ?? ''
+  const categoryName = unit?.unit_category_name ?? ''
+  const measureLabel = categoryName === 'Weight' ? 'Weight' : categoryName === 'Length' ? 'Length' : 'Qty'
+  const withUnit     = (n) => `${Number(n).toLocaleString()}${unitSymbol ? ` ${unitSymbol}` : ''}`
+
   const [rolls, setRolls]                 = useState([])
   const [noOfPieces, setNoOfPieces]       = useState('')
   const [startingRollNo, setStartingRollNo] = useState('')
@@ -108,10 +115,10 @@ export default function RollAssignModal({ item, isWeightUnit, onApply, onClose }
     if (missingRollNo) { setError('Each roll must have a Roll No.'); return }
 
     const zeroWeight = rolls.some((r) => !(parseFloat(r.weight) > 0))
-    if (zeroWeight) { setError('Each roll must have a weight greater than 0.'); return }
+    if (zeroWeight) { setError(`Each roll must have a ${measureLabel.toLowerCase()} greater than 0.`); return }
 
-    if (isWeightUnit && !isBalanced) {
-      setError(`Total roll weight (${totalWeight.toFixed(4)}) must equal quantity received (${required.toFixed(4)}).`)
+    if (!isBalanced) {
+      setError(`Total roll ${measureLabel.toLowerCase()} (${withUnit(totalWeight.toFixed(4))}) must equal quantity received (${withUnit(required.toFixed(4))}).`)
       return
     }
 
@@ -141,19 +148,15 @@ export default function RollAssignModal({ item, isWeightUnit, onApply, onClose }
 
         {/* Generator controls */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-slate-50 px-4 py-2.5">
-          {/* Left: summary */}
-          {isWeightUnit ? (
-            <div className="flex items-center gap-3 text-xs">
-              <span className="text-slate-500">Required: <span className="font-bold text-slate-700">{required.toLocaleString()}</span></span>
-              <span className="text-indigo-600">Entered: <span className="font-bold">{totalWeight.toLocaleString()}</span></span>
-              <span className={remaining > 0 ? 'text-amber-600' : remaining < 0 ? 'text-red-600' : 'text-emerald-600'}>
-                {remaining > 0 ? 'Remaining' : remaining < 0 ? 'Over by' : 'Balanced ✓'}:
-                {' '}<span className="font-bold">{Math.abs(remaining).toLocaleString()}</span>
-              </span>
-            </div>
-          ) : (
-            <span className="text-xs text-slate-500">{rolls.length} roll{rolls.length !== 1 ? 's' : ''} entered</span>
-          )}
+          {/* Left: balance summary — always shown, in the item's own UOM */}
+          <div className="flex items-center gap-3 text-xs">
+            <span className="text-slate-500">Required: <span className="font-bold text-slate-700">{withUnit(required)}</span></span>
+            <span className="text-indigo-600">Entered: <span className="font-bold">{withUnit(totalWeight)}</span></span>
+            <span className={remaining > 0 ? 'text-amber-600' : remaining < 0 ? 'text-red-600' : 'text-emerald-600'}>
+              {remaining > 0 ? 'Remaining' : remaining < 0 ? 'Over by' : 'Balanced ✓'}:
+              {' '}<span className="font-bold">{withUnit(Math.abs(remaining))}</span>
+            </span>
+          </div>
 
           {/* Right: generator inputs */}
           <div className="flex items-center gap-4">
@@ -187,7 +190,7 @@ export default function RollAssignModal({ item, isWeightUnit, onApply, onClose }
           ) : (
             <div className="flex flex-wrap gap-2.5">
               {rolls.map((r, idx) => (
-                <div key={r._key} className="w-40 rounded-lg border border-slate-200 bg-white p-2">
+                <div key={r._key} className="w-56 rounded-lg border border-slate-200 bg-white p-2">
                   <span className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-indigo-600">Roll {idx + 1}</span>
 
                   <div className="grid grid-cols-2 gap-1.5">
@@ -206,7 +209,7 @@ export default function RollAssignModal({ item, isWeightUnit, onApply, onClose }
                     </div>
 
                     <div>
-                      <label className={LABEL}>Weight <span className="text-red-500">*</span></label>
+                      <label className={LABEL}>{measureLabel}{unitSymbol && ` (${unitSymbol})`} <span className="text-red-500">*</span></label>
                       <input
                         ref={setCellRef(idx, 'weight')}
                         type="number" min="0" step="0.0001"
@@ -269,7 +272,7 @@ export default function RollAssignModal({ item, isWeightUnit, onApply, onClose }
             <button
               type="button"
               onClick={handleApply}
-              className={`rounded px-4 py-1 text-xs font-semibold text-white transition-colors ${!isWeightUnit || isBalanced ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-400 cursor-not-allowed'}`}
+              className={`rounded px-4 py-1 text-xs font-semibold text-white transition-colors ${isBalanced ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-slate-400 cursor-not-allowed'}`}
             >
               Apply Rolls
             </button>
