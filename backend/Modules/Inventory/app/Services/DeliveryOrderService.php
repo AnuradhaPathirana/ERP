@@ -16,6 +16,7 @@ use Modules\Inventory\Models\DeliveryOrder;
 use Modules\Inventory\Models\DeliveryOrderItem;
 use Modules\Inventory\Models\DeliveryOrderPiece;
 use Modules\Inventory\Models\GrnItemPiece;
+use Modules\Inventory\Models\Product;
 use Modules\Inventory\Models\ProductLocationStore;
 use Modules\Inventory\Models\SalesOrder;
 use Modules\Inventory\Models\SalesOrderItem;
@@ -34,6 +35,10 @@ use Modules\Inventory\Models\StockTransaction;
 class DeliveryOrderService
 {
     private const EPSILON = 0.0001;
+
+    public function __construct(private readonly UnitConversionService $units)
+    {
+    }
 
     /** @param array<string, mixed> $filters */
     public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
@@ -496,12 +501,31 @@ class DeliveryOrderService
                 }
             }
 
+            $productsById = Product::with('baseUnit')
+                ->whereIn('id', $do->items->pluck('product_id')->unique())
+                ->get()
+                ->keyBy('id');
+
             // ── Build outbound groups: do_item × store × location × batch ─
+            // Every qty below is in the product's stocking UOM, so it can be compared
+            // against and subtracted from current_stock directly.
             $groups = []; // key => [do_item, product_id, store_id, location_id, batch_id, qty, unit_id, unit_price, piece_row_ids[]]
             foreach ($do->items as $item) {
-                $soItem = $soItems->get($item->so_item_id);
+                $soItem     = $soItems->get($item->so_item_id);
+                $product    = $productsById->get($item->product_id);
+                $baseUnitId = $this->units->baseUnitIdFor($product);
+
+                // The SO quotes the customer a price per the SO line's UOM, but the
+                // ledger's qty_out is in base units — so the price must be rebased too,
+                // or qty × unit_price stops being the line's value (which is what the
+                // valuation reports compute).
+                $lineFactor    = $this->units->factor($item->unit_id ?? $baseUnitId, $baseUnitId);
+                $basePrice     = $lineFactor > 0 ? (float) $soItem->unit_price / $lineFactor : 0.0;
 
                 if ($item->is_scanned) {
+                    // Roll weights were converted to the stocking UOM when the GRN was
+                    // confirmed (see GoodsReceivedNoteService::sealPiecesForItem), so
+                    // they need no conversion here.
                     foreach ($do->pieces->where('do_item_id', $item->id) as $doPiece) {
                         $live = $livePieces->get($doPiece->piece_id);
                         $key  = "{$item->id}|{$live->store_id}|{$live->location_id}|{$live->batch_id}";
@@ -511,8 +535,8 @@ class DeliveryOrderService
                             'location_id' => $live->location_id,
                             'batch_id'   => $live->batch_id,
                             'qty'        => 0.0,
-                            'unit_id'    => $item->unit_id,
-                            'unit_price' => (float) $soItem->unit_price,
+                            'unit_id'    => $baseUnitId,
+                            'unit_price' => $basePrice,
                             'piece_rows' => [],
                             'piece_meta' => [],
                         ];
@@ -525,14 +549,23 @@ class DeliveryOrderService
                         ];
                     }
                 } else {
+                    // Manual line: the user typed a quantity in the line's UOM (say g)
+                    // which may differ from the stocking UOM (say Kg).
+                    $line = $this->units->toBase($product, $item->unit_id, (float) $item->quantity);
+
+                    $item->update([
+                        'conversion_factor' => $line['factor'],
+                        'base_quantity'     => $line['qty'],
+                    ]);
+
                     $groups["{$item->id}|manual"] = [
                         'product_id' => $item->product_id,
                         'store_id'   => $do->store_id,
                         'location_id' => $do->location_id,
                         'batch_id'   => null,
-                        'qty'        => (float) $item->quantity,
-                        'unit_id'    => $item->unit_id,
-                        'unit_price' => (float) $soItem->unit_price,
+                        'qty'        => $line['qty'],
+                        'unit_id'    => $baseUnitId,
+                        'unit_price' => $basePrice,
                         'piece_rows' => [],
                         'piece_meta' => [],
                     ];
@@ -545,11 +578,6 @@ class DeliveryOrderService
                 $key = "{$group['product_id']}|{$group['store_id']}|{$group['location_id']}";
                 $needs[$key] = ($needs[$key] ?? 0.0) + $group['qty'];
             }
-
-            $productsById = \Modules\Inventory\Models\Product::whereIn(
-                'id',
-                $do->items->pluck('product_id')->unique(),
-            )->get()->keyBy('id');
 
             foreach ($needs as $key => $needed) {
                 [$productId, $storeId, $locationId] = array_map(
@@ -567,11 +595,17 @@ class DeliveryOrderService
                 $product = $productsById->get($productId);
 
                 if ($balance - $needed < -self::EPSILON && !$product?->allow_minus) {
+                    // Both figures are in the stocking UOM — naming it avoids the
+                    // "but I have 100 Kg!" confusion when the line was priced in g.
+                    $symbol = $product?->baseUnit?->symbol ?? $product?->baseUnit?->name ?? '';
+
                     abort(422, sprintf(
-                        'Insufficient stock for %s: available %s, required %s.',
+                        'Insufficient stock for %s: available %s %s, required %s %s.',
                         $product?->name ?? "product #{$productId}",
                         number_format($balance, 4),
+                        $symbol,
                         number_format($needed, 4),
+                        $symbol,
                     ));
                 }
             }

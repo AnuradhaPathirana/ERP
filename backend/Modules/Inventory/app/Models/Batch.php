@@ -39,7 +39,7 @@ class Batch extends Model
         'received_date' => 'date',
         'initial_qty'   => 'decimal:4',
         'current_qty'   => 'decimal:4',
-        'unit_cost'     => 'decimal:4',
+        'unit_cost'     => 'decimal:8',
         'status'        => BatchStatus::class,
         'product_id'    => 'integer',
         'supplier_id'   => 'integer',

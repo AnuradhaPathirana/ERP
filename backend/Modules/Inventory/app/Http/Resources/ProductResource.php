@@ -34,6 +34,13 @@ class ProductResource extends JsonResource
             'location_id'   => $this->location_id,
             'location_name' => $this->whenLoaded('location', fn () => $this->location?->location_name),
 
+            // Stocking (base) UOM — drives every stock balance. The category is what
+            // GRN and SO forms filter their UOM dropdowns by; has_stock locks the field.
+            'base_unit_type_id'     => $this->base_unit_type_id,
+            'base_unit_symbol'      => $this->baseUnit?->symbol ?? $this->baseUnit?->name,
+            'base_unit_category_id' => $this->baseUnit?->unit_category_id,
+            'has_stock'             => $this->hasStockMovements(),
+
             // Reorder
             'reorder_level'  => $this->reorder_level !== null ? (float) $this->reorder_level : null,
             'reorder_qty'    => $this->reorder_qty   !== null ? (float) $this->reorder_qty   : null,

@@ -307,6 +307,7 @@ function emptyItem() {
     product_code:    '',
     product_name:    '',
     unit_id:         '',
+    base_unit_category_id: null, // limits the UOM dropdown to units convertible to the stocking UOM
     quantity:        '',
     unit_price:      '',
     discount:        '',
@@ -476,6 +477,19 @@ export default function SalesOrderFormPage() {
     return acc
   }, {})
 
+  // Only units convertible to the product's stocking UOM may be sold in — anything
+  // outside its category has no conversion rate and the backend rejects it.
+  const uomGroupsFor = (categoryId) => {
+    const groups = categoryId != null && uomGroups[String(categoryId)]
+      ? [uomGroups[String(categoryId)]]
+      : Object.values(uomGroups)
+
+    return groups.map((group) => ({
+      label: group.name,
+      items: group.items.map((u) => ({ value: String(u.id), label: u.symbol ?? u.name })),
+    }))
+  }
+
   // Strictly the customers of the selected Customer Type — customers without a
   // type on their master record only appear before a type is chosen.
   const filteredCustomers = useMemo(
@@ -543,6 +557,7 @@ export default function SalesOrderFormPage() {
         product_code: it.product?.product_code ?? '',
         product_name: it.product?.name         ?? '',
         unit_id:      it.unit_id != null ? String(it.unit_id) : '',
+        base_unit_category_id: it.product?.base_unit_category_id ?? null,
         quantity:     it.quantity,
         unit_price:   it.unit_price,
         discount:     it.discount || '',
@@ -625,7 +640,10 @@ export default function SalesOrderFormPage() {
         product_id:   scan.product.id,
         product_code: scan.product.product_code ?? '',
         product_name: scan.product.name ?? '',
+        // Scanned lines are always in the stocking UOM — the quantity is the sum of
+        // the rolls' weights, which are stored in that unit.
         unit_id:      scan.product.unit?.id != null ? String(scan.product.unit.id) : '',
+        base_unit_category_id: scan.product.base_unit_category_id ?? null,
         unit_price:   scan.selling_price != null ? String(scan.selling_price) : '',
         no_selling_price: scan.selling_price == null,
         attribute_id: scan.piece.attribute_id != null ? String(scan.piece.attribute_id) : '',
@@ -704,7 +722,9 @@ export default function SalesOrderFormPage() {
   }
 
   const selectProduct = (rowKey, product) => {
-    const defaultUnitTypeId = product.cost_details?.[0]?.unit_type_id
+    // Default to the stocking UOM — the price list's unit is per sales channel and
+    // an arbitrary first row is not a sound default for what stock is measured in.
+    const defaultUnitTypeId = product.base_unit_type_id ?? product.cost_details?.[0]?.unit_type_id
     setItems((prev) => prev.map((row) =>
       row._key === rowKey
         ? {
@@ -713,6 +733,7 @@ export default function SalesOrderFormPage() {
             product_code: product.product_code ?? '',
             product_name: product.name ?? '',
             unit_id:      defaultUnitTypeId != null ? String(defaultUnitTypeId) : '',
+            base_unit_category_id: product.base_unit_category_id ?? null,
             attribute_id: '',
             color_name:   '',
             color_options: [],
@@ -1108,10 +1129,7 @@ export default function SalesOrderFormPage() {
                     <DropdownSelectCell
                       cellRef={setCellRef(row._key, 'unit')}
                       value={row.unit_id}
-                      groups={Object.values(uomGroups).map((group) => ({
-                        label: group.name,
-                        items: group.items.map((u) => ({ value: String(u.id), label: u.symbol ?? u.name })),
-                      }))}
+                      groups={uomGroupsFor(row.base_unit_category_id)}
                       onChange={(val) => setRowField(idx, 'unit_id', val)}
                       onNext={() => focusCell(row._key, 'price')}
                     />
@@ -1298,10 +1316,7 @@ export default function SalesOrderFormPage() {
                 <label className={LABEL_CLS}>UOM</label>
                 <DropdownSelectCell
                   value={row.unit_id}
-                  groups={Object.values(uomGroups).map((group) => ({
-                    label: group.name,
-                    items: group.items.map((u) => ({ value: String(u.id), label: u.symbol ?? u.name })),
-                  }))}
+                  groups={uomGroupsFor(row.base_unit_category_id)}
                   onChange={(val) => setRowField(idx, 'unit_id', val)}
                 />
               </div>

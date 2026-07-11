@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Modules\Inventory\Http\Requests;
 
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Modules\Inventory\Models\Product;
 
 class UpdateProductRequest extends FormRequest
 {
@@ -35,6 +37,9 @@ class UpdateProductRequest extends FormRequest
             // Classification
             'category_id'            => ['required', 'integer', 'exists:inv_categories,id'],
             'location_id'            => ['nullable', 'integer', 'exists:inv_locations,id'],
+
+            // Stocking (base) UOM — every stock balance is denominated in this unit
+            'base_unit_type_id'      => ['required', 'integer', 'exists:inv_unit_types,id'],
 
             // Reorder
             'reorder_level'          => ['nullable', 'numeric', 'min:0'],
@@ -85,6 +90,34 @@ class UpdateProductRequest extends FormRequest
         ];
     }
 
+    /**
+     * The stocking UOM is frozen once stock has moved: every existing balance,
+     * batch quantity and roll weight is already denominated in it, so swapping it
+     * would reinterpret them all (100 Kg silently becoming 100 g).
+     */
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function (Validator $validator): void {
+            $product = $this->route('product');
+            $newUnit = $this->input('base_unit_type_id');
+
+            if (! $product instanceof Product || $newUnit === null) {
+                return;
+            }
+
+            if ((int) $newUnit === (int) $product->base_unit_type_id) {
+                return;
+            }
+
+            if ($product->hasStockMovements()) {
+                $validator->errors()->add(
+                    'base_unit_type_id',
+                    'The stocking UOM cannot be changed — stock has already been recorded for this product.',
+                );
+            }
+        });
+    }
+
     /** @return array<string, string> */
     public function messages(): array
     {
@@ -111,6 +144,7 @@ class UpdateProductRequest extends FormRequest
             'reorder_period'                        => 'reorder period',
             'stock_releasing_method'                => 'stock releasing method',
             'tracking_type'                         => 'tracking type',
+            'base_unit_type_id'                     => 'stocking UOM',
             'cost_details.*.sales_channel_id'       => 'sales channel',
             'cost_details.*.num_of_units'           => 'number of units',
             'cost_details.*.cost_price'             => 'cost price',

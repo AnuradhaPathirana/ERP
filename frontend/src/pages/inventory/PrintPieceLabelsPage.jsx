@@ -240,7 +240,11 @@ export default function PrintPieceLabelsPage() {
                         {label.roll_no && <span>Roll: {label.roll_no}</span>}
                       </div>
                       <div className="text-[10px] text-slate-500">
-                        {label.weight != null && <span className="mr-1">Wt: {Number(label.weight).toFixed(2)}</span>}
+                        {label.weight != null && (
+                          <span className="mr-1">
+                            Wt: {Number(label.weight).toFixed(2)}{label.uom ? ` ${label.uom}` : ''}
+                          </span>
+                        )}
                         {label.batch_no && <span>Batch: {label.batch_no}</span>}
                       </div>
                       <div className="text-[10px] text-slate-400">{label.grn_no}{label.shipping_code ? ` · ${label.shipping_code}` : ''}</div>

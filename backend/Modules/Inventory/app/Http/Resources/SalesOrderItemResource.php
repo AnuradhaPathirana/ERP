@@ -21,6 +21,8 @@ class SalesOrderItemResource extends JsonResource
             'is_scanned'   => $this->is_scanned,
             'quantity'     => (float) $this->quantity,
             'quantity_delivered' => (float) $this->quantity_delivered,
+            'conversion_factor'  => (float) $this->conversion_factor,
+            'base_quantity'      => (float) $this->base_quantity,
             'unit_price'   => (float) $this->unit_price,
             'discount'     => (float) $this->discount,
             'tax'          => (float) $this->tax,
@@ -31,6 +33,9 @@ class SalesOrderItemResource extends JsonResource
                 'id'           => $this->product->id,
                 'name'         => $this->product->name,
                 'product_code' => $this->product->product_code,
+                // Scopes the line's UOM dropdown to units convertible to the stocking UOM
+                'base_unit_type_id'     => $this->product->base_unit_type_id,
+                'base_unit_category_id' => $this->product->baseUnit?->unit_category_id,
             ]),
             'unit' => $this->whenLoaded('unit', fn () => $this->unit ? [
                 'id'   => $this->unit->id,

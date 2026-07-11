@@ -24,7 +24,7 @@ class GrnPieceLabelPdfController extends Controller
     {
         abort_if($goodsReceivedNote->status !== GrnStatus::Confirmed, 422, 'Piece labels are only available for confirmed GRNs.');
 
-        $pieces = GrnItemPiece::with(['product'])
+        $pieces = GrnItemPiece::with(['product.baseUnit'])
             ->where('grn_id', $goodsReceivedNote->id)
             ->orderBy('grn_item_id')
             ->orderBy('piece_no')
@@ -41,6 +41,9 @@ class GrnPieceLabelPdfController extends Controller
             'product'     => $piece->product,
             'batch_no'    => $piece->batch?->batch_no,
             'weight'      => $piece->weight,
+            // Roll weights are sealed in the product's stocking UOM at GRN confirm,
+            // so that is the unit the sticker must state — not the GRN's buying unit.
+            'uom'         => $piece->product?->baseUnit?->symbol ?? $piece->product?->baseUnit?->name,
             'roll_no'     => $piece->roll_no,
             'qr_data_uri' => $writer->write(
                 new QrCode(

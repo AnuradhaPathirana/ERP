@@ -81,7 +81,7 @@ class ProductController extends Controller
     public function all(): JsonResponse
     {
         $products = Product::orderBy('name')
-            ->get(['id', 'product_code', 'name', 'category_id']);
+            ->get(['id', 'product_code', 'name', 'category_id', 'base_unit_type_id']);
 
         return response()->json(['data' => $products]);
     }

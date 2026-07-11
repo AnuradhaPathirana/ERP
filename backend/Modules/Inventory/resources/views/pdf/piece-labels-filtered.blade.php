@@ -39,7 +39,7 @@
         <div class="product-name">Roll: {{ $label['roll_no'] }}</div>
         @endif
         @if($label['weight'] !== null)
-        <div class="product-name">Wt: {{ number_format((float) $label['weight'], 2) }}</div>
+        <div class="product-name">Wt: {{ number_format((float) $label['weight'], 2) }} {{ $label['uom'] }}</div>
         @endif
         @if($label['batch_no'])
         <div class="product-name">Batch: {{ $label['batch_no'] }}</div>

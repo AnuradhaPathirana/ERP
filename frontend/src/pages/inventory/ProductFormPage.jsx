@@ -61,6 +61,7 @@ const EMPTY_FORM = {
   product_type:              'Inventory',
   description:               '',
   category_id:               '',
+  base_unit_type_id:         '',
   location_stores:           [],
   reorder_level:             '',
   reorder_qty:               '',
@@ -98,6 +99,7 @@ function validateField(field, value) {
   }
   if (field === 'product_type' && !value) return 'Required.'
   if (field === 'category_id'  && !value) return 'Required.'
+  if (field === 'base_unit_type_id' && !value) return 'Required — stock is held in this unit.'
   if (field === 'supplier_ids' && (!value || value.length === 0)) return 'At least one supplier required.'
   if (field === 'reference_no' && value && String(value).length > 50) return 'Max 50 chars.'
   if (field === 'ean_13' && value && String(value).length > 50) return 'Max 50 chars.'
@@ -785,6 +787,14 @@ export default function ProductFormPage() {
   const attributeTypes = attributeTypesData ?? []
   const allAttributes  = allAttributesData  ?? []
 
+  // Unit types grouped by category, for the Stocking UOM <optgroup> list
+  const unitGroups = allUnitTypes.reduce((acc, u) => {
+    const key = String(u.unit_category_id)
+    if (!acc[key]) acc[key] = { name: u.unit_category_name ?? 'Other', items: [] }
+    acc[key].items.push(u)
+    return acc
+  }, {})
+
   const { isLoading: isFetching, isError: isFetchError, data: fetchedData } = useQuery({
     queryKey: ['product', id],
     queryFn:  () => getProduct(id),
@@ -805,6 +815,7 @@ export default function ProductFormPage() {
         product_type:              p.product_type             ?? '',
         description:               p.description              ?? '',
         category_id:               p.category_id  != null ? String(p.category_id)  : '',
+        base_unit_type_id:         p.base_unit_type_id != null ? String(p.base_unit_type_id) : '',
         location_stores:           (p.location_stores ?? []).map((ls) => ({
           location_id: ls.location_id != null ? String(ls.location_id) : '',
           store_id:    ls.store_id    != null ? String(ls.store_id)    : '',
@@ -867,6 +878,30 @@ export default function ProductFormPage() {
       appliedCode.current = nextCode
     }
   }, [isEditing, nextCode])
+
+  // Stock is denominated in the Stocking UOM, so changing it after stock exists
+  // would silently reinterpret every balance. The backend rejects it too.
+  const stockingUomLocked = Boolean(fetchedData?.data?.has_stock)
+
+  // Seed the Stocking UOM from the reference unit of the price list's unit
+  // category (set on the Unit Conversions page), so it rarely needs touching.
+  const defaultUnitSeeded = useRef(false)
+  useLayoutEffect(() => {
+    if (isEditing || defaultUnitSeeded.current || allUnitTypes.length === 0) return
+
+    const categoryId = form.cost_details.find((r) => r.unit_category_id)?.unit_category_id
+    if (!categoryId) return
+
+    const base = allUnitTypes.find(
+      (u) => String(u.unit_category_id) === String(categoryId) && u.is_category_base
+    )
+    if (!base) return
+
+    setForm((prev) => (prev.base_unit_type_id
+      ? prev
+      : { ...prev, base_unit_type_id: String(base.id) }))
+    defaultUnitSeeded.current = true
+  }, [isEditing, allUnitTypes, form.cost_details])
 
   // Pre-select the first created sales channel on the initial row (create mode only)
   const defaultChannelSeeded = useRef(false)
@@ -1030,7 +1065,7 @@ export default function ProductFormPage() {
     e.preventDefault()
     const fieldErrors = {}
     const allTouched  = {}
-    const validateFields = ['name', 'product_code', 'display_name', 'product_type', 'category_id', 'supplier_ids', 'reference_no', 'ean_13', 'reorder_level', 'reorder_qty']
+    const validateFields = ['name', 'product_code', 'display_name', 'product_type', 'category_id', 'base_unit_type_id', 'supplier_ids', 'reference_no', 'ean_13', 'reorder_level', 'reorder_qty']
     validateFields.forEach((f) => {
       fieldErrors[f] = validateField(f, form[f])
       allTouched[f]  = true
@@ -1064,6 +1099,7 @@ export default function ProductFormPage() {
       product_type:           form.product_type,
       description:            form.description.trim() || null,
       category_id:            form.category_id !== '' ? Number(form.category_id) : null,
+      base_unit_type_id:      form.base_unit_type_id !== '' ? Number(form.base_unit_type_id) : null,
       location_stores:        form.location_stores
         .filter((r) => r.location_id || r.store_id)
         .map((r) => ({
@@ -1212,6 +1248,37 @@ export default function ProductFormPage() {
                     placeholder="— Select category —"
                     emptyText="No categories available."
                   />
+                </Field>
+                <Field label="Stocking UOM" required error={e.base_unit_type_id} touched={t.base_unit_type_id} className="min-w-[160px] shrink-0">
+                  <select
+                    name="base_unit_type_id"
+                    value={f.base_unit_type_id}
+                    onChange={handleChange}
+                    onBlur={handleBlur}
+                    disabled={stockingUomLocked}
+                    className={[
+                      'block w-full rounded-md border-2 px-2 py-1 text-xs outline-none transition-all',
+                      stockingUomLocked
+                        ? 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500'
+                        : e.base_unit_type_id && t.base_unit_type_id
+                          ? 'border-red-300 bg-red-50/40 text-slate-800 focus:border-red-500 focus:bg-white focus:ring-2 focus:ring-red-500/15'
+                          : 'border-slate-200 bg-slate-50 text-slate-800 focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15',
+                    ].join(' ')}
+                  >
+                    <option value="">— Select unit —</option>
+                    {Object.entries(unitGroups).map(([key, group]) => (
+                      <optgroup key={key} label={group.name}>
+                        {group.items.map((u) => (
+                          <option key={u.id} value={String(u.id)}>{u.symbol ?? u.name}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                  <p className="mt-0.5 text-[10px] text-slate-400">
+                    {stockingUomLocked
+                      ? 'Locked — stock already recorded.'
+                      : 'Stock is held in this unit. GRN & SO may use any unit of the same category.'}
+                  </p>
                 </Field>
               </div>
 

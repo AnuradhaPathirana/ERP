@@ -16,7 +16,8 @@ class ProductService
     /** @param array<string, mixed> $filters */
     public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
-        $query = Product::with(['suppliers', 'salesChannels', 'category'])
+        $query = Product::with(['suppliers', 'salesChannels', 'category', 'baseUnit'])
+            ->withExists('stockTransactions')
             ->orderBy('name');
 
         if (!empty($filters['search'])) {
@@ -45,7 +46,9 @@ class ProductService
 
     public function find(int $id): Product
     {
-        return Product::with(['suppliers', 'salesChannels', 'category', 'location', 'productAttributes', 'locationStores'])->findOrFail($id);
+        return Product::with(['suppliers', 'salesChannels', 'category', 'location', 'productAttributes', 'locationStores', 'baseUnit'])
+            ->withExists('stockTransactions')
+            ->findOrFail($id);
     }
 
     public function create(ProductData $data): Product
@@ -61,7 +64,7 @@ class ProductService
             $this->syncProductAttributes($product, $data->productAttributes);
             $this->syncLocationStores($product, $data->locationStores);
 
-            return $product->load(['suppliers', 'salesChannels', 'productAttributes', 'locationStores']);
+            return $product->load(['suppliers', 'salesChannels', 'productAttributes', 'locationStores', 'baseUnit']);
         });
     }
 
@@ -75,7 +78,7 @@ class ProductService
         $this->syncProductAttributes($product, $data->productAttributes);
         $this->syncLocationStores($product, $data->locationStores);
 
-        return $product->load(['suppliers', 'salesChannels', 'productAttributes', 'locationStores']);
+        return $product->load(['suppliers', 'salesChannels', 'productAttributes', 'locationStores', 'baseUnit']);
     }
 
     public function delete(Product $product): void
@@ -238,6 +241,7 @@ class ProductService
             'description'              => $data->description,
             'category_id'              => $data->categoryId,
             'location_id'              => $data->locationId,
+            'base_unit_type_id'        => $data->baseUnitTypeId,
             'reorder_level'            => $data->reorderLevel,
             'reorder_qty'              => $data->reorderQty,
             'reorder_period'           => $data->reorderPeriod,

@@ -23,6 +23,7 @@ final class ProductData
         public readonly ?string $description,
         public readonly int     $categoryId,
         public readonly ?int    $locationId,
+        public readonly int     $baseUnitTypeId,
         public readonly ?float  $reorderLevel,
         public readonly ?float  $reorderQty,
         public readonly ?int    $reorderPeriod,
@@ -58,6 +59,7 @@ final class ProductData
             locationId:              $request->validated('location_id') !== null
                                          ? (int) $request->validated('location_id')
                                          : null,
+            baseUnitTypeId:          (int) $request->validated('base_unit_type_id'),
             reorderLevel:            $request->validated('reorder_level') !== null
                                          ? (float) $request->validated('reorder_level')
                                          : null,

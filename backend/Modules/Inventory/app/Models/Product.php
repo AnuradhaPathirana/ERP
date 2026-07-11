@@ -15,7 +15,9 @@ use Modules\Inventory\Models\Location;
 use Modules\Inventory\Models\ProductAttribute;
 use Modules\Inventory\Models\ProductLocationStore;
 use Modules\Inventory\Models\SalesChannel;
+use Modules\Inventory\Models\StockTransaction;
 use Modules\Inventory\Models\SupplierMaster;
+use Modules\Inventory\Models\UnitType;
 
 class Product extends Model
 {
@@ -33,6 +35,7 @@ class Product extends Model
         'description',
         'category_id',
         'location_id',
+        'base_unit_type_id',
         'reorder_level',
         'reorder_qty',
         'reorder_period',
@@ -54,6 +57,7 @@ class Product extends Model
     protected $casts = [
         'category_id'               => 'integer',
         'location_id'               => 'integer',
+        'base_unit_type_id'         => 'integer',
         'reorder_level'             => 'decimal:4',
         'reorder_qty'               => 'decimal:4',
         'lock_purchase'             => 'boolean',
@@ -82,6 +86,31 @@ class Product extends Model
     public function locationStores(): HasMany
     {
         return $this->hasMany(ProductLocationStore::class, 'product_id');
+    }
+
+    /** The stocking UOM — every stock balance for this product is denominated in it. */
+    public function baseUnit(): BelongsTo
+    {
+        return $this->belongsTo(UnitType::class, 'base_unit_type_id');
+    }
+
+    public function stockTransactions(): HasMany
+    {
+        return $this->hasMany(StockTransaction::class, 'product_id');
+    }
+
+    /**
+     * Once stock has moved, the base UOM is frozen: changing it would silently
+     * reinterpret every existing balance (100 Kg suddenly reading as 100 g).
+     *
+     * Prefers the withExists('stockTransactions') attribute so listings don't
+     * fire one query per row.
+     */
+    public function hasStockMovements(): bool
+    {
+        return isset($this->attributes['stock_transactions_exists'])
+            ? (bool) $this->attributes['stock_transactions_exists']
+            : $this->stockTransactions()->exists();
     }
 
     public function suppliers(): BelongsToMany

@@ -21,6 +21,8 @@ class GoodsReceivedNoteItemResource extends JsonResource
             'attribute_id'      => $this->attribute_id,
             'quantity_ordered'  => (float) $this->quantity_ordered,
             'quantity_received' => (float) $this->quantity_received,
+            'conversion_factor' => (float) $this->conversion_factor,
+            'base_quantity'     => (float) $this->base_quantity,
             'no_of_pieces'      => (int) $this->no_of_pieces,
             'unit_price'        => (float) $this->unit_price,
             'discount'          => (float) $this->discount,
@@ -35,6 +37,9 @@ class GoodsReceivedNoteItemResource extends JsonResource
                 'product_code' => $this->product->product_code,
                 'is_batch'     => $this->product->is_batch,
                 'is_serial'    => $this->product->is_serial,
+                // Scopes the line's UOM dropdown to units convertible to the stocking UOM
+                'base_unit_type_id'     => $this->product->base_unit_type_id,
+                'base_unit_category_id' => $this->product->baseUnit?->unit_category_id,
             ]),
             'unit' => $this->whenLoaded('unit', fn () => [
                 'id'   => $this->unit->id,

@@ -116,7 +116,8 @@ class PieceLabelController extends Controller
                 fn (Builder $itemQuery) => $itemQuery->where('attribute_id', (int) $filters['attribute_id'])
             ))
             ->with([
-                'product:id,name,product_code',
+                'product:id,name,product_code,base_unit_type_id',
+                'product.baseUnit:id,name,symbol',
                 'batch:id,batch_no',
                 'grn:id,grn_no,shipping_code',
                 'grnItem:id,attribute_id',
@@ -142,6 +143,9 @@ class PieceLabelController extends Controller
             'batch_no'      => $piece->batch?->batch_no,
             'roll_no'       => $piece->roll_no,
             'weight'        => $piece->weight,
+            // Roll weights are sealed in the product's stocking UOM at GRN confirm,
+            // so that is the unit the sticker must state — not the GRN's buying unit.
+            'uom'           => $piece->product?->baseUnit?->symbol ?? $piece->product?->baseUnit?->name,
             'grn_no'        => $piece->grn?->grn_no,
             'shipping_code' => $piece->grn?->shipping_code,
             'printed_at'    => $piece->printed_at?->toDateTimeString(),

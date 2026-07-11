@@ -24,8 +24,10 @@ use Modules\Inventory\Models\SalesOrderPiece;
  */
 class SalesOrderService
 {
-    public function __construct(private readonly ProductPricingService $pricing)
-    {
+    public function __construct(
+        private readonly ProductPricingService $pricing,
+        private readonly UnitConversionService $units,
+    ) {
     }
 
     /** @param array<string, mixed> $filters */
@@ -71,7 +73,7 @@ class SalesOrderService
     public function find(int $id): SalesOrder
     {
         return SalesOrder::with([
-            'items.product',
+            'items.product.baseUnit',
             'items.unit',
             'items.attribute',
             'items.pieces.piece',
@@ -202,7 +204,7 @@ class SalesOrderService
      */
     public function scanPiece(string $pieceCode): array
     {
-        $piece = GrnItemPiece::with(['product', 'grnItem.unit', 'grnItem.attribute'])
+        $piece = GrnItemPiece::with(['product.baseUnit', 'grnItem.unit', 'grnItem.attribute'])
             ->where('piece_code', $pieceCode)
             ->firstOrFail();
 
@@ -238,9 +240,15 @@ class SalesOrderService
                 'name'                  => $product->name,
                 'product_code'          => $product->product_code,
                 'not_allow_direct_sale' => (bool) $product->not_allow_direct_sale,
-                'unit'                  => $piece->grnItem?->unit ? [
-                    'id'   => $piece->grnItem->unit->id,
-                    'name' => $piece->grnItem->unit->name,
+                'base_unit_type_id'     => $product->base_unit_type_id,
+                'base_unit_category_id' => $product->baseUnit?->unit_category_id,
+                // Roll weights are stored in the stocking UOM, and a scanned line's
+                // quantity is the sum of those weights — so the line is in that unit,
+                // not the unit the GRN happened to be keyed in.
+                'unit'                  => $product->baseUnit ? [
+                    'id'     => $product->baseUnit->id,
+                    'name'   => $product->baseUnit->name,
+                    'symbol' => $product->baseUnit->symbol,
                 ] : null,
             ] : null,
             // Cost of this roll's shipment — snapshot basis, NOT the sale price.
@@ -347,6 +355,11 @@ class SalesOrderService
 
         $this->rejectManualLinesForRollTrackedProducts($items);
 
+        $products = Product::whereIn(
+            'id',
+            collect($items)->pluck('product_id')->filter()->map(fn ($id) => (int) $id)->unique(),
+        )->get()->keyBy('id');
+
         foreach ($items as $row) {
             if (empty($row['product_id'])) {
                 continue;
@@ -360,13 +373,29 @@ class SalesOrderService
                 continue;
             }
 
+            $product = $products[(int) $row['product_id']];
+            $unitId  = !empty($row['unit_id']) ? (int) $row['unit_id'] : null;
+
+            // A scanned line's quantity is the sum of its roll weights, and those are
+            // held in the stocking UOM — so the line is denominated in it too.
+            // A manual line keeps the UOM the user picked and converts.
+            $factor = 1.0;
+            if ($isScanned) {
+                $unitId = $this->units->baseUnitIdFor($product);
+            } else {
+                $converted = $this->units->toBase($product, $unitId, $qty);
+                $factor    = $converted['factor'];
+            }
+
             $item = SalesOrderItem::create([
                 'so_id'      => $so->id,
                 'product_id' => (int) $row['product_id'],
-                'unit_id'    => !empty($row['unit_id']) ? (int) $row['unit_id'] : null,
+                'unit_id'    => $unitId,
                 'attribute_id' => !empty($row['attribute_id']) ? (int) $row['attribute_id'] : null,
                 'is_scanned' => $isScanned,
                 'quantity'   => $qty,
+                'conversion_factor' => $factor,
+                'base_quantity'     => round($qty * $factor, 6),
                 'unit_price' => (float) ($row['unit_price'] ?? 0),
                 'discount'   => (float) ($row['discount'] ?? 0),
                 'tax'        => (float) ($row['tax'] ?? 0),
@@ -377,6 +406,7 @@ class SalesOrderService
             if ($isScanned) {
                 // Quantity for scanned lines is derived from piece weights server-side.
                 $this->allocatePieces($so, $item, $pieceCodes);
+                $item->update(['base_quantity' => $item->fresh()->quantity]);
             }
 
             $this->recalculateLineTotal($item);

@@ -20,6 +20,8 @@ class DeliveryOrderItem extends Model
         'attribute_id',
         'is_scanned',
         'quantity',
+        'conversion_factor',
+        'base_quantity',
         'remarks',
     ];
 
@@ -31,6 +33,8 @@ class DeliveryOrderItem extends Model
         'attribute_id' => 'integer',
         'is_scanned'   => 'boolean',
         'quantity'     => 'decimal:4',
+        'conversion_factor' => 'decimal:10',
+        'base_quantity'     => 'decimal:6',
     ];
 
     public function deliveryOrder(): BelongsTo

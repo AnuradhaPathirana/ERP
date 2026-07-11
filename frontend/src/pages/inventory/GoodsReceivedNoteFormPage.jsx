@@ -487,6 +487,44 @@ export default function GoodsReceivedNoteFormPage() {
     return acc
   }, {})
 
+  // A line may be received in any unit of the product's stocking-UOM category —
+  // it converts to base on confirm. Units outside it have no conversion rate.
+  const uomGroupsFor = (categoryId) => {
+    const groups = categoryId != null && uomGroups[String(categoryId)]
+      ? [uomGroups[String(categoryId)]]
+      : Object.values(uomGroups)
+
+    return groups.map((group) => ({
+      label: group.name,
+      items: group.items.map((u) => ({ value: String(u.id), label: u.symbol ?? u.name })),
+    }))
+  }
+
+  const unitById = new Map(unitTypes.map((u) => [String(u.id), u]))
+  const symbolOf = (u) => u?.symbol ?? u?.name ?? ''
+
+  /**
+   * How a row's receiving UOM relates to the product's stocking UOM.
+   * base_rate is each unit's rate from its category's reference unit, so within a
+   * category:  factor(line → base) = base_rate[base] / base_rate[line].
+   * Returns null while the row has no product/unit yet.
+   */
+  const conversionFor = (row) => {
+    const line = unitById.get(String(row.unit_id ?? ''))
+    const base = unitById.get(String(row.base_unit_type_id ?? ''))
+    if (!line || !base) return null
+
+    const same   = String(line.id) === String(base.id)
+    const factor = same
+      ? 1
+      : (line.base_rate && base.base_rate ? base.base_rate / line.base_rate : null)
+
+    return { same, factor, lineSymbol: symbolOf(line), baseSymbol: symbolOf(base) }
+  }
+
+  const fmtNum = (n, max = 6) =>
+    n.toLocaleString(undefined, { maximumFractionDigits: max })
+
   // Color options are scoped to the SELECTED PRODUCT's own "Product Attributes"
   // (set at product creation), not just its category — only relevant for manual
   // (non-PO) rows, since PO-linked rows inherit their color from the PO item.
@@ -645,6 +683,8 @@ export default function GoodsReceivedNoteFormPage() {
         product_code:       it.product?.product_code ?? '',
         product_name:       it.product?.name ?? '',
         unit_id:            it.unit_id ?? '',
+        base_unit_type_id:     it.product?.base_unit_type_id ?? null,
+        base_unit_category_id: it.product?.base_unit_category_id ?? null,
         attribute_name:     it.attribute?.name ?? '',
         attribute_id:       it.attribute_id != null ? String(it.attribute_id) : '',
         color_options:      [],
@@ -743,6 +783,8 @@ export default function GoodsReceivedNoteFormPage() {
     product_code:      it.product?.product_code ?? '',
     product_name:      it.product?.name ?? '',
     unit_id:           it.unit_id ?? '',
+    base_unit_type_id:     it.product?.base_unit_type_id ?? null,
+    base_unit_category_id: it.product?.base_unit_category_id ?? null,
     attribute_name:    it.attribute_name ?? '',
     attribute_id:      it.attribute_id != null ? String(it.attribute_id) : '',
     color_options:     [],
@@ -923,9 +965,9 @@ export default function GoodsReceivedNoteFormPage() {
   }
 
   const selectProduct = async (rowKey, product) => {
-    // Default UOM from the product's first sales channel (Product creation's "Unit of Measure").
-    // Editable afterward — this is just a starting guess, not a lock.
-    const defaultUnitTypeId = product.cost_details?.[0]?.unit_type_id
+    // Default to the product's stocking UOM. Editable afterward to any unit of the
+    // same category — it converts to base when the GRN is confirmed.
+    const defaultUnitTypeId = product.base_unit_type_id ?? product.cost_details?.[0]?.unit_type_id
     setItems((prev) => prev.map((row) =>
       row._key === rowKey
         ? {
@@ -934,6 +976,8 @@ export default function GoodsReceivedNoteFormPage() {
             product_code: product.product_code ?? '',
             product_name: product.name ?? '',
             unit_id:      defaultUnitTypeId != null ? String(defaultUnitTypeId) : '',
+            base_unit_type_id:     product.base_unit_type_id ?? null,
+            base_unit_category_id: product.base_unit_category_id ?? null,
             is_batch:     product.is_batch ?? false,
             batches:      [],
             batch_no:     '',
@@ -1810,10 +1854,7 @@ export default function GoodsReceivedNoteFormPage() {
                               compact
                               cellRef={setCellRef(row._key, 'uom')}
                               value={row.unit_id ?? ''}
-                              groups={Object.values(uomGroups).map((group) => ({
-                                label: group.name,
-                                items: group.items.map((u) => ({ value: String(u.id), label: u.symbol ?? u.name })),
-                              }))}
+                              groups={uomGroupsFor(row.base_unit_category_id)}
                               onChange={(val) => setRowField(idx, 'unit_id', val)}
                               onNext={() => focusCell(row._key, 'qty')}
                               onBlur={() => touchItemField(row._key, 'uom')}
@@ -1843,6 +1884,17 @@ export default function GoodsReceivedNoteFormPage() {
                             {getItemErr(row._key, 'qty') && (
                               <span className="text-[9px] text-red-500 leading-none">{getItemErr(row._key, 'qty')}</span>
                             )}
+                            {/* The quantity that will actually hit stock */}
+                            {(() => {
+                              const conv = conversionFor(row)
+                              const qty  = parseFloat(row.quantity_received) || 0
+                              if (!conv || conv.same || !conv.factor || qty <= 0) return null
+                              return (
+                                <span className="text-[9px] font-medium text-indigo-500 leading-none">
+                                  = {fmtNum(qty * conv.factor)} {conv.baseSymbol}
+                                </span>
+                              )
+                            })()}
                           </div>
                         </td>
 
@@ -1876,28 +1928,56 @@ export default function GoodsReceivedNoteFormPage() {
                           </div>
                         </td>
 
-                        {/* Unit Price */}
+                        {/* Unit Price — typed per the line's UOM (straight off the supplier
+                            invoice); the stock ledger stores it per the stocking UOM. */}
                         <td className="px-2 py-1">
-                          <div className="flex flex-col gap-0.5">
-                            <input
-                              ref={setCellRef(row._key, 'price')}
-                              type="number" min="0" step="0.01"
-                              className={(getItemErr(row._key, 'price') ? TABLE_ERR : TABLE_INPUT) + ' w-20'}
-                              value={row.unit_price}
-                              onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
-                              onBlur={() => touchItemField(row._key, 'price')}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  if (discountEnabled) focusCell(row._key, 'disc')
-                                  else if (row.is_batch) focusCell(row._key, 'batch')
-                                }
-                              }}
-                            />
-                            {getItemErr(row._key, 'price') && (
-                              <span className="text-[9px] text-red-500 leading-none">{getItemErr(row._key, 'price')}</span>
-                            )}
-                          </div>
+                          {(() => {
+                            const conv  = conversionFor(row)
+                            const price = parseFloat(row.unit_price) || 0
+
+                            return (
+                              <div className="flex flex-col gap-0.5">
+                                <div className="flex items-center gap-0.5">
+                                  <input
+                                    ref={setCellRef(row._key, 'price')}
+                                    type="number" min="0" step="0.01"
+                                    className={(getItemErr(row._key, 'price') ? TABLE_ERR : TABLE_INPUT) + ' w-20'}
+                                    value={row.unit_price}
+                                    onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
+                                    onBlur={() => touchItemField(row._key, 'price')}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        e.preventDefault()
+                                        if (discountEnabled) focusCell(row._key, 'disc')
+                                        else if (row.is_batch) focusCell(row._key, 'batch')
+                                      }
+                                    }}
+                                  />
+                                  {conv && (
+                                    <span className="shrink-0 text-[9px] font-semibold text-slate-400 leading-none">
+                                      /{conv.lineSymbol}
+                                    </span>
+                                  )}
+                                </div>
+
+                                {/* What actually lands in stock, so the clerk can sanity-check
+                                    a per-Kg invoice against a per-gram ledger. */}
+                                {conv && !conv.same && conv.factor && price > 0 && (
+                                  <span className="text-[9px] font-medium text-indigo-500 leading-none">
+                                    = {fmtNum(price / conv.factor, 8)} /{conv.baseSymbol}
+                                  </span>
+                                )}
+                                {conv && !conv.same && !conv.factor && (
+                                  <span className="text-[9px] text-red-500 leading-none">
+                                    No rate to {conv.baseSymbol}
+                                  </span>
+                                )}
+                                {getItemErr(row._key, 'price') && (
+                                  <span className="text-[9px] text-red-500 leading-none">{getItemErr(row._key, 'price')}</span>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </td>
 
                         {/* Disc% */}

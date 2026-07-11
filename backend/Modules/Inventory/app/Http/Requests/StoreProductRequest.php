@@ -36,6 +36,9 @@ class StoreProductRequest extends FormRequest
             'category_id'            => ['required', 'integer', 'exists:inv_categories,id'],
             'location_id'            => ['nullable', 'integer', 'exists:inv_locations,id'],
 
+            // Stocking (base) UOM — every stock balance is denominated in this unit
+            'base_unit_type_id'      => ['required', 'integer', 'exists:inv_unit_types,id'],
+
             // Reorder
             'reorder_level'          => ['nullable', 'numeric', 'min:0'],
             'reorder_qty'            => ['nullable', 'numeric', 'min:0'],
@@ -111,6 +114,7 @@ class StoreProductRequest extends FormRequest
             'reorder_period'                        => 'reorder period',
             'stock_releasing_method'                => 'stock releasing method',
             'tracking_type'                         => 'tracking type',
+            'base_unit_type_id'                     => 'stocking UOM',
             'cost_details.*.sales_channel_id'       => 'sales channel',
             'cost_details.*.num_of_units'           => 'number of units',
             'cost_details.*.cost_price'             => 'cost price',

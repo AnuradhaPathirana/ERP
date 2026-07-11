@@ -11,6 +11,7 @@ use Modules\Inventory\DTOs\UnitTypeData;
 use Modules\Inventory\Http\Requests\UnitTypeRequest;
 use Modules\Inventory\Http\Resources\UnitTypeResource;
 use Modules\Inventory\Models\UnitCategory;
+use Modules\Inventory\Models\UnitConversion;
 use Modules\Inventory\Models\UnitType;
 use Modules\Inventory\Services\UnitTypeService;
 
@@ -102,14 +103,33 @@ class UnitTypeController extends Controller
             }
         }
 
+        // The category's reference unit (set on the Unit Conversions page) — the
+        // Product form uses it to prefill a new product's Stocking UOM.
+        $baseUnitIdByCategory = UnitCategory::whereNotNull('base_unit_type_id')
+            ->pluck('base_unit_type_id', 'id');
+
+        // Rate from each category's reference unit to this unit. Lets the forms derive
+        // any factor within a category without a round trip:
+        //     factor(from → to) = base_rate[to] / base_rate[from]
+        $baseRates = UnitConversion::whereIn('from_unit_type_id', $baseUnitIdByCategory->values())
+            ->pluck('multiplier', 'to_unit_type_id');
+
         $items = $query->get()
-            ->map(fn (UnitType $u) => [
-                'id'                 => $u->id,
-                'unit_category_id'   => $u->unit_category_id,
-                'unit_category_name' => $u->relationLoaded('category') ? $u->category?->name : null,
-                'name'               => $u->name,
-                'symbol'             => $u->symbol,
-            ])
+            ->map(function (UnitType $u) use ($baseUnitIdByCategory, $baseRates): array {
+                $isBase = (int) ($baseUnitIdByCategory[$u->unit_category_id] ?? 0) === $u->id;
+
+                return [
+                    'id'                 => $u->id,
+                    'unit_category_id'   => $u->unit_category_id,
+                    'unit_category_name' => $u->relationLoaded('category') ? $u->category?->name : null,
+                    'name'               => $u->name,
+                    'symbol'             => $u->symbol,
+                    'is_category_base'   => $isBase,
+                    'base_rate'          => $isBase
+                        ? 1.0
+                        : (isset($baseRates[$u->id]) ? (float) $baseRates[$u->id] : null),
+                ];
+            })
             ->values()
             ->all();
 

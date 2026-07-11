@@ -5,12 +5,144 @@ declare(strict_types=1);
 namespace Modules\Inventory\Services;
 
 use Illuminate\Support\Facades\DB;
+use Modules\Inventory\Models\Product;
 use Modules\Inventory\Models\UnitCategory;
 use Modules\Inventory\Models\UnitConversion;
 use Modules\Inventory\Models\UnitType;
 
 class UnitConversionService
 {
+    /** Base-UOM quantities are persisted at decimal(20,6). */
+    private const BASE_SCALE = 6;
+
+    /** Base-UOM prices are persisted at decimal(20,8) — a per-gram price is tiny. */
+    private const PRICE_SCALE = 8;
+
+    /**
+     * Rebase a document price so it lines up with a base-unit quantity.
+     *
+     * Documents quote the price the way the invoice does — 250 per Kg — but the ledger
+     * counts in base units, so it must hold 0.25 per g. The two always travel together:
+     * scaling the quantity by the factor while leaving the price alone would inflate
+     * every stock valuation by exactly that factor.
+     */
+    public function priceToBase(float $price, float $factor): float
+    {
+        if ($factor <= 0.0) {
+            return 0.0;
+        }
+
+        return round($price / $factor, self::PRICE_SCALE);
+    }
+
+    /**
+     * Multiplier that turns a quantity in $fromUnitId into $toUnitId.
+     *
+     * Aborts rather than guessing: a silent 1:1 fallback is what corrupts a stock
+     * ledger, because the wrong number posts without anyone noticing.
+     */
+    public function factor(int $fromUnitId, int $toUnitId): float
+    {
+        // saveRates() never writes a self-referencing row, so identity is implicit.
+        if ($fromUnitId === $toUnitId) {
+            return 1.0;
+        }
+
+        $from = UnitType::find($fromUnitId, ['id', 'name', 'symbol', 'unit_category_id']);
+        $to   = UnitType::find($toUnitId, ['id', 'name', 'symbol', 'unit_category_id']);
+
+        abort_if($from === null || $to === null, 422, 'Unknown unit of measure.');
+
+        // Conversion rates are only ever defined within a unit category — there is
+        // no factor from Litre to Kg without a per-product density.
+        abort_if(
+            $from->unit_category_id !== $to->unit_category_id,
+            422,
+            sprintf(
+                'Cannot convert %s to %s — they belong to different unit categories.',
+                $from->symbol ?? $from->name,
+                $to->symbol ?? $to->name,
+            ),
+        );
+
+        $multiplier = UnitConversion::where('from_unit_type_id', $fromUnitId)
+            ->where('to_unit_type_id', $toUnitId)
+            ->value('multiplier');
+
+        abort_if(
+            $multiplier === null || (float) $multiplier <= 0.0,
+            422,
+            sprintf(
+                'No conversion defined from %s to %s — set the rate in Unit Conversions.',
+                $from->symbol ?? $from->name,
+                $to->symbol ?? $to->name,
+            ),
+        );
+
+        return (float) $multiplier;
+    }
+
+    /**
+     * Converts a document quantity into the product's stocking (base) UOM.
+     *
+     * Everything that touches a balance — inv_stock_transactions, current_stock,
+     * Batch.current_qty, roll weights — must go through here, so that a GRN in Kg
+     * and a sale in g act on the same number line.
+     *
+     * @return array{qty: float, factor: float, base_unit_id: int}
+     */
+    public function toBase(Product $product, ?int $unitId, float $qty): array
+    {
+        $baseUnitId = $this->baseUnitIdFor($product);
+
+        // A line saved before the UOM column existed is already in base units.
+        $factor  = $unitId === null ? 1.0 : $this->factor($unitId, $baseUnitId);
+        $baseQty = round($qty * $factor, self::BASE_SCALE);
+
+        // A quantity that survives validation but rounds away to nothing would post
+        // a zero movement while the document still claims stock changed hands.
+        abort_if(
+            $qty > 0.0 && $baseQty <= 0.0,
+            422,
+            sprintf(
+                'Quantity %s is too small to record in the stocking UOM — it rounds to zero.',
+                rtrim(rtrim(number_format($qty, 6), '0'), '.'),
+            ),
+        );
+
+        return ['qty' => $baseQty, 'factor' => $factor, 'base_unit_id' => $baseUnitId];
+    }
+
+    /** The unit every balance for this product is denominated in. */
+    public function baseUnitIdFor(Product $product): int
+    {
+        abort_if(
+            $product->base_unit_type_id === null,
+            422,
+            sprintf(
+                'Product "%s" has no Stocking UOM — set it on the product before moving stock.',
+                $product->name,
+            ),
+        );
+
+        return (int) $product->base_unit_type_id;
+    }
+
+    /** True when $unitId can be used on a document line for $product. */
+    public function isUsableFor(Product $product, ?int $unitId): bool
+    {
+        if ($unitId === null || $product->base_unit_type_id === null) {
+            return false;
+        }
+
+        return UnitType::where('id', $unitId)
+            ->where(
+                'unit_category_id',
+                UnitType::where('id', $product->base_unit_type_id)->value('unit_category_id'),
+            )
+            ->exists();
+    }
+
     public function getByCategoryWithRates(int $categoryId): array
     {
         $category = UnitCategory::find($categoryId, ['id', 'base_unit_type_id']);

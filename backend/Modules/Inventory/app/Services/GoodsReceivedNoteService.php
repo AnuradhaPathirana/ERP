@@ -15,6 +15,7 @@ use Modules\Inventory\Models\GoodsReceivedNote;
 use Modules\Inventory\Models\GoodsReceivedNoteItem;
 use Modules\Inventory\Models\GrnItemBatch;
 use Modules\Inventory\Models\GrnItemPiece;
+use Modules\Inventory\Models\Product;
 use Modules\Inventory\Models\ProductLocationStore;
 use Modules\Inventory\Models\PurchaseOrder;
 use Modules\Inventory\Models\PurchaseOrderItem;
@@ -23,8 +24,10 @@ use Modules\Inventory\Models\StockTransaction;
 
 class GoodsReceivedNoteService
 {
-    public function __construct(private readonly ProductPricingService $pricing)
-    {
+    public function __construct(
+        private readonly ProductPricingService $pricing,
+        private readonly UnitConversionService $units,
+    ) {
     }
 
     /** @param array<string, mixed> $filters */
@@ -68,13 +71,13 @@ class GoodsReceivedNoteService
     public function find(int $id): GoodsReceivedNote
     {
         return GoodsReceivedNote::with([
-            'items.product',
+            'items.product.baseUnit',
             'items.unit',
             'items.attribute',
             'items.poItem',
             'items.batchAssignments.batch',
             'items.pieces',
-            'purchaseOrder.items.product',
+            'purchaseOrder.items.product.baseUnit',
             'supplier',
             'store',
             'location',
@@ -87,7 +90,7 @@ class GoodsReceivedNoteService
      */
     public function getPoOutstandingItems(int $poId): array
     {
-        $po = PurchaseOrder::with(['items.product', 'items.unit', 'items.attribute', 'supplier'])->findOrFail($poId);
+        $po = PurchaseOrder::with(['items.product.baseUnit', 'items.unit', 'items.attribute', 'supplier'])->findOrFail($poId);
 
         if (!$po->status->canReceiveGoods()) {
             abort(422, 'Purchase order must be confirmed before creating a GRN.');
@@ -115,6 +118,8 @@ class GoodsReceivedNoteService
                     'product_code' => $item->product->product_code,
                     'is_batch'     => $item->product->is_batch,
                     'is_serial'    => $item->product->is_serial,
+                    'base_unit_type_id'     => $item->product->base_unit_type_id,
+                    'base_unit_category_id' => $item->product->baseUnit?->unit_category_id,
                 ],
             ])
             ->values()
@@ -132,7 +137,7 @@ class GoodsReceivedNoteService
             return [];
         }
 
-        $pos = PurchaseOrder::with(['items.product', 'items.unit', 'items.attribute'])
+        $pos = PurchaseOrder::with(['items.product.baseUnit', 'items.unit', 'items.attribute'])
             ->whereIn('id', $poIds)
             ->get();
 
@@ -164,6 +169,8 @@ class GoodsReceivedNoteService
                         'product_code' => $item->product->product_code,
                         'is_batch'     => $item->product->is_batch,
                         'is_serial'    => $item->product->is_serial,
+                        'base_unit_type_id'     => $item->product->base_unit_type_id,
+                        'base_unit_category_id' => $item->product->baseUnit?->unit_category_id,
                     ],
                 ];
             }
@@ -268,7 +275,7 @@ class GoodsReceivedNoteService
             $this->syncItems($grn, $data->items);
             $this->recalculateTotal($grn);
 
-            return $grn->load(['items.product', 'items.unit', 'items.attribute', 'purchaseOrder', 'supplier', 'store', 'location']);
+            return $grn->load(['items.product.baseUnit', 'items.unit', 'items.attribute', 'purchaseOrder', 'supplier', 'store', 'location']);
         });
     }
 
@@ -295,7 +302,7 @@ class GoodsReceivedNoteService
             $this->syncItems($grn, $data->items);
             $this->recalculateTotal($grn);
 
-            return $grn->load(['items.product', 'items.unit', 'items.attribute', 'purchaseOrder', 'supplier', 'store', 'location']);
+            return $grn->load(['items.product.baseUnit', 'items.unit', 'items.attribute', 'purchaseOrder', 'supplier', 'store', 'location']);
         });
     }
 
@@ -312,7 +319,7 @@ class GoodsReceivedNoteService
                 abort(422, 'Only draft GRNs can be confirmed.');
             }
 
-            $grn->load(['items.product', 'items.batchAssignments.batch', 'items.pieces']);
+            $grn->load(['items.product.baseUnit', 'items.batchAssignments.batch', 'items.pieces']);
 
             // Every line must be received as rolls — they become the QR-labelled
             // pieces that sales orders allocate. Catches legacy drafts saved
@@ -335,10 +342,27 @@ class GoodsReceivedNoteService
                 $stockTransactionIdByBatch = [];
                 $nonBatchStockTransactionId = null;
 
+                // The line was received in the supplier's UOM (say Kg); stock only
+                // ever speaks the product's stocking UOM (say g). Everything below
+                // this point posts base-unit quantities.
+                $line       = $this->units->toBase($item->product, $item->unit_id, (float) $item->quantity_received);
+                $baseUnitId = $line['base_unit_id'];
+
+                // The price follows the quantity into base units: 250 per Kg is 0.25 per g.
+                // Without this, qty_in × unit_price (which is how the valuation report and
+                // the WAC subquery compute stock value) would be overstated 1000×.
+                $basePrice = $this->units->priceToBase((float) $item->unit_price, $line['factor']);
+
+                $item->update([
+                    'conversion_factor' => $line['factor'],
+                    'base_quantity'     => $line['qty'],
+                ]);
+
                 if ($batchAssignments->isNotEmpty()) {
                     // Batch-tracked product: one stock transaction + batch record per assignment
                     foreach ($batchAssignments as $assignment) {
-                        $batch = $assignment->batch;
+                        $batch     = $assignment->batch;
+                        $batchBase = $this->units->toBase($item->product, $item->unit_id, (float) $assignment->quantity);
 
                         // Create stock transaction per batch slice
                         $stockTransaction = StockTransaction::create([
@@ -351,15 +375,15 @@ class GoodsReceivedNoteService
                             'batch_no'         => $batch->batch_no,
                             'batch_id'         => $batch->id,
                             'expiry_date'      => $batch->expiry_date,
-                            'qty_in'           => $assignment->quantity,
+                            'qty_in'           => $batchBase['qty'],
                             'qty_out'          => 0,
-                            'unit_id'          => $item->unit_id,
-                            'unit_price'       => $item->unit_price,
+                            'unit_id'          => $baseUnitId,
+                            'unit_price'       => $basePrice,
                             'created_by'       => auth()->id(),
                         ]);
                         $stockTransactionIdByBatch[$batch->id] = $stockTransaction->id;
 
-                        // Update batch current_qty (set to initial_qty on first confirmation)
+                        // Batch quantities were already converted at draft time (see syncItems)
                         $batch->update(['current_qty' => $batch->initial_qty]);
 
                         // Update denormalized stock balance per batch quantity
@@ -371,7 +395,7 @@ class GoodsReceivedNoteService
                             ],
                             ['current_stock' => 0]
                         );
-                        $pivot->increment('current_stock', (float) $assignment->quantity);
+                        $pivot->increment('current_stock', $batchBase['qty']);
                     }
                 } else {
                     // Non-batch product: single stock transaction as before
@@ -385,10 +409,10 @@ class GoodsReceivedNoteService
                         'batch_no'         => $item->batch_no,
                         'batch_id'         => null,
                         'expiry_date'      => $item->expiry_date,
-                        'qty_in'           => $item->quantity_received,
+                        'qty_in'           => $line['qty'],
                         'qty_out'          => 0,
-                        'unit_id'          => $item->unit_id,
-                        'unit_price'       => $item->unit_price,
+                        'unit_id'          => $baseUnitId,
+                        'unit_price'       => $basePrice,
                         'created_by'       => auth()->id(),
                     ]);
                     $nonBatchStockTransactionId = $stockTransaction->id;
@@ -401,10 +425,10 @@ class GoodsReceivedNoteService
                         ],
                         ['current_stock' => 0]
                     );
-                    $pivot->increment('current_stock', (float) $item->quantity_received);
+                    $pivot->increment('current_stock', $line['qty']);
                 }
 
-                $this->sealPiecesForItem($grn, $item, $itemSeq + 1, $stockTransactionIdByBatch, $nonBatchStockTransactionId);
+                $this->sealPiecesForItem($grn, $item, $itemSeq + 1, $stockTransactionIdByBatch, $nonBatchStockTransactionId, $line['factor']);
 
                 // Update quantity_received on the linked PO item (skip for manual GRN items)
                 if ($item->po_item_id) {
@@ -416,6 +440,9 @@ class GoodsReceivedNoteService
             // Mirror each line's purchase cost onto the product's price list
             // (last-cost method). Selling prices are never touched — margins
             // stay the user's decision on the Product form.
+            //
+            // Keyed by the line's own unit: the price list stores a price per unit, and
+            // this line's price is per the unit it was purchased in.
             foreach ($grn->items as $item) {
                 $this->pricing->syncLastCost(
                     (int) $item->product_id,
@@ -435,7 +462,7 @@ class GoodsReceivedNoteService
                 $this->syncPoStatusAfterGrn($poId);
             }
 
-            return $grn->fresh(['items.product', 'items.unit', 'items.attribute', 'purchaseOrder', 'supplier', 'store', 'location']);
+            return $grn->fresh(['items.product.baseUnit', 'items.unit', 'items.attribute', 'purchaseOrder', 'supplier', 'store', 'location']);
         });
     }
 
@@ -490,6 +517,10 @@ class GoodsReceivedNoteService
      * stock transaction that posted its quantity. Runs only at confirmation time, since GRN
      * items become immutable once confirmed (piece_code depends on a stable item sequence).
      *
+     * Roll weights are entered in the line's UOM but converted to the product's stocking
+     * UOM here, because DeliveryOrderService sums these weights to derive the dispatch
+     * quantity it subtracts from current_stock — the two must speak the same unit.
+     *
      * @param array<int, int> $stockTransactionIdByBatch keyed by batch_id
      */
     private function sealPiecesForItem(
@@ -498,6 +529,7 @@ class GoodsReceivedNoteService
         int $itemSeq,
         array $stockTransactionIdByBatch,
         ?int $nonBatchStockTransactionId,
+        float $conversionFactor,
     ): void {
         foreach ($item->pieces as $piece) {
             $stockTransactionId = $piece->batch_id
@@ -508,6 +540,9 @@ class GoodsReceivedNoteService
                 'piece_code'           => sprintf('%s-I%03d-P%03d', $grn->grn_no, $itemSeq, $piece->piece_no),
                 'status'               => 'in_stock',
                 'stock_transaction_id' => $stockTransactionId,
+                'weight'               => $piece->weight !== null
+                    ? round((float) $piece->weight * $conversionFactor, 6)
+                    : null,
             ]);
         }
     }
@@ -536,16 +571,31 @@ class GoodsReceivedNoteService
             ->filter(fn (array $row) => !empty($row['product_id']) && ($row['quantity_received'] ?? 0) > 0)
             ->values();
 
+        $products = Product::whereIn('id', $validItems->pluck('product_id')->unique())
+            ->get()
+            ->keyBy('id');
+
         foreach ($validItems as $row) {
+            $product = $products[(int) $row['product_id']];
             $hasPoItem   = !empty($row['po_item_id']);
             $ordered     = $hasPoItem ? (float) ($poItem[$row['po_item_id']]?->quantity_ordered ?? 0) : 0;
             $qtyRcv      = (float) $row['quantity_received'];
             $rolls       = $row['rolls'] ?? [];
             $noOfPieces  = count($rolls);
+            $unitId      = !empty($row['unit_id']) ? (int) $row['unit_id'] : null;
+            // Priced per the line's receiving UOM — straight off the supplier invoice
+            // (250 per Kg). It is rebased to the stocking UOM only when it reaches the
+            // stock ledger; see confirm().
             $unitPrice   = (float) ($row['unit_price'] ?? 0);
             $discountPct = (float) ($row['discount'] ?? 0);
             $taxPct      = (float) ($row['tax'] ?? 0);
 
+            // Resolved at draft time so an unconvertible UOM is rejected while the user
+            // is still on the form, not at confirm. Re-resolved on confirm — that is the
+            // value that actually posts.
+            $line = $this->units->toBase($product, $unitId, $qtyRcv);
+
+            // Quantity and price are both in the line's UOM, so this is the invoice value.
             $gross     = $qtyRcv * $unitPrice;
             $discAmt   = $gross * ($discountPct / 100);
             $taxAmt    = $gross * ($taxPct / 100);
@@ -568,10 +618,12 @@ class GoodsReceivedNoteService
                 'grn_id'            => $grn->id,
                 'po_item_id'        => $hasPoItem ? (int) $row['po_item_id'] : null,
                 'product_id'        => (int) $row['product_id'],
-                'unit_id'           => !empty($row['unit_id']) ? (int) $row['unit_id'] : null,
+                'unit_id'           => $unitId,
                 'attribute_id'      => $attributeId,
                 'quantity_ordered'  => $ordered,
                 'quantity_received' => $qtyRcv,
+                'conversion_factor' => $line['factor'],
+                'base_quantity'     => $line['qty'],
                 'no_of_pieces'      => $noOfPieces,
                 'unit_price'        => $unitPrice,
                 'discount'          => $discountPct,
@@ -589,6 +641,13 @@ class GoodsReceivedNoteService
                         continue;
                     }
 
+                    // Batch master quantities are a stock balance, so they live in the
+                    // product's stocking UOM — and its unit_cost must follow, or
+                    // current_qty × unit_cost stops being the batch's value. The bridge
+                    // row below keeps the quantity and price the user typed on the document.
+                    $batchBaseQty   = $this->units->toBase($product, $unitId, $batchQty)['qty'];
+                    $batchBaseCost  = $this->units->priceToBase($unitPrice, $line['factor']);
+
                     $batch = Batch::firstOrCreate(
                         [
                             'product_id' => (int) $row['product_id'],
@@ -600,9 +659,9 @@ class GoodsReceivedNoteService
                             'mfg_date'          => !empty($batchRow['mfg_date'])     ? $batchRow['mfg_date']     : null,
                             'expiry_date'       => !empty($batchRow['expiry_date'])  ? $batchRow['expiry_date']  : null,
                             'received_date'     => $grn->grn_date,
-                            'initial_qty'       => $batchQty,
-                            'current_qty'       => $batchQty,
-                            'unit_cost'         => $unitPrice,
+                            'initial_qty'       => $batchBaseQty,
+                            'current_qty'       => $batchBaseQty,
+                            'unit_cost'         => $batchBaseCost,
                             'status'            => BatchStatus::from($batchRow['status'] ?? 'active'),
                             'country_of_origin' => $batchRow['country_of_origin'] ?? null,
                             'notes'             => $batchRow['notes']             ?? null,

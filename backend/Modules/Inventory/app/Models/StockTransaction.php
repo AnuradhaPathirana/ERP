@@ -33,7 +33,7 @@ class StockTransaction extends Model
         'expiry_date'      => 'date',
         'qty_in'           => 'decimal:4',
         'qty_out'          => 'decimal:4',
-        'unit_price'       => 'decimal:4',
+        'unit_price'       => 'decimal:8',
         'reference_id'     => 'integer',
         'product_id'       => 'integer',
         'store_id'         => 'integer',
