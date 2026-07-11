@@ -46,6 +46,10 @@ class StoreSalesOrderRequest extends FormRequest
             'items.*.remarks'       => ['nullable', 'string', 'max:255'],
             'items.*.piece_codes'   => ['nullable', 'array'],
             'items.*.piece_codes.*' => ['string', 'distinct', 'exists:inv_grn_item_pieces,piece_code'],
+            // How much of each roll this line takes, keyed by piece code, in the line's
+            // own UOM. Omitted = spread the line quantity across the rolls (oldest first).
+            'items.*.piece_takes'   => ['nullable', 'array'],
+            'items.*.piece_takes.*' => ['numeric', 'gt:0'],
         ];
     }
 

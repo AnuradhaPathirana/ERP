@@ -216,17 +216,18 @@ class SalesOrderTest extends TestCase
             ->assertJsonPath('data.so_no', "SO-{$year}-0002");
     }
 
-    public function test_store_with_scanned_pieces_allocates_and_recomputes_quantity(): void
+    public function test_store_with_scanned_pieces_defaults_to_selling_the_rolls_whole(): void
     {
         $product = Product::factory()->create();
         $seed    = $this->makeGrnWithPieces($product, [12.5, 7.5], unitPrice: 300);
         $codes   = array_map(fn (GrnItemPiece $p) => $p->piece_code, $seed['pieces']);
 
+        // No quantity sent — scanning rolls means "sell these rolls", so the line takes
+        // them whole. The user can then reduce it to sell only part of the last roll.
         $response = $this->actingAs($this->user)
             ->postJson('/api/v1/sales-orders', $this->validPayload([
                 'items' => [[
                     'product_id'  => $product->id,
-                    'quantity'    => 999, // bogus client qty must be ignored
                     'unit_price'  => 300,
                     'piece_codes' => $codes,
                 ]],
@@ -245,6 +246,31 @@ class SalesOrderTest extends TestCase
                 ->count(),
         );
         $this->assertEquals(300.0, (float) SalesOrderPiece::where('so_id', $soId)->first()->grn_unit_price);
+
+        // Every roll is taken in full, so nothing will be cut at dispatch.
+        SalesOrderPiece::where('so_id', $soId)->get()->each(
+            fn (SalesOrderPiece $sp) => $this->assertEquals((float) $sp->weight, (float) $sp->taken_quantity),
+        );
+    }
+
+    public function test_store_rejects_a_quantity_the_selected_rolls_cannot_cover(): void
+    {
+        $product = Product::factory()->create();
+        $seed    = $this->makeGrnWithPieces($product, [12.5, 7.5], unitPrice: 300);
+        $codes   = array_map(fn (GrnItemPiece $p) => $p->piece_code, $seed['pieces']);
+
+        // The rolls hold 20; selling 999 off them is not possible.
+        $this->actingAs($this->user)
+            ->postJson('/api/v1/sales-orders', $this->validPayload([
+                'items' => [[
+                    'product_id'  => $product->id,
+                    'quantity'    => 999,
+                    'unit_price'  => 300,
+                    'piece_codes' => $codes,
+                ]],
+            ]))
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'The selected rolls hold only 20 — add another roll or reduce the quantity.');
     }
 
     public function test_store_rejects_piece_that_is_not_in_stock(): void

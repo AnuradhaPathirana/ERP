@@ -114,8 +114,12 @@ class SalesOrderController extends Controller
         $pricing = $this->service->productPricing($productId);
 
         return response()->json(['data' => [
-            'unit_price' => $pricing['selling_price'],
-            'cost_price' => $pricing['cost_price'],
+            // Both per the product's stocking UOM — named here so the sales form can
+            // re-express them in whatever unit the line actually sells in.
+            'unit_price'        => $pricing['selling_price'],
+            'cost_price'        => $pricing['cost_price'],
+            'base_unit_type_id' => $pricing['base_unit_type_id'],
+            'base_uom'          => $pricing['base_uom'],
         ]]);
     }
 }

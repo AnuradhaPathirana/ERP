@@ -23,6 +23,7 @@ use Modules\Inventory\Models\SalesOrderItem;
 use Modules\Inventory\Models\SalesOrderPiece;
 use Modules\Inventory\Models\StockReferenceType;
 use Modules\Inventory\Models\StockTransaction;
+use Modules\Inventory\Support\Quantity;
 
 /**
  * Delivery Orders execute the physical dispatch of a sales order.
@@ -34,10 +35,13 @@ use Modules\Inventory\Models\StockTransaction;
  */
 class DeliveryOrderService
 {
-    private const EPSILON = 0.0001;
+    /** @see Quantity::EPSILON — one tolerance for the whole module, not one per service. */
+    private const EPSILON = Quantity::EPSILON;
 
-    public function __construct(private readonly UnitConversionService $units)
-    {
+    public function __construct(
+        private readonly UnitConversionService $units,
+        private readonly RollService $rolls,
+    ) {
     }
 
     /** @param array<string, mixed> $filters */
@@ -140,7 +144,11 @@ class DeliveryOrderService
                         'piece_id'    => $sp->piece_id,
                         'piece_code'  => $sp->piece_code,
                         'roll_no'     => $sp->piece?->roll_no,
-                        'weight'      => (float) $sp->weight,
+                        // What the roll holds vs. what this sale takes off it — a cut roll
+                        // ships less than its weight and leaves a remnant behind.
+                        'weight'         => (float) $sp->weight,
+                        'taken_quantity' => (float) $sp->taken_quantity,
+                        'is_cut'         => (float) $sp->taken_quantity < (float) $sp->weight - self::EPSILON,
                         'store'       => $sp->piece?->store?->store_name,
                         'location'    => $sp->piece?->location?->location_name ?? $sp->piece?->location?->name,
                     ])
@@ -351,7 +359,14 @@ class DeliveryOrderService
                     'remarks'      => $row['remarks'] ?? null,
                 ]);
 
-                $doItem->quantity = $this->attachPieces($do, $doItem, $soItem, $pieceIds);
+                // attachPieces sums what the sale takes off each roll (stocking UOM); the
+                // line itself is shown in the UOM the customer bought in (Yard).
+                $factor  = max((float) $soItem->conversion_factor, self::EPSILON);
+                $baseQty = $this->attachPieces($do, $doItem, $soItem, $pieceIds);
+
+                $doItem->base_quantity     = $baseQty;
+                $doItem->conversion_factor = $factor;
+                $doItem->quantity          = round($baseQty / $factor, 4);
                 $doItem->save();
             } else {
                 $qty = (float) ($row['quantity'] ?? 0);
@@ -426,7 +441,10 @@ class DeliveryOrderService
                 'so_piece_id' => $soPiece->id,
                 'piece_id'    => $pieceId,
                 'piece_code'  => $soPiece->piece_code,
-                'weight'      => (float) $soPiece->weight,
+                // The roll's own weight, and the slice of it this sale takes — they
+                // differ whenever the customer buys less than a full roll.
+                'weight'         => (float) $soPiece->weight,
+                'taken_quantity' => (float) $soPiece->taken_quantity,
                 'created_by'  => Auth::id(),
                 'created_at'  => now(),
                 'updated_at'  => now(),
@@ -442,7 +460,8 @@ class DeliveryOrderService
             throw $e;
         }
 
-        return array_sum(array_column($rows, 'weight'));
+        // Base UOM — what leaves stock, not what the rolls weigh.
+        return array_sum(array_column($rows, 'taken_quantity'));
     }
 
     /** The outbound stock posting — everything in one transaction. */
@@ -523,9 +542,9 @@ class DeliveryOrderService
                 $basePrice     = $lineFactor > 0 ? (float) $soItem->unit_price / $lineFactor : 0.0;
 
                 if ($item->is_scanned) {
-                    // Roll weights were converted to the stocking UOM when the GRN was
-                    // confirmed (see GoodsReceivedNoteService::sealPiecesForItem), so
-                    // they need no conversion here.
+                    // Roll weights are already in the stocking UOM (sealed at GRN confirm),
+                    // and taken_quantity is the slice of each roll this sale takes — which
+                    // is what leaves stock. The rest of the roll stays, as a remnant.
                     foreach ($do->pieces->where('do_item_id', $item->id) as $doPiece) {
                         $live = $livePieces->get($doPiece->piece_id);
                         $key  = "{$item->id}|{$live->store_id}|{$live->location_id}|{$live->batch_id}";
@@ -540,7 +559,7 @@ class DeliveryOrderService
                             'piece_rows' => [],
                             'piece_meta' => [],
                         ];
-                        $groups[$key]['qty']         += (float) $doPiece->weight;
+                        $groups[$key]['qty']         += (float) $doPiece->taken_quantity;
                         $groups[$key]['piece_rows'][] = $doPiece->id;
                         $groups[$key]['piece_meta'][$doPiece->id] = [
                             'store_id'    => $live->store_id,
@@ -660,10 +679,12 @@ class DeliveryOrderService
                 }
             }
 
-            // ── Rolls leave stock ─────────────────────────────────────────
-            if ($do->pieces->isNotEmpty()) {
-                GrnItemPiece::whereIn('id', $do->pieces->pluck('piece_id'))
-                    ->update(['status' => GrnItemPiece::STATUS_DELIVERED]);
+            // ── Rolls leave stock; partly-sold ones are cut ───────────────
+            foreach ($do->pieces as $doPiece) {
+                $this->rolls->shipOrCut(
+                    $livePieces->get($doPiece->piece_id),
+                    (float) $doPiece->taken_quantity,
+                );
             }
 
             // ── Fulfillment + SO auto-complete ───────────────────────────
@@ -689,4 +710,5 @@ class DeliveryOrderService
             return $this->find($do->id);
         });
     }
+
 }

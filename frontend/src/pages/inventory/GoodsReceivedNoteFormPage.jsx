@@ -2256,6 +2256,7 @@ export default function GoodsReceivedNoteFormPage() {
         <RollAssignModal
           item={items[rollModalIdx]}
           unit={unitTypes.find((u) => u.id === Number(items[rollModalIdx].unit_id)) ?? null}
+          conversion={conversionFor(items[rollModalIdx])}
           onApply={(rolls) => {
             const rowKey = items[rollModalIdx]._key
             setItems((prev) => prev.map((row, i) => i === rollModalIdx ? { ...row, rolls } : row))

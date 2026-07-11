@@ -37,8 +37,9 @@ class Batch extends Model
         'mfg_date'      => 'date',
         'expiry_date'   => 'date',
         'received_date' => 'date',
-        'initial_qty'   => 'decimal:4',
-        'current_qty'   => 'decimal:4',
+        // Batch quantities are stock balances in the product's base UOM — decimal(20,6).
+        'initial_qty'   => 'decimal:6',
+        'current_qty'   => 'decimal:6',
         'unit_cost'     => 'decimal:8',
         'status'        => BatchStatus::class,
         'product_id'    => 'integer',

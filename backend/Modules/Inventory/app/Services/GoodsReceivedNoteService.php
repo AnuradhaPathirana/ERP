@@ -21,6 +21,7 @@ use Modules\Inventory\Models\PurchaseOrder;
 use Modules\Inventory\Models\PurchaseOrderItem;
 use Modules\Inventory\Models\StockReferenceType;
 use Modules\Inventory\Models\StockTransaction;
+use Modules\Inventory\Support\Quantity;
 
 class GoodsReceivedNoteService
 {
@@ -353,6 +354,12 @@ class GoodsReceivedNoteService
                 // the WAC subquery compute stock value) would be overstated 1000×.
                 $basePrice = $this->units->priceToBase((float) $item->unit_price, $line['factor']);
 
+                // Roll weights were already converted to base units when the draft was saved,
+                // using the rate in force at that moment. Should that rate have been edited
+                // since, this puts them back in step with the quantity we are about to post.
+                $draftFactor = (float) $item->conversion_factor;
+                $rescale     = $draftFactor > 0 ? $line['factor'] / $draftFactor : 1.0;
+
                 $item->update([
                     'conversion_factor' => $line['factor'],
                     'base_quantity'     => $line['qty'],
@@ -428,7 +435,7 @@ class GoodsReceivedNoteService
                     $pivot->increment('current_stock', $line['qty']);
                 }
 
-                $this->sealPiecesForItem($grn, $item, $itemSeq + 1, $stockTransactionIdByBatch, $nonBatchStockTransactionId, $line['factor']);
+                $this->sealPiecesForItem($grn, $item, $itemSeq + 1, $stockTransactionIdByBatch, $nonBatchStockTransactionId, $rescale);
 
                 // Update quantity_received on the linked PO item (skip for manual GRN items)
                 if ($item->po_item_id) {
@@ -517,11 +524,9 @@ class GoodsReceivedNoteService
      * stock transaction that posted its quantity. Runs only at confirmation time, since GRN
      * items become immutable once confirmed (piece_code depends on a stable item sequence).
      *
-     * Roll weights are entered in the line's UOM but converted to the product's stocking
-     * UOM here, because DeliveryOrderService sums these weights to derive the dispatch
-     * quantity it subtracts from current_stock — the two must speak the same unit.
-     *
-     * @param array<int, int> $stockTransactionIdByBatch keyed by batch_id
+     * @param  array<int, int> $stockTransactionIdByBatch keyed by batch_id
+     * @param  float $rescale corrects roll weights when the Kg→g rate was edited between the
+     *         draft save and this confirmation, so that Σ roll weight still equals base_quantity
      */
     private function sealPiecesForItem(
         GoodsReceivedNote $grn,
@@ -529,7 +534,7 @@ class GoodsReceivedNoteService
         int $itemSeq,
         array $stockTransactionIdByBatch,
         ?int $nonBatchStockTransactionId,
-        float $conversionFactor,
+        float $rescale,
     ): void {
         foreach ($item->pieces as $piece) {
             $stockTransactionId = $piece->batch_id
@@ -540,9 +545,9 @@ class GoodsReceivedNoteService
                 'piece_code'           => sprintf('%s-I%03d-P%03d', $grn->grn_no, $itemSeq, $piece->piece_no),
                 'status'               => 'in_stock',
                 'stock_transaction_id' => $stockTransactionId,
-                'weight'               => $piece->weight !== null
-                    ? round((float) $piece->weight * $conversionFactor, 6)
-                    : null,
+                'weight'               => $piece->weight !== null && $rescale !== 1.0
+                    ? Quantity::round((float) $piece->weight * $rescale)
+                    : $piece->weight,
             ]);
         }
     }
@@ -681,6 +686,12 @@ class GoodsReceivedNoteService
             // Create piece rows for each roll captured at draft time (weight + roll_no).
             // These stay "unsealed" (piece_code null, status draft) until GRN confirmation,
             // since GRN items get deleted and recreated on every draft save/edit.
+            //
+            // The user types roll weights in the line's UOM (1.5 Kg), but a roll IS stock —
+            // sales allocate against these weights and DeliveryOrderService sums them to
+            // decrement current_stock. So they are stored in the product's stocking UOM
+            // (1,500 g), same as every other balance. GoodsReceivedNoteItemResource turns
+            // them back into the line's UOM for the roll editor.
             if (!empty($rolls)) {
                 $batchIdsForRolls = $this->distributeBatchIdsAcrossRolls($grnItem, count($rolls));
 
@@ -693,7 +704,7 @@ class GoodsReceivedNoteService
                         'store_id'    => $grn->store_id,
                         'location_id' => $grn->location_id,
                         'piece_no'    => $i + 1,
-                        'weight'      => (float) $rollRow['weight'],
+                        'weight'      => Quantity::round((float) $rollRow['weight'] * $line['factor']),
                         'roll_no'     => $rollRow['roll_no'],
                         'piece_code'  => null,
                         'status'      => 'draft',

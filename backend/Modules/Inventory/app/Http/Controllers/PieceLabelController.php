@@ -89,19 +89,24 @@ class PieceLabelController extends Controller
         return response()->json(['data' => $codes]);
     }
 
-    /** @return array{product_id?: int, shipping_code?: string, attribute_id?: int} */
+    /** @return array{product_id?: int, shipping_code?: string, attribute_id?: int, print_status?: string} */
     private function validateFilters(Request $request): array
     {
+        // print_status counts as a filter in its own right: "every sticker I still owe"
+        // is a complete question, and the most common reason to open this page.
         return $request->validate([
-            'product_id'    => ['nullable', 'integer', 'exists:inv_products,id', 'required_without_all:shipping_code,attribute_id'],
-            'shipping_code' => ['nullable', 'string', 'max:100', 'required_without_all:product_id,attribute_id'],
-            'attribute_id'  => ['nullable', 'integer', 'exists:inv_attributes,id', 'required_without_all:product_id,shipping_code'],
+            'product_id'    => ['nullable', 'integer', 'exists:inv_products,id', 'required_without_all:shipping_code,attribute_id,print_status'],
+            'shipping_code' => ['nullable', 'string', 'max:100', 'required_without_all:product_id,attribute_id,print_status'],
+            'attribute_id'  => ['nullable', 'integer', 'exists:inv_attributes,id', 'required_without_all:product_id,shipping_code,print_status'],
+            'print_status'  => ['nullable', 'in:pending,printed'],
         ]);
     }
 
     /** Sealed pieces of confirmed GRNs matching the given filters. */
     private function pieceQuery(array $filters): Builder
     {
+        $pending = ($filters['print_status'] ?? null) === 'pending';
+
         return GrnItemPiece::query()
             ->whereNotNull('piece_code')
             ->whereHas('grn', function (Builder $query) use ($filters): void {
@@ -115,6 +120,12 @@ class PieceLabelController extends Controller
                 'grnItem',
                 fn (Builder $itemQuery) => $itemQuery->where('attribute_id', (int) $filters['attribute_id'])
             ))
+            // A label is owed either because the roll arrived on a GRN nobody printed, or
+            // because a sale cut it and the offcut's sticker does not exist yet — both are
+            // simply pieces with no printed_at. Printing them stamps it (see pdf()), so the
+            // queue empties itself.
+            ->when($pending, fn (Builder $query) => $query->whereNull('printed_at'))
+            ->when(($filters['print_status'] ?? null) === 'printed', fn (Builder $query) => $query->whereNotNull('printed_at'))
             ->with([
                 'product:id,name,product_code,base_unit_type_id',
                 'product.baseUnit:id,name,symbol',
@@ -122,10 +133,15 @@ class PieceLabelController extends Controller
                 'grn:id,grn_no,shipping_code',
                 'grnItem:id,attribute_id',
                 'grnItem.attribute:id,attribute_name',
+                'parent:id,piece_code',
             ])
-            ->orderBy('grn_id')
-            ->orderBy('grn_item_id')
-            ->orderBy('piece_no');
+            // A work queue reads newest-first — the roll just cut is the one being held at
+            // the cutting table. Everything else prints in GRN sheet order.
+            ->when($pending, fn (Builder $query) => $query->orderByDesc('id'))
+            ->unless($pending, fn (Builder $query) => $query
+                ->orderBy('grn_id')
+                ->orderBy('grn_item_id')
+                ->orderBy('piece_no'));
     }
 
     /** @return Collection<int, array<string, mixed>> */
@@ -143,6 +159,10 @@ class PieceLabelController extends Controller
             'batch_no'      => $piece->batch?->batch_no,
             'roll_no'       => $piece->roll_no,
             'weight'        => $piece->weight,
+            // An offcut's roll still wears the sticker of the roll it was cut from, which
+            // now overstates its length. Naming that code tells the operator which sticker
+            // to peel off, so one roll never carries two live QR codes.
+            'replaces'      => $piece->parent?->piece_code,
             // Roll weights are sealed in the product's stocking UOM at GRN confirm,
             // so that is the unit the sticker must state — not the GRN's buying unit.
             'uom'           => $piece->product?->baseUnit?->symbol ?? $piece->product?->baseUnit?->name,
@@ -171,6 +191,9 @@ class PieceLabelController extends Controller
         }
         if (!empty($filters['attribute_id'])) {
             $parts[] = 'Color: ' . ($pieces->first()?->grnItem?->attribute?->attribute_name ?? $filters['attribute_id']);
+        }
+        if (!empty($filters['print_status'])) {
+            $parts[] = 'Labels: ' . ($filters['print_status'] === 'pending' ? 'Not printed yet' : 'Already printed');
         }
 
         return implode('  |  ', $parts);

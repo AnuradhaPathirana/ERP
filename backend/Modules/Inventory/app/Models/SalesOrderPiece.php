@@ -17,6 +17,7 @@ class SalesOrderPiece extends Model
         'piece_id',
         'piece_code',
         'weight',
+        'taken_quantity',
         'grn_unit_price',
         'created_by',
     ];
@@ -25,8 +26,9 @@ class SalesOrderPiece extends Model
         'so_id'          => 'integer',
         'so_item_id'     => 'integer',
         'piece_id'       => 'integer',
-        'weight'         => 'decimal:4',
-        'grn_unit_price' => 'decimal:4',
+        'weight'         => 'decimal:6',
+        'taken_quantity' => 'decimal:6',
+        'grn_unit_price' => 'decimal:8',
         'created_by'     => 'integer',
     ];
 

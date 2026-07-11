@@ -14,6 +14,7 @@ use Modules\Inventory\Models\Product;
 use Modules\Inventory\Models\SalesOrder;
 use Modules\Inventory\Models\SalesOrderItem;
 use Modules\Inventory\Models\SalesOrderPiece;
+use Modules\Inventory\Support\Quantity;
 
 /**
  * Sales orders are commitment documents only — no stock transactions are
@@ -27,6 +28,7 @@ class SalesOrderService
     public function __construct(
         private readonly ProductPricingService $pricing,
         private readonly UnitConversionService $units,
+        private readonly RollService $rolls,
     ) {
     }
 
@@ -252,7 +254,7 @@ class SalesOrderService
                 ] : null,
             ] : null,
             // Cost of this roll's shipment — snapshot basis, NOT the sale price.
-            'grn_unit_price'     => (float) ($piece->grnItem?->unit_price ?? 0),
+            'grn_unit_price'     => $this->grnCostPerBase($piece),
             // Shipment-specific sale price: confirmed-costing price for this
             // roll's GRN line, price-list fallback (null = neither configured).
             'selling_price'      => $resolved['price'] ?? null,
@@ -281,7 +283,9 @@ class SalesOrderService
             ->where('product_id', $productId)
             ->where('status', GrnItemPiece::STATUS_IN_STOCK)
             ->whereNotNull('piece_code')
-            ->where('weight', '>', 0)
+            // Not "> 0": an offcut of 0.000008 m displays as 0.0000 and can never be sold,
+            // so listing it only invites the user to pick a roll that gives them nothing.
+            ->where('weight', '>=', Quantity::minSellable())
             ->orderBy('id')
             ->get()
             ->map(fn (GrnItemPiece $piece) => [
@@ -292,7 +296,7 @@ class SalesOrderService
                 'grn_no'         => $piece->grn?->grn_no,
                 'store'          => $piece->store?->store_name,
                 'location'       => $piece->location?->location_name ?? $piece->location?->name,
-                'grn_unit_price' => (float) ($piece->grnItem?->unit_price ?? 0),
+                'grn_unit_price' => $this->grnCostPerBase($piece),
                 // Shipment-specific sale price (confirmed costing → price list)
                 'selling_price'  => $resolve($piece)['price'],
                 'price_source'   => $resolve($piece)['source'],
@@ -301,10 +305,16 @@ class SalesOrderService
             ])
             ->values();
 
+        // Roll weights are sealed in the product's stocking UOM at GRN confirm, so the
+        // picker must name that unit — a bare "100" tells the user nothing, and guessing
+        // "kg" is wrong the moment the product is fabric measured in metres.
+        $baseUnit = Product::with('baseUnit')->find($productId)?->baseUnit;
+
         return [
             'pieces'        => $pieces->all(),
             'count'         => $pieces->count(),
             'total_weight'  => (float) $pieces->sum('weight'),
+            'base_uom'      => $baseUnit?->symbol ?? $baseUnit?->name,
             // Price-list sale price (per product) — fallback shown when a roll
             // has no confirmed costing.
             'selling_price' => $this->pricing->sellingPriceFor($productId),
@@ -317,9 +327,19 @@ class SalesOrderService
      *
      * @return array{selling_price: ?float, cost_price: ?float}
      */
+    /**
+     * Default prices for a product. Both are PER THE STOCKING UOM — the sales form
+     * converts them into whatever unit the line sells in, so it must be told which unit
+     * they arrived in.
+     */
     public function productPricing(int $productId): array
     {
-        return $this->pricing->pricingFor($productId);
+        $baseUnit = Product::with('baseUnit')->find($productId)?->baseUnit;
+
+        return $this->pricing->pricingFor($productId) + [
+            'base_unit_type_id' => $baseUnit?->id,
+            'base_uom'          => $baseUnit?->symbol ?? $baseUnit?->name,
+        ];
     }
 
     private function buildSoNo(bool $lock): string
@@ -376,16 +396,10 @@ class SalesOrderService
             $product = $products[(int) $row['product_id']];
             $unitId  = !empty($row['unit_id']) ? (int) $row['unit_id'] : null;
 
-            // A scanned line's quantity is the sum of its roll weights, and those are
-            // held in the stocking UOM — so the line is denominated in it too.
-            // A manual line keeps the UOM the user picked and converts.
-            $factor = 1.0;
-            if ($isScanned) {
-                $unitId = $this->units->baseUnitIdFor($product);
-            } else {
-                $converted = $this->units->toBase($product, $unitId, $qty);
-                $factor    = $converted['factor'];
-            }
+            // Every line — roll-backed or not — is priced and quantified in the UOM the
+            // customer buys in (Yard), and converted to the stocking UOM (m) for stock.
+            // A roll line may sell LESS than its rolls hold: the rolls get cut at dispatch.
+            $converted = $this->units->toBase($product, $unitId, $qty);
 
             $item = SalesOrderItem::create([
                 'so_id'      => $so->id,
@@ -394,8 +408,8 @@ class SalesOrderService
                 'attribute_id' => !empty($row['attribute_id']) ? (int) $row['attribute_id'] : null,
                 'is_scanned' => $isScanned,
                 'quantity'   => $qty,
-                'conversion_factor' => $factor,
-                'base_quantity'     => round($qty * $factor, 6),
+                'conversion_factor' => $converted['factor'],
+                'base_quantity'     => $converted['qty'],
                 'unit_price' => (float) ($row['unit_price'] ?? 0),
                 'discount'   => (float) ($row['discount'] ?? 0),
                 'tax'        => (float) ($row['tax'] ?? 0),
@@ -404,9 +418,15 @@ class SalesOrderService
             ]);
 
             if ($isScanned) {
-                // Quantity for scanned lines is derived from piece weights server-side.
-                $this->allocatePieces($so, $item, $pieceCodes);
-                $item->update(['base_quantity' => $item->fresh()->quantity]);
+                // piece_takes lets the roll picker say how much comes off each roll (in the
+                // line's UOM). Absent, the quantity is spread across them oldest-first.
+                $this->allocatePieces(
+                    $so,
+                    $item,
+                    $pieceCodes,
+                    (array) ($row['piece_takes'] ?? []),
+                    $converted['factor'],
+                );
             }
 
             $this->recalculateLineTotal($item);
@@ -446,13 +466,51 @@ class SalesOrderService
     }
 
     /** @param array<string> $codes */
-    private function allocatePieces(SalesOrder $so, SalesOrderItem $item, array $codes): void
+    /**
+     * What this roll's shipment cost, per the product's stocking UOM.
+     *
+     * The GRN line was priced in its own receiving unit (250 per Kg) and froze the factor
+     * it used, so rebasing is exact. Without this, a below-cost warning would compare a
+     * per-yard sale price against a per-metre cost and fire at random.
+     */
+    private function grnCostPerBase(GrnItemPiece $piece): float
     {
+        $line = $piece->grnItem;
+
+        if ($line === null) {
+            return 0.0;
+        }
+
+        return $this->units->priceToBase(
+            (float) $line->unit_price,
+            (float) ($line->conversion_factor ?: 1),
+        );
+    }
+
+    /**
+     * Reserve the rolls a line sells from, and record how much comes off each.
+     *
+     * The whole roll is reserved even when only part of it is sold — it is one object
+     * in the rack, and the cut happens physically at dispatch (DeliveryOrderService).
+     * `taken_quantity` is what this line actually sells; `weight` stays the roll's own.
+     *
+     * @param array<string>              $codes  piece codes, in the order the user picked them
+     * @param array<string, float|string> $takes  piece_code => quantity to take, in the LINE's UOM
+     */
+    private function allocatePieces(
+        SalesOrder $so,
+        SalesOrderItem $item,
+        array $codes,
+        array $takes,
+        float $factor,
+    ): void {
         $codes  = array_values(array_unique($codes));
         $pieces = GrnItemPiece::with('grnItem')
             ->whereIn('piece_code', $codes)
             ->lockForUpdate()
-            ->get();
+            ->get()
+            ->sortBy('id')            // oldest roll first — the fill order for auto-distribution
+            ->values();
 
         if ($pieces->count() !== count($codes)) {
             $missing = array_diff($codes, $pieces->pluck('piece_code')->all());
@@ -476,13 +534,62 @@ class SalesOrderService
             abort(422, 'Rolls of different colours cannot be mixed on one line — split them into separate lines.');
         }
 
+        $baseQuantity = (float) $item->base_quantity;
+        $typedQty     = Quantity::isPositive($baseQuantity);
+
+        // Converting the customer's UOM into the warehouse's rounds, so "2 yd" and the
+        // 1.828799 m actually left on the roll never line up to the last decimal. The
+        // tolerance is the smallest amount the user could have typed — below that, a
+        // difference is arithmetic, not a disagreement.
+        $tolerance = Quantity::toleranceFor($factor);
+
+        // Three ways a line's rolls get apportioned, in order of how explicit they are:
+        //   1. the picker said how much comes off each roll;
+        //   2. the user typed a line quantity, which we spread across them;
+        //   3. neither — the customer is taking the rolls whole (the common case, and
+        //      what a bare QR scan means).
+        $takenByRollId = match (true) {
+            $takes !== [] => $this->rolls->takesFor($pieces, $takes, $factor),
+            $typedQty     => $this->rolls->distribute($pieces, $baseQuantity, $tolerance),
+            default       => $this->rolls->distribute($pieces, $this->rolls->capacityOf($pieces), $tolerance),
+        };
+
+        $takenTotal = Quantity::round(array_sum($takenByRollId));
+
+        if ($typedQty) {
+            // A real disagreement — the picker's per-roll amounts not adding up to the line
+            // — must fail loudly: otherwise the stock movement and the invoice would part
+            // company. Only conversion dust is forgiven.
+            abort_if(
+                abs($takenTotal - $baseQuantity) > $tolerance,
+                422,
+                sprintf(
+                    'The roll quantities add up to %s but the line says %s — they must match.',
+                    Quantity::format($takenTotal),
+                    Quantity::format($baseQuantity),
+                ),
+            );
+        }
+
+        // What the rolls physically give is the truth for stock, so the line records that
+        // rather than the converted ideal. The customer is still billed for the quantity
+        // they asked for, in their own unit — only base_quantity is snapped.
+        $item->base_quantity = $takenTotal;
+
+        if (! $typedQty) {
+            // Nothing was typed, so the rolls decide the quantity too — expressed back in
+            // the UOM the customer buys in.
+            $item->quantity = Quantity::round($takenTotal / $factor);
+        }
+
         SalesOrderPiece::insert($pieces->map(fn (GrnItemPiece $piece) => [
             'so_id'          => $so->id,
             'so_item_id'     => $item->id,
             'piece_id'       => $piece->id,
             'piece_code'     => $piece->piece_code,
             'weight'         => (float) $piece->weight,
-            'grn_unit_price' => (float) ($piece->grnItem?->unit_price ?? 0),
+            'taken_quantity' => $takenByRollId[$piece->id],
+            'grn_unit_price' => $this->grnCostPerBase($piece),
             'created_by'     => Auth::id(),
             'created_at'     => now(),
             'updated_at'     => now(),
@@ -491,9 +598,9 @@ class SalesOrderService
         GrnItemPiece::whereIn('id', $pieces->pluck('id'))
             ->update(['status' => GrnItemPiece::STATUS_ALLOCATED]);
 
-        // Quantity and colour are both derived from the allocated rolls
-        $item->quantity     = $pieces->sum(fn (GrnItemPiece $piece) => (float) $piece->weight);
+        // Colour is still derived from the rolls; the quantity is now the user's.
         $item->attribute_id = $pieces->first()->grnItem?->attribute_id;
+        $item->save();
     }
 
     private function releaseAllPieces(SalesOrder $so): void

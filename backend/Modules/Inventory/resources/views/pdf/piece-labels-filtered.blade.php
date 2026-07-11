@@ -16,6 +16,8 @@
   .qr-img { width: 90px; height: 90px; }
   .piece-code { font-family: 'DejaVu Sans Mono', monospace; font-size: 6.5pt; font-weight: 700; color: #1e293b; margin-top: 3px; }
   .product-name { font-size: 6pt; color: #475569; margin-top: 1px; }
+  /* Tells the operator which sticker on the roll this one supersedes. */
+  .replaces { font-family: 'DejaVu Sans Mono', monospace; font-size: 5.5pt; font-weight: 700; color: #b45309; margin-top: 2px; }
 </style>
 </head>
 <body>
@@ -43,6 +45,9 @@
         @endif
         @if($label['batch_no'])
         <div class="product-name">Batch: {{ $label['batch_no'] }}</div>
+        @endif
+        @if(!empty($label['replaces']))
+        <div class="replaces">&#8631; REPLACES {{ $label['replaces'] }}</div>
         @endif
       </td>
       @endforeach

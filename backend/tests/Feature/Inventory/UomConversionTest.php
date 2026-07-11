@@ -20,6 +20,7 @@ use Modules\Inventory\Models\SupplierMaster;
 use Modules\Inventory\Models\UnitCategory;
 use Modules\Inventory\Models\UnitConversion;
 use Modules\Inventory\Models\UnitType;
+use Modules\Inventory\Services\RollService;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -227,6 +228,93 @@ class UomConversionTest extends TestCase
         // A 1.5 Kg roll is 1500 g — DeliveryOrderService sums these weights to
         // decide how much to subtract from current_stock, so they must be base.
         $this->assertSame(1500.0, (float) $seed['piece']->fresh()->weight);
+    }
+
+    /**
+     * A roll is stock, so it is stored in the stocking UOM from the first draft save —
+     * but the GRN is a document in the supplier's UOM, so the roll editor must get the
+     * Kg the user typed back, not the grams they became. Reading grams under a "(Kg)"
+     * heading is the bug this pins: 1.5 Kg came back as 1,500.
+     */
+    public function test_the_roll_editor_reads_roll_weights_back_in_the_lines_uom(): void
+    {
+        [$storeId, $locId] = $this->makeStoreAndLocation();
+        $product           = $this->gramStockedProduct();
+
+        $supplier = SupplierMaster::create([
+            'supplier_code' => 'SUP-ROLL-1',
+            'supplier_name' => 'Roll Supplier',
+        ]);
+
+        $grnId = $this->actingAs($this->user)
+            ->postJson('/api/v1/goods-received-notes', [
+                'grn_date'      => '2026-07-01',
+                'supplier_id'   => $supplier->id,
+                'shipping_code' => 'SHIP-ROLL-1',
+                'store_id'      => $storeId,
+                'location_id'   => $locId,
+                'items'         => [[
+                    'product_id'        => $product->id,
+                    'unit_id'           => $this->kg->id,
+                    'quantity_received' => 5,
+                    'unit_price'        => 250,
+                    'rolls'             => [
+                        ['roll_no' => 'R-1', 'weight' => 2],
+                        ['roll_no' => 'R-2', 'weight' => 3],
+                    ],
+                ]],
+            ])
+            ->assertCreated()
+            ->json('data.id');
+
+        $storedWeights = fn () => GrnItemPiece::where('grn_id', $grnId)
+            ->orderBy('piece_no')
+            ->pluck('weight')
+            ->map(fn ($w) => (float) $w)
+            ->all();
+
+        // Stored as stock — grams — from the draft save, not only once confirmed.
+        $this->assertSame([2000.0, 3000.0], $storedWeights());
+
+        $this->confirmGrn(GoodsReceivedNote::findOrFail($grnId))->assertOk();
+        $this->assertSame([2000.0, 3000.0], $storedWeights(), 'confirming must not convert twice');
+
+        // Read back for the roll editor: the Kg the user typed, so that its
+        // Σ rolls = Qty Received balance still holds.
+        $items = $this->actingAs($this->user)
+            ->getJson("/api/v1/goods-received-notes/{$grnId}")
+            ->assertOk()
+            ->json('data.items.0');
+
+        $this->assertSame(5.0, (float) $items['quantity_received']);
+        $this->assertSame([2.0, 3.0], array_map('floatval', array_column($items['pieces'], 'weight')));
+    }
+
+    /**
+     * Cutting a roll to fill a partial sale spawns an offcut against the same GRN line.
+     * The GRN records what was RECEIVED, so the offcut must not show up there — it would
+     * both invent a roll the supplier never sent and break Σ rolls = Qty Received.
+     */
+    public function test_an_offcut_from_a_partial_sale_is_not_shown_as_a_received_roll(): void
+    {
+        [$storeId, $locId] = $this->makeStoreAndLocation();
+        $product           = $this->gramStockedProduct();
+        $seed              = $this->makeDraftGrn($product, 2, $this->kg, $storeId, $locId);
+
+        $this->confirmGrn($seed['grn'])->assertOk();
+
+        // Sell 1.2 Kg off the 2 Kg roll — 800 g comes back as a fresh, labelled offcut.
+        $offcut = app(RollService::class)->shipOrCut($seed['piece']->fresh(), 1200.0);
+        $this->assertNotNull($offcut);
+        $this->assertSame($seed['item']->id, (int) $offcut->grn_item_id);
+
+        $pieces = $this->actingAs($this->user)
+            ->getJson("/api/v1/goods-received-notes/{$seed['grn']->id}")
+            ->assertOk()
+            ->json('data.items.0.pieces');
+
+        $this->assertCount(1, $pieces, 'the GRN shows the roll it received, not the one sales cut');
+        $this->assertSame(2.0, (float) $pieces[0]['weight']);
     }
 
     public function test_line_total_uses_the_invoiced_price_not_the_rebased_one(): void

@@ -6,17 +6,30 @@ namespace Modules\Inventory\Services;
 
 use Illuminate\Support\Facades\DB;
 use Modules\Inventory\Models\Product;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Modules\Inventory\Models\UnitCategory;
 use Modules\Inventory\Models\UnitConversion;
 use Modules\Inventory\Models\UnitType;
+use Modules\Inventory\Support\Quantity;
 
 class UnitConversionService
 {
-    /** Base-UOM quantities are persisted at decimal(20,6). */
-    private const BASE_SCALE = 6;
-
-    /** Base-UOM prices are persisted at decimal(20,8) — a per-gram price is tiny. */
-    private const PRICE_SCALE = 8;
+    /**
+     * factor(), but null instead of an abort when the units cannot be converted.
+     *
+     * Price lookups feed defaults on a form, and a whole roll list should not 500 because
+     * one product is missing a rate. The caller decides what an unconvertible price means
+     * — here it means "no default", never "use the number anyway", which would quietly
+     * quote a per-metre price to a customer buying yards.
+     */
+    public function tryFactor(int $fromUnitId, int $toUnitId): ?float
+    {
+        try {
+            return $this->factor($fromUnitId, $toUnitId);
+        } catch (HttpException) {
+            return null;
+        }
+    }
 
     /**
      * Rebase a document price so it lines up with a base-unit quantity.
@@ -32,7 +45,7 @@ class UnitConversionService
             return 0.0;
         }
 
-        return round($price / $factor, self::PRICE_SCALE);
+        return Quantity::roundPrice($price / $factor);
     }
 
     /**
@@ -97,7 +110,7 @@ class UnitConversionService
 
         // A line saved before the UOM column existed is already in base units.
         $factor  = $unitId === null ? 1.0 : $this->factor($unitId, $baseUnitId);
-        $baseQty = round($qty * $factor, self::BASE_SCALE);
+        $baseQty = Quantity::round($qty * $factor);
 
         // A quantity that survives validation but rounds away to nothing would post
         // a zero movement while the document still claims stock changed hands.
@@ -106,7 +119,7 @@ class UnitConversionService
             422,
             sprintf(
                 'Quantity %s is too small to record in the stocking UOM — it rounds to zero.',
-                rtrim(rtrim(number_format($qty, 6), '0'), '.'),
+                Quantity::format($qty),
             ),
         );
 

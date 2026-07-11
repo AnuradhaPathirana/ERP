@@ -18,13 +18,19 @@ function computeAutoRollNo(start, index) {
   return String(value).padStart(trimmed.length, '0')
 }
 
-export default function RollAssignModal({ item, unit, onApply, onClose }) {
+export default function RollAssignModal({ item, unit, conversion = null, onApply, onClose }) {
   // Rolls are measured in the item's own UOM — kg, m, yd, pcs… The balance
   // (Σ roll measures = Qty Received) holds for every unit, not just Weight.
   const unitSymbol   = unit?.symbol ?? ''
   const categoryName = unit?.unit_category_name ?? ''
   const measureLabel = categoryName === 'Weight' ? 'Weight' : categoryName === 'Length' ? 'Length' : 'Qty'
   const withUnit     = (n) => `${Number(n).toLocaleString()}${unitSymbol ? ` ${unitSymbol}` : ''}`
+
+  // Rolls are received in this UOM but stocked in the product's — the QR sticker and
+  // every later sale speak the stocking UOM, so show what these rolls become.
+  const rebased = conversion && !conversion.same && conversion.factor
+    ? { factor: conversion.factor, symbol: conversion.baseSymbol }
+    : null
 
   const [rolls, setRolls]                 = useState([])
   const [noOfPieces, setNoOfPieces]       = useState('')
@@ -156,6 +162,11 @@ export default function RollAssignModal({ item, unit, onApply, onClose }) {
               {remaining > 0 ? 'Remaining' : remaining < 0 ? 'Over by' : 'Balanced ✓'}:
               {' '}<span className="font-bold">{withUnit(Math.abs(remaining))}</span>
             </span>
+            {rebased && (
+              <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-semibold text-indigo-600">
+                Stocked as {(totalWeight * rebased.factor).toLocaleString(undefined, { maximumFractionDigits: 4 })} {rebased.symbol}
+              </span>
+            )}
           </div>
 
           {/* Right: generator inputs */}
@@ -221,6 +232,11 @@ export default function RollAssignModal({ item, unit, onApply, onClose }) {
                           if (e.key === 'Enter') { e.preventDefault(); focusCell(idx + 1, 'roll') }
                         }}
                       />
+                      {rebased && parseFloat(r.weight) > 0 && (
+                        <span className="mt-0.5 block text-[10px] font-medium text-indigo-500">
+                          = {(parseFloat(r.weight) * rebased.factor).toLocaleString(undefined, { maximumFractionDigits: 4 })} {rebased.symbol}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>

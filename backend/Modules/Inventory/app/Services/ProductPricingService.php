@@ -10,6 +10,7 @@ use Modules\Inventory\Enums\CostingStatus;
 use Modules\Inventory\Enums\GrnStatus;
 use Modules\Inventory\Models\GoodsReceivedNoteItem;
 use Modules\Inventory\Models\GrnItemPiece;
+use Modules\Inventory\Models\Product;
 
 /**
  * Single source of truth for product price resolution.
@@ -25,29 +26,75 @@ class ProductPricingService
 {
     private const PIVOT_TABLE = 'inv_product_sales_channels';
 
+    public function __construct(private readonly UnitConversionService $units)
+    {
+    }
+
     /**
-     * Default selling price for a product — the primary (first) price-list
-     * row. Null when the product has no channel pricing configured.
+     * Default selling price for a product — the primary (first) price-list row,
+     * expressed PER THE PRODUCT'S STOCKING UOM. Null when the product has no channel
+     * pricing, or when its price is filed in a unit that cannot be converted.
+     *
+     * Every price this class returns is per the base UOM, because a price is meaningless
+     * without its unit: a list price of 400 filed against "m" is not 400 per yard, and
+     * handing that number to a yard-denominated sales line overcharges by 9%.
      */
     public function sellingPriceFor(int $productId): ?float
     {
-        $price = DB::table(self::PIVOT_TABLE)
+        $row = DB::table(self::PIVOT_TABLE)
             ->where('product_id', $productId)
             ->orderBy('id')
-            ->value('selling_price');
+            ->first(['selling_price', 'unit_type_id']);
 
-        return $price !== null ? (float) $price : null;
+        return $this->toBasePrice(
+            $productId,
+            $row?->unit_type_id !== null ? (int) $row->unit_type_id : null,
+            $row?->selling_price !== null ? (float) $row->selling_price : null,
+        );
     }
 
-    /** Latest confirmed-GRN purchase cost (last-cost method). */
+    /** Latest confirmed-GRN purchase cost (last-cost method), per the stocking UOM. */
     public function lastCostFor(int $productId): ?float
     {
-        $price = GoodsReceivedNoteItem::where('product_id', $productId)
+        $line = GoodsReceivedNoteItem::where('product_id', $productId)
             ->whereHas('grn', fn ($q) => $q->where('status', GrnStatus::Confirmed->value))
             ->orderByDesc('id')
-            ->value('unit_price');
+            ->first(['unit_price', 'unit_id']);
 
-        return $price !== null ? (float) $price : null;
+        return $this->toBasePrice(
+            $productId,
+            $line?->unit_id !== null ? (int) $line->unit_id : null,
+            $line?->unit_price !== null ? (float) $line->unit_price : null,
+        );
+    }
+
+    /**
+     * Re-express a stored price per the product's stocking UOM.
+     *
+     * A price is always filed against the unit its document used (a GRN line's receiving
+     * unit, a price-list row's unit). Converting it is the exact mirror of what the stock
+     * ledger does with the quantity — 250 per Kg is 0.25 per g — so that a price and a
+     * quantity can always be multiplied together and mean something.
+     *
+     * Returns null when there is no rate: better no default than a confidently wrong one.
+     */
+    private function toBasePrice(int $productId, ?int $unitId, ?float $price): ?float
+    {
+        if ($price === null) {
+            return null;
+        }
+
+        $baseUnitId = Product::where('id', $productId)->value('base_unit_type_id');
+
+        // No stocking UOM, or a price with no unit recorded (pre-dates the UOM work):
+        // there is nothing to convert from, so it is already in whatever base means here.
+        if ($baseUnitId === null || $unitId === null || $unitId === (int) $baseUnitId) {
+            return $price;
+        }
+
+        $factor = $this->units->tryFactor($unitId, (int) $baseUnitId);
+
+        return $factor !== null ? $this->units->priceToBase($price, $factor) : null;
     }
 
     /**
@@ -71,15 +118,28 @@ class ProductPricingService
      */
     public function sellingPriceForGrnItem(int $grnItemId): ?float
     {
-        $price = DB::table('inv_costing_items')
+        $row = DB::table('inv_costing_items')
             ->join('inv_costings', 'inv_costings.id', '=', 'inv_costing_items.costing_id')
             ->where('inv_costing_items.grn_item_id', $grnItemId)
             ->where('inv_costings.status', CostingStatus::Confirmed->value)
             ->whereNull('inv_costings.deleted_at')
             ->orderByDesc('inv_costing_items.id')
-            ->value('inv_costing_items.selling_price');
+            ->first([
+                'inv_costing_items.selling_price',
+                'inv_costing_items.unit_id',
+                'inv_costing_items.product_id',
+            ]);
 
-        return $price !== null ? (float) $price : null;
+        if ($row === null) {
+            return null;
+        }
+
+        // Costed per the shipment's receiving unit — rebase it like any other price.
+        return $this->toBasePrice(
+            (int) $row->product_id,
+            $row->unit_id !== null ? (int) $row->unit_id : null,
+            $row->selling_price !== null ? (float) $row->selling_price : null,
+        );
     }
 
     /**

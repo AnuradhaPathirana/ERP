@@ -9,7 +9,12 @@ const fmt = (n, d = 2) => Number(n).toLocaleString(undefined, { minimumFractionD
  * Roll picker for manual (non-QR) sales order lines.
  * Lists the product's in-stock rolls; selected rolls are allocated to the
  * order exactly like scanned ones. Auto-pick ticks rolls FIFO until the
- * entered target weight is covered.
+ * entered target quantity is covered.
+ *
+ * Every quantity shown here is in the product's STOCKING UOM — the unit roll weights
+ * are sealed in at GRN confirm. It is named on screen rather than assumed, because it
+ * varies by product (fabric in metres, yarn in kg) and the sales line may well be in a
+ * different unit again (yards).
  */
 export default function SalesOrderRollPickerModal({
   product,            // { id, name, product_code }
@@ -22,7 +27,7 @@ export default function SalesOrderRollPickerModal({
   const [selected, setSelected]         = useState(() => new Set((initialPieces ?? []).map((p) => p.piece_code)))
   const [filter, setFilter]             = useState('')
   const [colorFilter, setColorFilter]   = useState(initialAttributeId != null && initialAttributeId !== '' ? String(initialAttributeId) : '')
-  const [targetKg, setTargetKg]         = useState('')
+  const [target, setTarget]             = useState('')
   const [colorError, setColorError]     = useState('')
 
   const { data, isLoading, isError } = useQuery({
@@ -30,6 +35,9 @@ export default function SalesOrderRollPickerModal({
     queryFn:  () => getAvailablePieces(product.id),
     staleTime: 0,
   })
+
+  // The unit every number in this modal is expressed in.
+  const uom = data?.base_uom ?? ''
 
   const disabled = useMemo(() => new Set(disabledCodes ?? []), [disabledCodes])
 
@@ -76,15 +84,15 @@ export default function SalesOrderRollPickerModal({
   }
 
   const autoPick = () => {
-    const target = parseFloat(targetKg)
-    if (!(target > 0)) return
+    const goal = parseFloat(target)
+    if (!(goal > 0)) return
     setSelected((prev) => {
       const next = new Set(prev)
       let total = rolls
         .filter((p) => next.has(p.piece_code))
         .reduce((s, p) => s + (parseFloat(p.weight) || 0), 0)
       for (const p of rolls) { // FIFO — list is already oldest-first
-        if (total >= target) break
+        if (total >= goal) break
         if (next.has(p.piece_code) || disabled.has(p.piece_code)) continue
         if (!matchesColor(p)) continue
         next.add(p.piece_code)
@@ -128,10 +136,10 @@ export default function SalesOrderRollPickerModal({
               <h2 className="text-xs font-bold text-indigo-700">Select Rolls — {product.name}</h2>
               <p className="text-[10px] text-indigo-400">
                 <span className="font-mono">{product.product_code}</span>
-                {data && <> · {data.count} roll{data.count !== 1 ? 's' : ''} in stock · {fmt(data.total_weight)} total</>}
+                {data && <> · {data.count} roll{data.count !== 1 ? 's' : ''} in stock · {fmt(data.total_weight)} {uom} total</>}
                 {listPrice != null && (
                   <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-px font-bold text-emerald-700 tabular-nums" title="Product price-list price — rolls from costed shipments show their own costing price per row">
-                    List @ {fmt(listPrice)}
+                    List @ {fmt(listPrice)}{uom && `/${uom}`}
                   </span>
                 )}
               </p>
@@ -167,12 +175,14 @@ export default function SalesOrderRollPickerModal({
           <div className="ml-auto flex items-center gap-1.5">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Auto-pick</span>
             <input
-              type="number" min="0" step="0.01" placeholder="Target kg"
-              value={targetKg}
-              onChange={(e) => setTargetKg(e.target.value)}
+              type="number" min="0" step="0.01"
+              placeholder={uom ? `Target ${uom}` : 'Target'}
+              value={target}
+              onChange={(e) => setTarget(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); autoPick() } }}
               className="block w-24 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white"
             />
+            {uom && <span className="text-[10px] font-semibold text-slate-400">{uom}</span>}
             <button
               type="button"
               onClick={autoPick}
@@ -203,9 +213,17 @@ export default function SalesOrderRollPickerModal({
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Roll No</th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Piece Code</th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Colour</th>
-                  <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Weight</th>
-                  <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN Cost</th>
-                  <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Selling</th>
+                  <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Weight{uom && <span className="ml-0.5 font-semibold normal-case text-indigo-500">({uom})</span>}
+                  </th>
+                  {/* Both prices are per the stocking UOM — the sales line may quote a
+                      different unit, so say which one these are in. */}
+                  <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    GRN Cost{uom && <span className="ml-0.5 font-semibold normal-case text-indigo-500">(/{uom})</span>}
+                  </th>
+                  <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Selling{uom && <span className="ml-0.5 font-semibold normal-case text-indigo-500">(/{uom})</span>}
+                  </th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN</th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Store / Location</th>
                 </tr>
@@ -262,7 +280,12 @@ export default function SalesOrderRollPickerModal({
             <span className="text-slate-500">
               Selected: <span className="font-bold text-slate-700">{selectedRolls.length} roll{selectedRolls.length !== 1 ? 's' : ''}</span>
             </span>
-            <span className="rounded bg-indigo-100 px-2 py-0.5 font-bold text-indigo-700 tabular-nums">{fmt(selectedWeight)} kg</span>
+            <span
+              className="rounded bg-indigo-100 px-2 py-0.5 font-bold text-indigo-700 tabular-nums"
+              title="Total the selected rolls hold, in the product's stocking UOM. The sales line may sell less than this — the last roll is cut at dispatch."
+            >
+              {fmt(selectedWeight)} {uom}
+            </span>
             {distinctSelling.size > 1 && (
               <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700" title="Old stock sells at its old price, new stock at its new price">
                 {distinctSelling.size} selling prices — will split into {distinctSelling.size} lines

@@ -41,6 +41,11 @@ const SELECT_ERR_CLS =
   'block w-full rounded border border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-1 focus:ring-red-500/20 cursor-pointer'
 const LABEL_CLS = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
 const ERR_CLS   = 'text-[10px] text-red-500 leading-tight'
+// Quantity inputs accept 4 decimals, so half a tick is the smallest difference a user can
+// express. Comparisons against roll capacity must forgive anything below it — converting
+// Yard to metres rounds, and 2 yd off a 1.828799 m remnant is a valid sale, not an
+// over-sell. Mirrors Quantity::toleranceFor() on the backend.
+const QTY_TOLERANCE = 0.00005
 const TABLE_INPUT =
   'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white'
 const TABLE_INPUT_RO =
@@ -307,6 +312,7 @@ function emptyItem() {
     product_code:    '',
     product_name:    '',
     unit_id:         '',
+    base_unit_type_id:     null, // the product's stocking UOM — roll weights and stock are in it
     base_unit_category_id: null, // limits the UOM dropdown to units convertible to the stocking UOM
     quantity:        '',
     unit_price:      '',
@@ -330,10 +336,16 @@ function isColorAttributeTypeName(name) {
   return n === 'color' || n === 'colour'
 }
 
+// A roll line no longer derives its quantity from the rolls: the customer may buy 50 yd
+// off a 100 m roll, and the roll gets cut at dispatch. Attaching rolls auto-fills the
+// quantity with their full capacity, and the user is free to lower it.
 function rowQty(row) {
-  return row.pieces.length > 0
-    ? row.pieces.reduce((s, p) => s + (parseFloat(p.weight) || 0), 0)
-    : parseFloat(row.quantity) || 0
+  return parseFloat(row.quantity) || 0
+}
+
+/** What the attached rolls hold, in the product's stocking UOM (roll weights are base). */
+function rollCapacityBase(row) {
+  return row.pieces.reduce((sum, p) => sum + (parseFloat(p.weight) || 0), 0)
 }
 
 function calcItem(row, discountEnabled, taxEnabled) {
@@ -348,8 +360,13 @@ function calcItem(row, discountEnabled, taxEnabled) {
   return { qty, gross, discAmt, taxAmt, amount }
 }
 
-// Below-cost guard basis: the dearest attached roll's GRN cost, or the latest
-// confirmed GRN cost (cost_hint) for manual no-roll lines. Null = unknown.
+// Below-cost guard basis: the dearest attached roll's GRN cost, or the latest confirmed
+// GRN cost (cost_hint) for manual no-roll lines. Null = unknown.
+//
+// Every cost the API returns is PER THE STOCKING UOM (see ProductPricingService), while
+// the line is priced in the UOM the customer buys in — so the two must be brought into
+// one unit before they can be compared, or a per-yard price would be judged against a
+// per-metre cost and the warning would fire at random.
 function rowCostBasis(row) {
   if (row.pieces.length > 0) {
     const costs = row.pieces.map((p) => Number(p.grn_unit_price) || 0).filter((c) => c > 0)
@@ -358,9 +375,15 @@ function rowCostBasis(row) {
   return row.cost_hint != null ? Number(row.cost_hint) : null
 }
 
-function isBelowCost(row) {
+/** The line's price, re-expressed per the stocking UOM. `factor` converts line -> base. */
+function priceInBase(row, factor) {
   const price = parseFloat(row.unit_price)
-  const cost  = rowCostBasis(row)
+  return price > 0 && factor > 0 ? price / factor : 0
+}
+
+function isBelowCost(row, factor = 1) {
+  const cost  = rowCostBasis(row) // per base UOM
+  const price = priceInBase(row, factor)
   return cost != null && price > 0 && price < cost
 }
 
@@ -490,6 +513,70 @@ export default function SalesOrderFormPage() {
     }))
   }
 
+  const unitById = new Map(unitTypes.map((u) => [String(u.id), u]))
+  const symbolOf = (u) => u?.symbol ?? u?.name ?? ''
+
+  /**
+   * How the line's selling UOM (Yard) relates to the product's stocking UOM (m).
+   * base_rate is each unit's rate from its category's reference unit, so within a
+   * category:  factor(line -> base) = base_rate[base] / base_rate[line].
+   * Roll weights and stock are in base; the line's quantity and price are not.
+   */
+  const conversionFor = (row) => {
+    const line = unitById.get(String(row.unit_id ?? ''))
+    const base = unitById.get(String(row.base_unit_type_id ?? ''))
+    if (!line || !base) return null
+
+    const same   = String(line.id) === String(base.id)
+    const factor = same
+      ? 1
+      : (line.base_rate && base.base_rate ? base.base_rate / line.base_rate : null)
+
+    return { same, factor, lineSymbol: symbolOf(line), baseSymbol: symbolOf(base) }
+  }
+
+  /** The rolls' full capacity, expressed in the UOM the customer is buying in. */
+  const capacityInLineUom = (row) => {
+    const conv = conversionFor(row)
+    const base = rollCapacityBase(row)
+
+    return conv?.factor ? base / conv.factor : base
+  }
+
+  /**
+   * A price stored per the stocking UOM (43.74 /m), shown per the line's UOM (40 /yd).
+   *
+   * A price per unit U is worth `factor(U -> base)` base units, so it scales by the same
+   * factor as the quantity — never the inverse. 43.74/m x 0.9144 m/yd = 40/yd.
+   */
+  const priceInLineUom = (basePrice, row) => {
+    const factor = conversionFor(row)?.factor
+    if (basePrice == null) return null
+
+    return factor ? Number(basePrice) * factor : Number(basePrice)
+  }
+
+  /** Re-price a line when its UOM changes: 400/m becomes 365.76/yd, not 400/yd. */
+  const repriceForUnit = (row, previousUnitId) => {
+    const from = unitById.get(String(previousUnitId ?? ''))
+    const to   = unitById.get(String(row.unit_id ?? ''))
+    const price = parseFloat(row.unit_price)
+
+    if (!from || !to || !from.base_rate || !to.base_rate || !(price > 0)) return row
+
+    return { ...row, unit_price: String(Number((price * (from.base_rate / to.base_rate)).toFixed(4))) }
+  }
+
+  /** Attaching or removing rolls re-fills the quantity with their full capacity. */
+  const fillQuantityFromRolls = (row) => ({
+    ...row,
+    quantity: row.pieces.length > 0
+      ? String(Number(capacityInLineUom(row).toFixed(4)))
+      : '',
+  })
+
+  const fmtQty = (n, max = 4) => Number(n).toLocaleString(undefined, { maximumFractionDigits: max })
+
   // Strictly the customers of the selected Customer Type — customers without a
   // type on their master record only appear before a type is chosen.
   const filteredCustomers = useMemo(
@@ -557,6 +644,7 @@ export default function SalesOrderFormPage() {
         product_code: it.product?.product_code ?? '',
         product_name: it.product?.name         ?? '',
         unit_id:      it.unit_id != null ? String(it.unit_id) : '',
+        base_unit_type_id:     it.product?.base_unit_type_id ?? null,
         base_unit_category_id: it.product?.base_unit_category_id ?? null,
         quantity:     it.quantity,
         unit_price:   it.unit_price,
@@ -633,23 +721,27 @@ export default function SalesOrderFormPage() {
         String(r.attribute_id || '') === String(scan.piece.attribute_id ?? '') &&
         Number(r.pieces[0]?.selling_price ?? 0) === Number(scan.selling_price ?? 0))
       if (existing) {
-        return prev.map((r) => r._key === existing._key ? { ...r, pieces: [...r.pieces, piece] } : r)
+        return prev.map((r) => r._key === existing._key
+          ? fillQuantityFromRolls({ ...r, pieces: [...r.pieces, piece] })
+          : r)
       }
-      const line = {
+      // A scanned line defaults to the product's stocking UOM and the roll's full length.
+      // The user can then switch to a selling UOM (Yard) and lower the quantity — the
+      // roll is cut at dispatch.
+      const line = fillQuantityFromRolls({
         ...emptyItem(),
         product_id:   scan.product.id,
         product_code: scan.product.product_code ?? '',
         product_name: scan.product.name ?? '',
-        // Scanned lines are always in the stocking UOM — the quantity is the sum of
-        // the rolls' weights, which are stored in that unit.
         unit_id:      scan.product.unit?.id != null ? String(scan.product.unit.id) : '',
+        base_unit_type_id:     scan.product.base_unit_type_id ?? null,
         base_unit_category_id: scan.product.base_unit_category_id ?? null,
         unit_price:   scan.selling_price != null ? String(scan.selling_price) : '',
         no_selling_price: scan.selling_price == null,
         attribute_id: scan.piece.attribute_id != null ? String(scan.piece.attribute_id) : '',
         color_name:   scan.piece.color ?? '',
         pieces:       [piece],
-      }
+      })
       // Replace a single untouched empty row instead of appending below it
       const isBlank = (r) => !r.product_id && r.pieces.length === 0 && !r.quantity && !r.unit_price
       if (prev.length === 1 && isBlank(prev[0])) return [line]
@@ -692,7 +784,9 @@ export default function SalesOrderFormPage() {
 
   const removePiece = (rowKey, pieceCode) => {
     setItems((prev) => prev
-      .map((r) => r._key === rowKey ? { ...r, pieces: r.pieces.filter((p) => p.piece_code !== pieceCode) } : r)
+      .map((r) => r._key === rowKey
+        ? fillQuantityFromRolls({ ...r, pieces: r.pieces.filter((p) => p.piece_code !== pieceCode) })
+        : r)
       // A scanned line with no pieces left has no quantity — drop it (keep at least one row)
       .filter((r, _, arr) => !(r._key === rowKey && r.pieces.length === 0 && arr.length > 1))
       .map((r) => r._key === rowKey && r.pieces.length === 0 ? emptyItem() : r)
@@ -733,6 +827,7 @@ export default function SalesOrderFormPage() {
             product_code: product.product_code ?? '',
             product_name: product.name ?? '',
             unit_id:      defaultUnitTypeId != null ? String(defaultUnitTypeId) : '',
+            base_unit_type_id:     product.base_unit_type_id ?? null,
             base_unit_category_id: product.base_unit_category_id ?? null,
             attribute_id: '',
             color_name:   '',
@@ -756,16 +851,20 @@ export default function SalesOrderFormPage() {
     // keep the latest GRN cost on the row as the below-cost warning basis.
     getProductSalePrice(product.id)
       .then(({ unit_price, cost_price }) => {
-        setItems((prev) => prev.map((row) =>
-          row._key === rowKey
-            ? {
-                ...row,
-                unit_price:       !row.unit_price && unit_price != null ? String(unit_price) : row.unit_price,
-                cost_hint:        cost_price ?? null,
-                no_selling_price: unit_price == null,
-              }
-            : row
-        ))
+        setItems((prev) => prev.map((row) => {
+          if (row._key !== rowKey) return row
+
+          // Both prices arrive per the stocking UOM. The selling price is shown in the
+          // line's own unit; the cost stays in base, which is what isBelowCost compares in.
+          const listPrice = priceInLineUom(unit_price, row)
+
+          return {
+            ...row,
+            unit_price:       !row.unit_price && listPrice != null ? String(Number(listPrice.toFixed(4))) : row.unit_price,
+            cost_hint:        cost_price ?? null,
+            no_selling_price: unit_price == null,
+          }
+        }))
       })
       .catch(() => { /* silent — price stays manual */ })
 
@@ -806,7 +905,7 @@ export default function SalesOrderFormPage() {
       const base = prev[idx]
 
       if (pieces.length === 0) {
-        return prev.map((r) => r._key === rowKey ? { ...r, pieces: [] } : r)
+        return prev.map((r) => r._key === rowKey ? fillQuantityFromRolls({ ...r, pieces: [] }) : r)
       }
 
       // One line per colour + SELLING price — rolls from shipments costed at
@@ -819,16 +918,24 @@ export default function SalesOrderFormPage() {
         groups.get(key).push(piece)
       }
 
-      const lines = [...groups.values()].map((groupPieces, i) => ({
-        ...(i === 0 ? base : { ...emptyItem(), ...base, _key: Date.now() + Math.random() + i }),
-        pieces:       groupPieces,
-        // Each group sells at its rolls' own shipment price (still editable);
-        // rolls without a resolved price keep the line's existing price.
-        unit_price:   groupPieces[0].selling_price != null ? String(groupPieces[0].selling_price) : base.unit_price,
-        attribute_id: groupPieces[0].attribute_id != null ? String(groupPieces[0].attribute_id) : '',
-        color_name:   groupPieces[0].color ?? '',
-        expanded:     false,
-      }))
+      // Changing which rolls are on a line re-fills its quantity with their full
+      // capacity — the user then lowers it if the customer wants only part.
+      const lines = [...groups.values()].map((groupPieces, i) => {
+        const line = i === 0 ? base : { ...emptyItem(), ...base, _key: Date.now() + Math.random() + i }
+        // The roll's shipment price is per the stocking UOM — show it in the line's unit.
+        const rollPrice = priceInLineUom(groupPieces[0].selling_price, line)
+
+        return fillQuantityFromRolls({
+          ...line,
+          pieces:       groupPieces,
+          // Each group sells at its rolls' own shipment price (still editable);
+          // rolls without a resolved price keep the line's existing price.
+          unit_price:   rollPrice != null ? String(Number(rollPrice.toFixed(4))) : base.unit_price,
+          attribute_id: groupPieces[0].attribute_id != null ? String(groupPieces[0].attribute_id) : '',
+          color_name:   groupPieces[0].color ?? '',
+          expanded:     false,
+        })
+      })
 
       const next = [...prev]
       next.splice(idx, 1, ...lines)
@@ -853,7 +960,22 @@ export default function SalesOrderFormPage() {
   }, [])
 
   const removeRow   = (idx)   => setItems((prev) => prev.length > 1 ? prev.filter((_, i) => i !== idx) : [emptyItem()])
-  const setRowField = (idx, field, value) => setItems((prev) => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row))
+
+  const setRowField = (idx, field, value) => setItems((prev) => prev.map((row, i) => {
+    if (i !== idx) return row
+
+    let next = { ...row, [field]: value }
+
+    if (field === 'unit_id') {
+      // Switching from metres to yards must re-express BOTH the quantity and the price,
+      // or the same numbers would silently come to mean something else — 400 would go
+      // from "per metre" to "per yard", a 9% overcharge nobody typed.
+      next = repriceForUnit(next, row.unit_id)
+      if (next.pieces.length > 0) next = fillQuantityFromRolls(next)
+    }
+
+    return next
+  }))
   const toggleExpanded = (idx) => setItems((prev) => prev.map((row, i) => i === idx ? { ...row, expanded: !row.expanded } : row))
 
   /* ── Alt+N shortcut ───────────────────────────────────────── */
@@ -914,7 +1036,9 @@ export default function SalesOrderFormPage() {
     if (!form.sales_person_id)
       clientErrors.sales_person_id = ['Sales person is required.']
 
-    const validItems = items.filter((r) => r.product_id && (r.pieces.length > 0 || parseFloat(r.quantity) > 0))
+    // Roll lines carry a real quantity now (auto-filled from the rolls, then editable),
+    // so every line needs one — a blank roll line is no longer "sell them whole".
+    const validItems = items.filter((r) => r.product_id && parseFloat(r.quantity) > 0)
     if (validItems.length === 0)
       clientErrors.items = ['Scan a piece or add at least one product with a valid quantity.']
 
@@ -922,6 +1046,17 @@ export default function SalesOrderFormPage() {
     const unpickedLine = items.find((r) => r.product_id && r.pieces.length === 0 && r.available_count > 0)
     if (unpickedLine)
       clientErrors.items = [`${unpickedLine.product_name} has rolls in stock — use Select Rolls to choose which rolls to sell.`]
+
+    // You cannot sell more than the attached rolls physically hold — but the comparison
+    // must forgive the rounding of the unit conversion itself, or selling exactly the
+    // remainder of a roll (2 yd off 1.828799 m) would be rejected as an over-sell.
+    const overSold = items.find((r) =>
+      r.pieces.length > 0 && rowQty(r) > capacityInLineUom(r) + QTY_TOLERANCE)
+    if (overSold)
+      clientErrors.items = [
+        `${overSold.product_name}: the selected rolls hold only ${fmtQty(capacityInLineUom(overSold))} ` +
+        `${conversionFor(overSold)?.lineSymbol ?? ''} — add another roll or reduce the quantity.`,
+      ]
 
     if (Object.keys(clientErrors).length) {
       setErrors(clientErrors)
@@ -1005,41 +1140,99 @@ export default function SalesOrderFormPage() {
 
   /* ── Shared line-item renderers ───────────────────────────── */
 
-  const renderPieceList = (row) => (
-    <div className="rounded border border-indigo-100 bg-indigo-50/40 px-2 py-1">
-      <table className="w-full text-[11px]">
-        <thead>
-          <tr className="text-left text-[9px] font-bold uppercase tracking-wider text-indigo-400">
-            <th className="py-0.5 pr-2">Piece Code</th>
-            <th className="py-0.5 pr-2">Roll No</th>
-            <th className="py-0.5 pr-2 text-right">Weight</th>
-            <th className="py-0.5 pr-2 text-right">GRN Price</th>
-            <th className="w-6"></th>
-          </tr>
-        </thead>
-        <tbody>
-          {row.pieces.map((p) => (
-            <tr key={p.piece_code} className="text-slate-600">
-              <td className="py-0.5 pr-2 font-mono">{p.piece_code}</td>
-              <td className="py-0.5 pr-2">{p.roll_no || '—'}</td>
-              <td className="py-0.5 pr-2 text-right tabular-nums">{Number(p.weight).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
-              <td className="py-0.5 pr-2 text-right tabular-nums">{p.grn_unit_price ? Number(p.grn_unit_price).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}</td>
-              <td className="py-0.5 text-center">
-                <button
-                  type="button"
-                  onClick={() => removePiece(row._key, p.piece_code)}
-                  className="rounded p-0.5 text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors"
-                  title="Remove piece"
-                >
-                  <X size={10} />
-                </button>
-              </td>
+  /**
+   * Mirrors the server's allocation (RollService::distribute): the quantity fills the
+   * rolls in order, so only the last one it reaches is left partly used — and that one
+   * gets cut at dispatch. Shown here so the cut is never a surprise at the warehouse.
+   */
+  const rollTakes = (row) => {
+    const factor = conversionFor(row)?.factor ?? 1
+    // Never ask for more than the rolls hold: the conversion cannot land exactly on the
+    // roll's length, and the server snaps that difference away rather than stranding it.
+    let remaining = Math.min(rowQty(row) * factor, rollCapacityBase(row))
+
+    return row.pieces.map((p) => {
+      const held = parseFloat(p.weight) || 0
+      let take = Math.max(0, Math.min(remaining, held))
+
+      // A leftover too small to type is dust, not a remnant — the whole roll goes.
+      if (held - take < QTY_TOLERANCE) take = held
+      remaining -= take
+
+      return { ...p, take, cut: take > 0 && held - take >= QTY_TOLERANCE }
+    })
+  }
+
+  /**
+   * What this line actually takes out of stock, in the stocking UOM.
+   *
+   * On a roll line the rolls are the physical truth, so it is the sum of what each roll
+   * gives up — the figure SalesOrderService posts to the ledger. Re-deriving it from the
+   * typed quantity instead would read 510.000016 m for 557.7428 yd: 510 m has no exact
+   * 4-decimal equivalent in yards, and the quantity box only holds 4. The rolls hold
+   * 510 m and 510 m is what leaves, so that is what we show.
+   */
+  const baseQtyOf = (row) => {
+    const factor = conversionFor(row)?.factor ?? 1
+
+    return row.pieces.length > 0
+      ? rollTakes(row).reduce((sum, p) => sum + p.take, 0)
+      : rowQty(row) * factor
+  }
+
+  const renderPieceList = (row) => {
+    const takes    = rollTakes(row)
+    const cutCount = takes.filter((t) => t.cut).length
+    const baseUom  = conversionFor(row)?.baseSymbol ?? ''
+
+    return (
+      <div className="rounded border border-indigo-100 bg-indigo-50/40 px-2 py-1">
+        {cutCount > 0 && (
+          <p className={`mb-1 text-[10px] font-semibold ${cutCount > 1 ? 'text-amber-600' : 'text-indigo-500'}`}>
+            {cutCount === 1
+              ? '1 roll will be cut — 1 new remnant label to print.'
+              : `${cutCount} rolls will be cut — ${cutCount} new remnant labels to print.`}
+          </p>
+        )}
+        <table className="w-full text-[11px]">
+          <thead>
+            <tr className="text-left text-[9px] font-bold uppercase tracking-wider text-indigo-400">
+              <th className="py-0.5 pr-2">Piece Code</th>
+              <th className="py-0.5 pr-2">Roll No</th>
+              <th className="py-0.5 pr-2 text-right">Holds ({baseUom})</th>
+              <th className="py-0.5 pr-2 text-right">Selling ({baseUom})</th>
+              <th className="py-0.5 pr-2 text-right">GRN Cost{baseUom && ` (/${baseUom})`}</th>
+              <th className="w-6"></th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
+          </thead>
+          <tbody>
+            {takes.map((p) => (
+              <tr key={p.piece_code} className="text-slate-600">
+                <td className="py-0.5 pr-2 font-mono">{p.piece_code}</td>
+                <td className="py-0.5 pr-2">{p.roll_no || '—'}</td>
+                <td className="py-0.5 pr-2 text-right tabular-nums">{fmtQty(p.weight)}</td>
+                <td className="py-0.5 pr-2 text-right tabular-nums">
+                  <span className={p.cut ? 'font-bold text-amber-600' : ''}>{fmtQty(p.take)}</span>
+                  {p.cut && <span className="ml-1 text-[9px] font-bold text-amber-500">CUT</span>}
+                </td>
+                <td className="py-0.5 pr-2 text-right tabular-nums">{p.grn_unit_price ? Number(p.grn_unit_price).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}</td>
+                <td className="py-0.5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => removePiece(row._key, p.piece_code)}
+                    className="rounded p-0.5 text-slate-300 hover:bg-red-50 hover:text-red-500 transition-colors"
+                    title="Remove piece"
+                  >
+                    <X size={10} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
 
   const renderItemsTable = () => (
     <div className="overflow-x-auto">
@@ -1134,23 +1327,53 @@ export default function SalesOrderFormPage() {
                       onNext={() => focusCell(row._key, 'price')}
                     />
                   </td>
+                  {/* Unit Price — quoted per the line's UOM (what the customer is told).
+                      The stock ledger stores it per the stocking UOM; the hint shows that. */}
                   <td className="px-1.5 py-1">
-                    <input
-                      ref={setCellRef(row._key, 'price')}
-                      type="number" min="0" step="0.01" placeholder="0.00" value={row.unit_price}
-                      onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          if (!isScanned) focusCell(row._key, 'qty')
-                          else if (discountEnabled) focusCell(row._key, 'disc')
-                          else scanInputRef.current?.focus()
-                        }
-                      }}
-                      className={isBelowCost(row) ? TABLE_INPUT_WARN : TABLE_INPUT} />
-                    {isBelowCost(row) && (
-                      <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">Below cost ({fmt(rowCostBasis(row))})</p>
-                    )}
+                    {(() => {
+                      const conv      = conversionFor(row)
+                      const factor    = conv?.factor ?? 1
+                      const belowCost = isBelowCost(row, factor)
+                      const price     = parseFloat(row.unit_price) || 0
+
+                      return (
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-0.5">
+                            <input
+                              ref={setCellRef(row._key, 'price')}
+                              type="number" min="0" step="0.01" placeholder="0.00" value={row.unit_price}
+                              onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  if (!isScanned) focusCell(row._key, 'qty')
+                                  else if (discountEnabled) focusCell(row._key, 'disc')
+                                  else scanInputRef.current?.focus()
+                                }
+                              }}
+                              className={belowCost ? TABLE_INPUT_WARN : TABLE_INPUT} />
+                            {conv && (
+                              <span className="shrink-0 text-[9px] font-semibold leading-none text-slate-400">
+                                /{conv.lineSymbol}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* What the stock ledger will record, so a per-yard quote can be
+                              checked against a per-metre cost without mental arithmetic. */}
+                          {conv && !conv.same && conv.factor && price > 0 && (
+                            <span className="text-[9px] font-medium leading-none text-indigo-500">
+                              = {fmtQty(price / conv.factor, 4)} /{conv.baseSymbol}
+                            </span>
+                          )}
+                          {belowCost && (
+                            <p className="text-[9px] font-semibold leading-tight text-amber-600">
+                              Below cost ({fmt(rowCostBasis(row) * factor)}/{conv?.lineSymbol ?? ''})
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })()}
                     {row.no_selling_price && !row.unit_price && (
                       <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">No selling price on product</p>
                     )}
@@ -1159,13 +1382,47 @@ export default function SalesOrderFormPage() {
                     )}
                   </td>
                   <td className="px-1.5 py-1">
-                    {isScanned ? (
-                      <input readOnly value={qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} className={`${TABLE_INPUT_RO} text-right tabular-nums`} title="Derived from allocated roll weights" />
-                    ) : row.product_id && row.available_count > 0 ? (
+                    {isScanned ? (() => {
+                      // Editable: the customer may take less than the rolls hold, and the
+                      // last roll reached is cut at dispatch. Capacity is the ceiling.
+                      const conv     = conversionFor(row)
+                      const capacity = capacityInLineUom(row)
+                      const over     = qty > capacity + QTY_TOLERANCE
+
+                      return (
+                        <div className="flex flex-col gap-0.5">
+                          <input
+                            ref={setCellRef(row._key, 'qty')}
+                            type="number" min="0" step="0.0001" value={row.quantity}
+                            onChange={(e) => setRowField(idx, 'quantity', e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, discountEnabled ? 'disc' : 'product') }
+                            }}
+                            className={`${over ? TABLE_INPUT_WARN : TABLE_INPUT} text-right tabular-nums`}
+                            title={`Rolls hold ${fmtQty(capacity)} ${conv?.lineSymbol ?? ''} — sell all or part`}
+                          />
+                          {over ? (
+                            <span className="text-[9px] font-medium text-red-500 leading-none">
+                              Rolls hold only {fmtQty(capacity)} {conv?.lineSymbol}
+                            </span>
+                          ) : (
+                            <span className="text-[9px] text-slate-400 leading-none">
+                              of {fmtQty(capacity)} {conv?.lineSymbol}
+                            </span>
+                          )}
+                          {/* What actually leaves stock */}
+                          {conv && !conv.same && conv.factor && qty > 0 && (
+                            <span className="text-[9px] font-medium text-indigo-500 leading-none">
+                              = {fmtQty(baseQtyOf(row), 6)} {conv.baseSymbol}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })() : row.product_id && row.available_count > 0 ? (
                       <button
                         type="button"
                         onClick={() => setRollPickerKey(row._key)}
-                        title={`${row.available_count} rolls (${Number(row.available_weight).toLocaleString()} kg) in stock — select which rolls to sell`}
+                        title={`${row.available_count} rolls (${fmtQty(row.available_weight)} ${conversionFor(row)?.baseSymbol ?? ''}) in stock — select which rolls to sell`}
                         className="flex w-full items-center justify-center gap-1 rounded border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 hover:bg-violet-100 transition-colors"
                       >
                         <Boxes size={10} /> Select Rolls ({row.available_count})
@@ -1321,10 +1578,18 @@ export default function SalesOrderFormPage() {
                 />
               </div>
               <div>
-                <label className={LABEL_CLS}>Unit Price</label>
-                <input type="number" min="0" step="0.01" value={row.unit_price} onChange={(e) => setRowField(idx, 'unit_price', e.target.value)} className={isBelowCost(row) ? TABLE_INPUT_WARN : TABLE_INPUT} />
-                {isBelowCost(row) && (
-                  <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">Below cost ({fmt(rowCostBasis(row))})</p>
+                <label className={LABEL_CLS}>
+                  Unit Price{conversionFor(row)?.lineSymbol ? ` (/${conversionFor(row).lineSymbol})` : ''}
+                </label>
+                <input
+                  type="number" min="0" step="0.01" value={row.unit_price}
+                  onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
+                  className={isBelowCost(row, conversionFor(row)?.factor ?? 1) ? TABLE_INPUT_WARN : TABLE_INPUT}
+                />
+                {isBelowCost(row, conversionFor(row)?.factor ?? 1) && (
+                  <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">
+                    Below cost ({fmt(rowCostBasis(row) * (conversionFor(row)?.factor ?? 1))})
+                  </p>
                 )}
                 {row.no_selling_price && !row.unit_price && (
                   <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">No selling price on product</p>
@@ -1333,7 +1598,16 @@ export default function SalesOrderFormPage() {
               <div>
                 <label className={LABEL_CLS}>Quantity</label>
                 {isScanned ? (
-                  <input readOnly value={qty.toLocaleString(undefined, { maximumFractionDigits: 4 })} className={`${TABLE_INPUT_RO} text-right tabular-nums`} />
+                  <>
+                    <input
+                      type="number" min="0" step="0.0001" value={row.quantity}
+                      onChange={(e) => setRowField(idx, 'quantity', e.target.value)}
+                      className={`${TABLE_INPUT} text-right tabular-nums`}
+                    />
+                    <p className="mt-0.5 text-[9px] leading-tight text-slate-400">
+                      of {fmtQty(capacityInLineUom(row))} {conversionFor(row)?.lineSymbol} on the rolls
+                    </p>
+                  </>
                 ) : row.product_id && row.available_count > 0 ? (
                   <button
                     type="button"

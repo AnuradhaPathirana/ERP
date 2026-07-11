@@ -31,8 +31,9 @@ class StockTransaction extends Model
     protected $casts = [
         'transaction_date' => 'datetime',
         'expiry_date'      => 'date',
-        'qty_in'           => 'decimal:4',
-        'qty_out'          => 'decimal:4',
+        // Ledger movements are in the product's base UOM — decimal(20,6).
+        'qty_in'           => 'decimal:6',
+        'qty_out'          => 'decimal:6',
         'unit_price'       => 'decimal:8',
         'reference_id'     => 'integer',
         'product_id'       => 'integer',

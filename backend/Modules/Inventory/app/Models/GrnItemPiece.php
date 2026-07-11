@@ -25,6 +25,7 @@ class GrnItemPiece extends Model
         'store_id',
         'location_id',
         'piece_no',
+        'parent_piece_id',
         'weight',
         'roll_no',
         'piece_code',
@@ -42,7 +43,8 @@ class GrnItemPiece extends Model
         'store_id'              => 'integer',
         'location_id'           => 'integer',
         'piece_no'              => 'integer',
-        'weight'                => 'decimal:4',
+        'parent_piece_id'       => 'integer',
+        'weight'                => 'decimal:6',
         'printed_at'            => 'datetime',
         'created_by'            => 'integer',
     ];
@@ -50,6 +52,12 @@ class GrnItemPiece extends Model
     public function grnItem(): BelongsTo
     {
         return $this->belongsTo(GoodsReceivedNoteItem::class, 'grn_item_id');
+    }
+
+    /** The roll this one was cut from — null for rolls received on the GRN. */
+    public function parent(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'parent_piece_id');
     }
 
     public function grn(): BelongsTo

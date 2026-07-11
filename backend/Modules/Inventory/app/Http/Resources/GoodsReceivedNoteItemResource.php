@@ -6,6 +6,7 @@ namespace Modules\Inventory\Http\Resources;
 
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Modules\Inventory\Support\Quantity;
 
 class GoodsReceivedNoteItemResource extends JsonResource
 {
@@ -64,14 +65,34 @@ class GoodsReceivedNoteItemResource extends JsonResource
                     'notes'              => $a->batch?->notes,
                 ])
             ),
+            // The rolls this line was RECEIVED as. Offcuts created later by partial sales
+            // carry a parent_piece_id and are excluded — they are stock events after the
+            // fact, not part of the receipt, and counting them would break the roll
+            // editor's Σ rolls = Qty Received balance.
+            //
+            // Weights are stored in the product's stocking UOM (see GoodsReceivedNoteService)
+            // and handed back in the line's own UOM, which is what the rest of this payload
+            // — quantity_received, unit_price, line_total — is denominated in.
             'pieces' => $this->whenLoaded('pieces', fn () =>
-                $this->pieces->sortBy('piece_no')->values()->map(fn ($p) => [
-                    'id'      => $p->id,
-                    'piece_no' => $p->piece_no,
-                    'roll_no'  => $p->roll_no,
-                    'weight'   => $p->weight !== null ? (float) $p->weight : null,
-                ])
+                $this->pieces
+                    ->whereNull('parent_piece_id')
+                    ->sortBy('piece_no')
+                    ->values()
+                    ->map(fn ($p) => [
+                        'id'       => $p->id,
+                        'piece_no' => $p->piece_no,
+                        'roll_no'  => $p->roll_no,
+                        'weight'   => $p->weight !== null ? $this->inLineUom((float) $p->weight) : null,
+                    ])
             ),
         ];
+    }
+
+    /** Re-expresses a stocking-UOM quantity in the unit this line was received in. */
+    private function inLineUom(float $baseQuantity): float
+    {
+        $factor = (float) $this->conversion_factor;
+
+        return $factor > 0 ? Quantity::round($baseQuantity / $factor) : $baseQuantity;
     }
 }

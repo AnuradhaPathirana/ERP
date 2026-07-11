@@ -22,7 +22,9 @@ class ProductLocationStore extends Model
         'product_id'    => 'integer',
         'location_id'   => 'integer',
         'store_id'      => 'integer',
-        'current_stock' => 'decimal:4',
+        // Must match the column, decimal(20,6): a base-UOM balance can carry six places
+        // (45.720046 m), and a shorter cast would round them off on every read.
+        'current_stock' => 'decimal:6',
     ];
 
     public function product(): BelongsTo

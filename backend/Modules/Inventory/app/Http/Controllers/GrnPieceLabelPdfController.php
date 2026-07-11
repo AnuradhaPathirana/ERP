@@ -24,7 +24,7 @@ class GrnPieceLabelPdfController extends Controller
     {
         abort_if($goodsReceivedNote->status !== GrnStatus::Confirmed, 422, 'Piece labels are only available for confirmed GRNs.');
 
-        $pieces = GrnItemPiece::with(['product.baseUnit'])
+        $pieces = GrnItemPiece::with(['product.baseUnit', 'parent:id,piece_code'])
             ->where('grn_id', $goodsReceivedNote->id)
             ->orderBy('grn_item_id')
             ->orderBy('piece_no')
@@ -45,6 +45,9 @@ class GrnPieceLabelPdfController extends Controller
             // so that is the unit the sticker must state — not the GRN's buying unit.
             'uom'         => $piece->product?->baseUnit?->symbol ?? $piece->product?->baseUnit?->name,
             'roll_no'     => $piece->roll_no,
+            // Set when a sale cut this roll out of another: names the sticker it supersedes,
+            // so the operator peels the stale one off instead of leaving two live QR codes.
+            'replaces'    => $piece->parent?->piece_code,
             'qr_data_uri' => $writer->write(
                 new QrCode(
                     data:   "{$frontendUrl}/inventory/pieces/{$piece->piece_code}",
