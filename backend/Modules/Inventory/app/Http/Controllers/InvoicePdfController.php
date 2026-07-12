@@ -25,6 +25,8 @@ class InvoicePdfController extends Controller
             'salesOrder',
             'deliveryOrder',
             'customer',
+            // Supplier block on the tax invoice.
+            'company',
         ])->findOrFail($invoice->id);
 
         $pdf = Pdf::loadView('inventory::pdf.invoice', ['invoice' => $inv])

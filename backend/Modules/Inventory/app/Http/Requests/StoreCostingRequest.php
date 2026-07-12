@@ -26,7 +26,9 @@ class StoreCostingRequest extends FormRequest
             'transaction_date' => ['nullable', 'date'],
             'note'             => ['nullable', 'string'],
 
-            // Single total FOB/CIF charge — spread per unit across all lines.
+            // Single total FOB/CIF charge for the shipment — apportioned across the
+            // lines BY VALUE (see CostingService::computeBreakdown), which is the only
+            // basis that holds when the lines are received in different units.
             // Preferred over itemised expense rows (kept for backward compat).
             'common_charge_amount' => ['nullable', 'numeric', 'min:0'],
 
@@ -41,11 +43,14 @@ class StoreCostingRequest extends FormRequest
             'expenses.*.amount'           => ['required_with:expenses', 'numeric', 'min:0'],
             'expenses.*.note'             => ['nullable', 'string', 'max:255'],
 
-            // Per-line overrides of the product breakdown (margin or typed price)
-            'items'                 => ['nullable', 'array'],
-            'items.*.grn_item_id'   => ['required_with:items', 'integer', 'min:1'],
-            'items.*.margin_pct'    => ['nullable', 'numeric', 'min:0', 'max:1000'],
-            'items.*.selling_price' => ['nullable', 'numeric', 'min:0'],
+            // Per-line overrides of the product breakdown (margin, or a typed price).
+            // A typed price is quoted PER THE PRODUCT'S STOCKING UOM — the unit the
+            // customer is invoiced in. Naming the field for its unit is the point: a
+            // bare "selling_price" is what let a per-Roll figure be read as per-Kg.
+            'items'                      => ['nullable', 'array'],
+            'items.*.grn_item_id'        => ['required_with:items', 'integer', 'min:1'],
+            'items.*.margin_pct'         => ['nullable', 'numeric', 'min:0', 'max:1000'],
+            'items.*.selling_price_base' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 

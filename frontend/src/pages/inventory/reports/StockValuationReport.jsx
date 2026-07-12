@@ -7,6 +7,7 @@ import { getAllCategories } from '../../../api/categories'
 import { getAllProducts } from '../../../api/products'
 import { getAllStores } from '../../../api/stores'
 import Pagination from '../../../components/ui/Pagination'
+import Money from '../../../components/ui/Money'
 import Breadcrumb from '../../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../../components/TableFilter'
 import FilterSearchSelect from '../../../components/ui/FilterSearchSelect'
@@ -82,7 +83,7 @@ export default function StockValuationReport() {
         {totalValue > 0 && (
           <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2 text-right">
             <div className="text-[10px] font-semibold uppercase tracking-wider text-green-600">Total Inventory Value</div>
-            <div className="text-lg font-bold text-green-700">{fmt(totalValue)}</div>
+            <div className="text-lg font-bold text-green-700"><Money value={totalValue} /></div>
           </div>
         )}
       </div>
@@ -162,8 +163,8 @@ export default function StockValuationReport() {
                         <td className="px-3 py-2 text-slate-500">{row.location_name}</td>
                         <td className="px-3 py-2 text-slate-500">{row.store_name}</td>
                         <td className="px-3 py-2 text-right font-medium text-slate-700">{fmt(row.current_stock)}</td>
-                        <td className="px-3 py-2 text-right text-slate-600">{fmt(row.avg_unit_cost)}</td>
-                        <td className="px-3 py-2 text-right font-bold text-green-700">{fmt(row.total_value)}</td>
+                        <td className="px-3 py-2 text-right text-slate-600"><Money value={row.avg_unit_cost} /></td>
+                        <td className="px-3 py-2 text-right font-bold text-green-700"><Money value={row.total_value} /></td>
                       </tr>
                     ))
                   )}
@@ -173,7 +174,7 @@ export default function StockValuationReport() {
                     <tr className="border-t-2 border-slate-200 bg-slate-50">
                       <td colSpan={8} className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider text-slate-600">Page Total</td>
                       <td className="px-3 py-2 text-right text-xs font-bold text-green-700">
-                        {fmt(rows.reduce((s, r) => s + Number(r.total_value), 0))}
+                        <Money value={rows.reduce((s, r) => s + Number(r.total_value), 0)} />
                       </td>
                     </tr>
                   </tfoot>

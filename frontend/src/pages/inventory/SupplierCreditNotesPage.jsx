@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { getSupplierCreditNotes } from '../../api/supplierCreditNotes'
 import { getAllSuppliers } from '../../api/suppliers'
 import Pagination from '../../components/ui/Pagination'
+import Money from '../../components/ui/Money'
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
 import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
@@ -126,8 +127,8 @@ export default function SupplierCreditNotesPage() {
                             {cn.credit_type_label}
                           </span>
                         </td>
-                        <td className="px-3 py-2 text-right text-slate-600 tabular-nums">{Number(cn.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                        <td className="px-3 py-2 text-right font-medium text-slate-700 tabular-nums">{Number(cn.remaining_balance).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 text-right text-slate-600"><Money value={cn.amount} /></td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-700"><Money value={cn.remaining_balance} /></td>
                         <td className="px-3 py-2 text-slate-500 truncate max-w-xs" title={cn.remark}>{cn.remark || <span className="italic text-slate-300">—</span>}</td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[cn.status] ?? 'bg-slate-100 text-slate-500'}`}>

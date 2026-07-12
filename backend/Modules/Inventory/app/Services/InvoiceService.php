@@ -11,6 +11,7 @@ use Modules\Inventory\DTOs\InvoiceData;
 use Modules\Inventory\Enums\DeliveryOrderStatus;
 use Modules\Inventory\Enums\InvoiceStatus;
 use Modules\Inventory\Enums\SalesOrderStatus;
+use Modules\Inventory\Models\Company;
 use Modules\Inventory\Models\DeliveryOrder;
 use Modules\Inventory\Models\Invoice;
 use Modules\Inventory\Models\InvoiceItem;
@@ -72,6 +73,7 @@ class InvoiceService
             'salesOrder',
             'deliveryOrder',
             'customer',
+            'company',
         ])->findOrFail($id);
     }
 
@@ -154,8 +156,10 @@ class InvoiceService
                 'invoice_date'     => $data->invoiceDate,
                 'due_date'         => $data->dueDate,
                 'transport_charge' => $data->transportCharge ?? $invoice->transport_charge,
+                'company_id'       => $data->companyId ?? $invoice->company_id,
                 'delivery_address' => $data->deliveryAddress,
                 'remarks'          => $data->remarks,
+                'mode_of_payment'  => $data->modeOfPayment,
             ]);
 
             // Draft re-pricing: quantities are fixed by the source document;
@@ -245,12 +249,14 @@ class InvoiceService
                 'so_id'            => $so->id,
                 'do_id'            => $do->id,
                 'customer_id'      => $so->customer_id,
+                'company_id'       => $data->companyId ?? $this->defaultCompanyId(),
                 'invoice_date'     => $data->invoiceDate,
                 'due_date'         => $data->dueDate,
                 'status'           => InvoiceStatus::Draft,
                 'transport_charge' => $data->transportCharge ?? $this->defaultTransportCharge($so),
                 'delivery_address' => $data->deliveryAddress ?? $do->delivery_address,
                 'remarks'          => $data->remarks,
+                'mode_of_payment'  => $data->modeOfPayment,
                 'created_by'       => Auth::id(),
                 'subtotal'         => 0,
                 'grand_total'      => 0,
@@ -304,12 +310,14 @@ class InvoiceService
                 'so_id'            => $so->id,
                 'do_id'            => null,
                 'customer_id'      => $so->customer_id,
+                'company_id'       => $data->companyId ?? $this->defaultCompanyId(),
                 'invoice_date'     => $data->invoiceDate,
                 'due_date'         => $data->dueDate,
                 'status'           => InvoiceStatus::Draft,
                 'transport_charge' => $data->transportCharge ?? (float) $so->transport_charge,
                 'delivery_address' => $data->deliveryAddress ?? $so->delivery_address,
                 'remarks'          => $data->remarks,
+                'mode_of_payment'  => $data->modeOfPayment,
                 'created_by'       => Auth::id(),
                 'subtotal'         => 0,
                 'grand_total'      => 0,
@@ -364,6 +372,18 @@ class InvoiceService
             ->exists();
 
         return $hasLiveInvoice ? 0.0 : (float) $so->transport_charge;
+    }
+
+    /**
+     * A tax invoice has to name its supplier, so an invoice is never left without a
+     * company. Where the caller does not say which, adopt the earliest — correct for
+     * the single-company deployments, and re-pointable per invoice for the rest.
+     */
+    private function defaultCompanyId(): ?int
+    {
+        $id = Company::query()->orderBy('id')->value('id');
+
+        return $id !== null ? (int) $id : null;
     }
 
     private function doHasLiveInvoice(int $doId): bool

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Users } from 'lucide-react'
 import { getSupplierSummaryReport } from '../../../api/reports'
 import Pagination from '../../../components/ui/Pagination'
+import Money from '../../../components/ui/Money'
 import Breadcrumb from '../../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../../components/TableFilter'
 import { useTableFilter } from '../../../hooks/useTableFilter'
@@ -16,7 +17,6 @@ const CRUMBS = [
 
 const INITIAL_FILTERS = { search: '', date_from: '', date_to: '' }
 
-const fmt = (n) => Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })
 
 export default function SupplierSummaryReport() {
   const [page, setPage] = useState(1)
@@ -94,9 +94,9 @@ export default function SupplierSummaryReport() {
                         <td className="px-3 py-2 capitalize text-slate-500">{row.supplier_type?.replace('_', ' ') || <span className="italic text-slate-300">—</span>}</td>
                         <td className="max-w-[120px] truncate px-3 py-2 text-slate-500" title={row.email}>{row.email || <span className="italic text-slate-300">—</span>}</td>
                         <td className="px-3 py-2 text-right font-medium text-slate-700">{row.po_count}</td>
-                        <td className="px-3 py-2 text-right font-bold text-slate-800">{fmt(row.po_value)}</td>
+                        <td className="px-3 py-2 text-right font-bold text-slate-800"><Money value={row.po_value} /></td>
                         <td className="px-3 py-2 text-right font-medium text-slate-700">{row.grn_count}</td>
-                        <td className="px-3 py-2 text-right font-bold text-green-700">{fmt(row.grn_value)}</td>
+                        <td className="px-3 py-2 text-right font-bold text-green-700"><Money value={row.grn_value} /></td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{row.last_order_date || <span className="italic text-slate-300">—</span>}</td>
                       </tr>
                     ))
@@ -107,9 +107,9 @@ export default function SupplierSummaryReport() {
                     <tr className="border-t-2 border-slate-200 bg-slate-50">
                       <td colSpan={5} className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider text-slate-600">Totals</td>
                       <td className="px-3 py-2 text-right text-xs font-bold text-slate-800">{rows.reduce((s, r) => s + Number(r.po_count), 0)}</td>
-                      <td className="px-3 py-2 text-right text-xs font-bold text-slate-800">{fmt(rows.reduce((s, r) => s + Number(r.po_value), 0))}</td>
+                      <td className="px-3 py-2 text-right text-xs font-bold text-slate-800"><Money value={rows.reduce((s, r) => s + Number(r.po_value), 0)} /></td>
                       <td className="px-3 py-2 text-right text-xs font-bold text-slate-800">{rows.reduce((s, r) => s + Number(r.grn_count), 0)}</td>
-                      <td className="px-3 py-2 text-right text-xs font-bold text-green-700">{fmt(rows.reduce((s, r) => s + Number(r.grn_value), 0))}</td>
+                      <td className="px-3 py-2 text-right text-xs font-bold text-green-700"><Money value={rows.reduce((s, r) => s + Number(r.grn_value), 0)} /></td>
                       <td />
                     </tr>
                   </tfoot>

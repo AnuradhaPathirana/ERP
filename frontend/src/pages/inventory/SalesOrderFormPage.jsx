@@ -25,7 +25,9 @@ import { getAllAttributeTypes } from '../../api/attributeTypes'
 import { getAllAttributes } from '../../api/attributes'
 import Breadcrumb from '../../components/Breadcrumb'
 import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
+import Money from '../../components/ui/Money'
 import { confirmAction, showError, showSuccess, showWarning } from '../../utils/alerts'
+import { CURRENCY, fmtMoney, fmtMoneyWithSymbol } from '../../utils/currency'
 
 const CUSTOMER_TYPES = ['Trade', 'Retail', 'Wholesale', 'Corporate']
 
@@ -398,7 +400,8 @@ function normalizeScannedCode(raw) {
   return value
 }
 
-const fmt = (n) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+/** Money only. Quantities go through fmtQty — a weight tagged "Rs" is worse than no tag at all. */
+const fmt = fmtMoney
 
 const EMPTY_FORM = {
   order_date:       new Date().toISOString().slice(0, 10),
@@ -771,7 +774,7 @@ export default function SalesOrderFormPage() {
 
       mergePieceIntoLines(scan)
       const colorTag = scan.piece.color ? ` (${scan.piece.color})` : ''
-      const priceTag = scan.selling_price != null ? ` @ ${Number(scan.selling_price).toLocaleString()}` : ''
+      const priceTag = scan.selling_price != null ? ` @ ${fmtMoneyWithSymbol(scan.selling_price)}` : ''
       showSuccess(`${scan.product.name}${colorTag} — ${Number(scan.piece.weight).toLocaleString()}${priceTag} added.`)
     } catch (e) {
       showError(e.response?.status === 404 ? `Piece ${code} not found.` : 'Failed to resolve the scanned piece.')
@@ -1201,7 +1204,7 @@ export default function SalesOrderFormPage() {
               <th className="py-0.5 pr-2">Roll No</th>
               <th className="py-0.5 pr-2 text-right">Holds ({baseUom})</th>
               <th className="py-0.5 pr-2 text-right">Selling ({baseUom})</th>
-              <th className="py-0.5 pr-2 text-right">GRN Cost{baseUom && ` (/${baseUom})`}</th>
+              <th className="py-0.5 pr-2 text-right">GRN Cost ({CURRENCY}{baseUom && `/${baseUom}`})</th>
               <th className="w-6"></th>
             </tr>
           </thead>
@@ -1215,7 +1218,7 @@ export default function SalesOrderFormPage() {
                   <span className={p.cut ? 'font-bold text-amber-600' : ''}>{fmtQty(p.take)}</span>
                   {p.cut && <span className="ml-1 text-[9px] font-bold text-amber-500">CUT</span>}
                 </td>
-                <td className="py-0.5 pr-2 text-right tabular-nums">{p.grn_unit_price ? Number(p.grn_unit_price).toLocaleString(undefined, { minimumFractionDigits: 2 }) : '—'}</td>
+                <td className="py-0.5 pr-2 text-right tabular-nums">{p.grn_unit_price ? fmt(p.grn_unit_price) : '—'}</td>
                 <td className="py-0.5 text-center">
                   <button
                     type="button"
@@ -1244,12 +1247,14 @@ export default function SalesOrderFormPage() {
             <th className="px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Product</th>
             <th className="w-20 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Colour</th>
             <th className="w-16 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">UOM</th>
-            <th className="w-24 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
-            <th className="w-24 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Quantity</th>
-            <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Gross</th>
+            {/* Price is wider than Quantity by one step: its cell also carries the inline
+                "/kg" unit suffix, so the input itself ends up the same size. */}
+            <th className="w-36 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price ({CURRENCY})</th>
+            <th className="w-32 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Quantity</th>
+            <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Gross ({CURRENCY})</th>
             {discountEnabled && <th className="w-16 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-amber-500">Disc%</th>}
             {taxEnabled && <th className="w-16 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-sky-500">Tax%</th>}
-            <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-700">Amount</th>
+            <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-700">Amount ({CURRENCY})</th>
             <th className="w-8"></th>
           </tr>
         </thead>
@@ -1368,7 +1373,7 @@ export default function SalesOrderFormPage() {
                           )}
                           {belowCost && (
                             <p className="text-[9px] font-semibold leading-tight text-amber-600">
-                              Below cost ({fmt(rowCostBasis(row) * factor)}/{conv?.lineSymbol ?? ''})
+                              Below cost ({fmtMoneyWithSymbol(rowCostBasis(row) * factor)}/{conv?.lineSymbol ?? ''})
                             </p>
                           )}
                         </div>
@@ -1503,16 +1508,16 @@ export default function SalesOrderFormPage() {
             <td colSpan={itemColSpan - 2} className="px-3 py-1.5">
               <div className="flex items-center gap-4 text-xs">
                 <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
-                <span className="text-slate-500">Gross: <span className="font-bold text-slate-700">{fmt(totals.gross)}</span></span>
-                {discountEnabled && <span className="text-amber-600">Disc: <span className="font-bold">-{fmt(totals.disc)}</span></span>}
-                {taxEnabled && <span className="text-sky-600">Tax: <span className="font-bold">+{fmt(totals.tax)}</span></span>}
-                {transportCharge > 0 && <span className="text-slate-500">Transport: <span className="font-bold text-slate-700">{fmt(transportCharge)}</span></span>}
+                <span className="text-slate-500">Gross: <Money value={totals.gross} className="font-bold text-slate-700" /></span>
+                {discountEnabled && <span className="text-amber-600">Disc: -<Money value={totals.disc} className="font-bold" /></span>}
+                {taxEnabled && <span className="text-sky-600">Tax: +<Money value={totals.tax} className="font-bold" /></span>}
+                {transportCharge > 0 && <span className="text-slate-500">Transport: <Money value={transportCharge} className="font-bold text-slate-700" /></span>}
               </div>
             </td>
             <td className="px-3 py-1.5 text-right">
               <div className="flex flex-col items-end leading-tight">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Net Total</span>
-                <span className="text-base font-black text-indigo-700 tabular-nums">{fmt(netAmount)}</span>
+                <Money value={netAmount} className="text-base font-black text-indigo-700" />
               </div>
             </td>
             <td></td>
@@ -1579,7 +1584,7 @@ export default function SalesOrderFormPage() {
               </div>
               <div>
                 <label className={LABEL_CLS}>
-                  Unit Price{conversionFor(row)?.lineSymbol ? ` (/${conversionFor(row).lineSymbol})` : ''}
+                  Unit Price ({CURRENCY}{conversionFor(row)?.lineSymbol ? `/${conversionFor(row).lineSymbol}` : ''})
                 </label>
                 <input
                   type="number" min="0" step="0.01" value={row.unit_price}
@@ -1588,7 +1593,7 @@ export default function SalesOrderFormPage() {
                 />
                 {isBelowCost(row, conversionFor(row)?.factor ?? 1) && (
                   <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">
-                    Below cost ({fmt(rowCostBasis(row) * (conversionFor(row)?.factor ?? 1))})
+                    Below cost ({fmtMoneyWithSymbol(rowCostBasis(row) * (conversionFor(row)?.factor ?? 1))})
                   </p>
                 )}
                 {row.no_selling_price && !row.unit_price && (
@@ -1621,7 +1626,7 @@ export default function SalesOrderFormPage() {
                 )}
               </div>
               <div>
-                <label className={LABEL_CLS}>Gross</label>
+                <label className={LABEL_CLS}>Gross ({CURRENCY})</label>
                 <input readOnly value={gross > 0 ? fmt(gross) : ''} className={`${TABLE_INPUT_RO} text-right tabular-nums`} />
               </div>
               {discountEnabled && (
@@ -1637,7 +1642,7 @@ export default function SalesOrderFormPage() {
                 </div>
               )}
               <div>
-                <label className={LABEL_CLS}>Amount</label>
+                <label className={LABEL_CLS}>Amount ({CURRENCY})</label>
                 <input readOnly value={amount > 0 ? fmt(amount) : ''} className={`${TABLE_INPUT_RO} text-right font-bold tabular-nums`} />
               </div>
               {isScanned && (
@@ -1664,7 +1669,7 @@ export default function SalesOrderFormPage() {
         </div>
         <div className="flex gap-2">
           <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-center">
-            <div className="text-sm font-black leading-tight text-indigo-700 tabular-nums">{fmt(netAmount)}</div>
+            <Money value={netAmount} className="block text-sm font-black leading-tight text-indigo-700" />
             <div className="text-[9px] font-bold uppercase tracking-wider text-indigo-400">Net Amount</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-1.5 text-center">
@@ -1860,7 +1865,7 @@ export default function SalesOrderFormPage() {
                 </div>
                 <div className="flex flex-col items-end leading-tight">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Net Total</span>
-                  <span className="text-base font-black text-indigo-700 tabular-nums">{fmt(netAmount)}</span>
+                  <Money value={netAmount} className="text-base font-black text-indigo-700" />
                 </div>
               </div>
             </>

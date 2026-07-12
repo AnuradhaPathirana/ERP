@@ -47,7 +47,10 @@
 <div class="page">
 
   @php
-    $fmt = fn ($n) => number_format((float) $n, 2);
+    // Quantities stay bare; only the money columns carry a currency.
+    $fmt   = fn ($n) => number_format((float) $n, 2);
+    $money = fn ($n) => \Modules\Inventory\Support\Money::number((float) $n);
+    $cur   = \Modules\Inventory\Support\Money::code();
   @endphp
 
   {{-- ══ HEADER ══════════════════════════════════════════════ --}}
@@ -89,9 +92,9 @@
     </tr>
     <tr>
       <td class="info-label">Opening Value :</td>
-      <td class="info-value">{{ $fmt($header['opening_value']) }}</td>
+      <td class="info-value">{{ \Modules\Inventory\Support\Money::format((float) $header['opening_value']) }}</td>
       <td class="info-label">Closing Value :</td>
-      <td class="info-value">{{ $fmt($header['closing_value']) }}</td>
+      <td class="info-value">{{ \Modules\Inventory\Support\Money::format((float) $header['closing_value']) }}</td>
       <td class="info-label">Warehouse :</td>
       <td class="info-value">{{ $header['store_name'] ?? 'All' }}</td>
       <td class="info-label">Generated Time :</td>
@@ -110,7 +113,7 @@
         <th rowspan="2" style="width:24px;">#</th>
         <th rowspan="2">Item Description</th>
         <th rowspan="2" style="width:60px;">Unit</th>
-        <th rowspan="2" class="ta-r" style="width:65px;">Price</th>
+        <th rowspan="2" class="ta-r" style="width:65px;">Price ({{ $cur }})</th>
         <th colspan="2" class="group">Opening Balance</th>
         <th colspan="2" class="group">Purchase</th>
         <th colspan="2" class="group">Sales / Consumptions</th>
@@ -118,13 +121,13 @@
       </tr>
       <tr>
         <th class="sub sub-first" style="width:58px;">Qty</th>
-        <th class="sub" style="width:70px;">Value</th>
+        <th class="sub" style="width:70px;">Value ({{ $cur }})</th>
         <th class="sub sub-first" style="width:58px;">Qty</th>
-        <th class="sub" style="width:70px;">Value</th>
+        <th class="sub" style="width:70px;">Value ({{ $cur }})</th>
         <th class="sub sub-first" style="width:58px;">Qty</th>
-        <th class="sub" style="width:70px;">Value</th>
+        <th class="sub" style="width:70px;">Value ({{ $cur }})</th>
         <th class="sub sub-first" style="width:58px;">Qty</th>
-        <th class="sub" style="width:70px;">Value</th>
+        <th class="sub" style="width:70px;">Value ({{ $cur }})</th>
       </tr>
     </thead>
     <tbody>
@@ -133,15 +136,15 @@
         <td class="muted">{{ $i + 1 }}</td>
         <td>{{ $row['product_name'] }}</td>
         <td>{{ $row['unit'] ?? '—' }}</td>
-        <td class="ta-r">{{ $fmt($row['price']) }}</td>
+        <td class="ta-r">{{ $money($row['price']) }}</td>
         <td class="ta-r sep">{{ $fmt($row['opening_qty']) }}</td>
-        <td class="ta-r">{{ $fmt($row['opening_value']) }}</td>
+        <td class="ta-r">{{ $money($row['opening_value']) }}</td>
         <td class="ta-r sep">{{ $fmt($row['purchase_qty']) }}</td>
-        <td class="ta-r">{{ $fmt($row['purchase_value']) }}</td>
+        <td class="ta-r">{{ $money($row['purchase_value']) }}</td>
         <td class="ta-r sep">{{ $fmt($row['sales_qty']) }}</td>
-        <td class="ta-r">{{ $fmt($row['sales_value']) }}</td>
+        <td class="ta-r">{{ $money($row['sales_value']) }}</td>
         <td class="ta-r sep bold">{{ $fmt($row['closing_qty']) }}</td>
-        <td class="ta-r bold">{{ $fmt($row['closing_value']) }}</td>
+        <td class="ta-r bold">{{ $money($row['closing_value']) }}</td>
       </tr>
       @empty
       <tr>
@@ -153,13 +156,13 @@
       <tr>
         <td colspan="4" class="ta-r">Total</td>
         <td class="ta-r">{{ $fmt($summary['opening_qty']) }}</td>
-        <td class="ta-r">{{ $fmt($summary['opening_value']) }}</td>
+        <td class="ta-r">{{ $money($summary['opening_value']) }}</td>
         <td class="ta-r">{{ $fmt($summary['purchase_qty']) }}</td>
-        <td class="ta-r">{{ $fmt($summary['purchase_value']) }}</td>
+        <td class="ta-r">{{ $money($summary['purchase_value']) }}</td>
         <td class="ta-r">{{ $fmt($summary['sales_qty']) }}</td>
-        <td class="ta-r">{{ $fmt($summary['sales_value']) }}</td>
+        <td class="ta-r">{{ $money($summary['sales_value']) }}</td>
         <td class="ta-r">{{ $fmt($summary['closing_qty']) }}</td>
-        <td class="ta-r">{{ $fmt($summary['closing_value']) }}</td>
+        <td class="ta-r">{{ $money($summary['closing_value']) }}</td>
       </tr>
     </tfoot>
   </table>

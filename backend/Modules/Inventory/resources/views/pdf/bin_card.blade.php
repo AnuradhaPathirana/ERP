@@ -91,12 +91,22 @@
       <td class="info-value">{{ $header['generated_at'] }}</td>
     </tr>
     <tr>
+      {{-- Every quantity below is in this UOM, every price in this currency —
+           named once here so the table cells can stay bare numbers. --}}
+      <td class="info-label">UOM :</td>
+      <td class="info-value">{{ $header['uom'] ?? '—' }}</td>
+      <td class="info-label">Currency :</td>
+      <td class="info-value">{{ $header['currency_code'] }} ({{ $header['currency_symbol'] }})</td>
+      <td class="info-label">Stock In Hand :</td>
+      <td class="info-value">{{ $fmt($header['stock_in_hand']) }}{{ $header['uom'] ? ' ' . $header['uom'] : '' }}</td>
+    </tr>
+    <tr>
       <td class="info-label">Reorder Level :</td>
       <td class="info-value">{{ $fmt($header['reorder_level']) }}</td>
-      <td class="info-label">Stock In Hand :</td>
-      <td class="info-value">{{ $fmt($header['stock_in_hand']) }}</td>
       <td class="info-label">Reorder Qty / Period :</td>
       <td class="info-value">{{ $fmt($header['reorder_qty']) }} / {{ $header['reorder_period'] ?? '—' }}</td>
+      <td class="info-label"></td>
+      <td class="info-value"></td>
     </tr>
   </table>
 
@@ -104,13 +114,16 @@
   <table class="items-table">
     <thead>
       <tr>
-        <th style="width:24px;">#</th>
-        <th style="width:70px;">Date</th>
+        <th style="width:20px;">#</th>
+        <th style="width:64px;">Date</th>
         <th>Description</th>
-        <th style="width:90px;">Document No</th>
-        <th class="ta-r" style="width:70px;">Stock IN</th>
-        <th class="ta-r" style="width:70px;">Stock Out</th>
-        <th class="ta-r" style="width:80px;">Stock Balance</th>
+        <th style="width:84px;">Document No</th>
+        <th style="width:58px;">Colour</th>
+        {{-- Header names the currency/unit once; cells stay bare numbers. --}}
+        <th class="ta-r" style="width:66px;">Unit Price ({{ $header['currency_code'] }})</th>
+        <th class="ta-r" style="width:62px;">Stock IN{{ $header['uom'] ? ' (' . $header['uom'] . ')' : '' }}</th>
+        <th class="ta-r" style="width:62px;">Stock Out{{ $header['uom'] ? ' (' . $header['uom'] . ')' : '' }}</th>
+        <th class="ta-r" style="width:72px;">Balance{{ $header['uom'] ? ' (' . $header['uom'] . ')' : '' }}</th>
       </tr>
     </thead>
     <tbody>
@@ -120,6 +133,8 @@
         <td>{{ $header['date_from'] }}</td>
         <td>Opening Balance</td>
         <td class="mono">—</td>
+        <td>—</td>
+        <td class="ta-r">—</td>
         <td class="ta-r">—</td>
         <td class="ta-r">—</td>
         <td class="ta-r">{{ $fmt($opening['balance']) }}</td>
@@ -132,19 +147,21 @@
         <td>{{ $row['date'] }}</td>
         <td>{{ $row['description'] }}</td>
         <td class="mono">{{ $row['document_no'] }}</td>
+        <td>{{ $row['color'] ?? '—' }}</td>
+        <td class="ta-r">{{ $row['unit_price'] !== null ? $fmt($row['unit_price']) : '—' }}</td>
         <td class="ta-r">{{ $row['qty_in'] > 0 ? $fmt($row['qty_in']) : '—' }}</td>
         <td class="ta-r">{{ $row['qty_out'] > 0 ? $fmt($row['qty_out']) : '—' }}</td>
         <td class="ta-r bold">{{ $fmt($row['balance']) }}</td>
       </tr>
       @empty
       <tr>
-        <td colspan="7" class="muted" style="text-align:center; padding:14px;">No stock transactions found for the selected filters.</td>
+        <td colspan="9" class="muted" style="text-align:center; padding:14px;">No stock transactions found for the selected filters.</td>
       </tr>
       @endforelse
     </tbody>
     <tfoot>
       <tr>
-        <td colspan="4" class="ta-r">Total</td>
+        <td colspan="6" class="ta-r">Total</td>
         <td class="ta-r">{{ $fmt($summary['total_in']) }}</td>
         <td class="ta-r">{{ $fmt($summary['total_out']) }}</td>
         <td class="ta-r">{{ $fmt($summary['closing_balance']) }}</td>

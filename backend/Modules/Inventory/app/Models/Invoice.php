@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Modules\Inventory\Enums\InvoiceStatus;
+use Modules\Inventory\Enums\PaymentMode;
 
 /**
  * Invoice — billing document. Raised either against one confirmed delivery
@@ -27,6 +28,7 @@ class Invoice extends Model
         'so_id',
         'do_id',
         'customer_id',
+        'company_id',
         'invoice_date',
         'due_date',
         'status',
@@ -35,6 +37,7 @@ class Invoice extends Model
         'grand_total',
         'delivery_address',
         'remarks',
+        'mode_of_payment',
         'created_by',
         'issued_at',
         'paid_at',
@@ -51,8 +54,10 @@ class Invoice extends Model
         'so_id'            => 'integer',
         'do_id'            => 'integer',
         'customer_id'      => 'integer',
+        'company_id'       => 'integer',
         'created_by'       => 'integer',
         'status'           => InvoiceStatus::class,
+        'mode_of_payment'  => PaymentMode::class,
     ];
 
     public function items(): HasMany
@@ -73,6 +78,12 @@ class Invoice extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(CustomerMaster::class, 'customer_id');
+    }
+
+    /** The company that issued this invoice — the supplier on the printed tax invoice. */
+    public function company(): BelongsTo
+    {
+        return $this->belongsTo(Company::class, 'company_id');
     }
 
     public function createdBy(): BelongsTo

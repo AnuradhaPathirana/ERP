@@ -23,6 +23,7 @@ use Modules\Inventory\Models\SalesOrderItem;
 use Modules\Inventory\Models\SalesOrderPiece;
 use Modules\Inventory\Models\StockReferenceType;
 use Modules\Inventory\Models\StockTransaction;
+use Modules\Inventory\Models\UnitType;
 use Modules\Inventory\Support\Quantity;
 
 /**
@@ -87,10 +88,13 @@ class DeliveryOrderService
     public function find(int $id): DeliveryOrder
     {
         return DeliveryOrder::with([
-            'items.product',
+            'items.product.baseUnit',
             'items.unit',
             'items.attribute',
-            'items.pieces.piece',
+            'items.pieces.piece.store',
+            'items.pieces.piece.location',
+            'items.pieces.piece.batch',
+            'items.pieces.piece.grn',
             'salesOrder.salesPerson',
             'salesOrder.orderTakenBy',
             'customer',
@@ -116,7 +120,7 @@ class DeliveryOrderService
     public function fromSalesOrder(int $soId): array
     {
         $so = SalesOrder::with([
-            'items.product', 'items.unit', 'items.attribute',
+            'items.product.baseUnit', 'items.unit', 'items.attribute',
             'customer', 'salesPerson', 'orderTakenBy',
         ])->findOrFail($soId);
 
@@ -130,9 +134,15 @@ class DeliveryOrderService
         $items = $so->items->map(function (SalesOrderItem $item) use ($so, $takenPieceIds): array {
             $remaining = max(0.0, (float) $item->quantity - (float) $item->quantity_delivered);
 
+            // The line is sold in one UOM (Yard) but the rolls are weighed in the product's
+            // stocking UOM (Kg). The picker sees both, so both symbols travel with the line.
+            $baseUnit   = $item->product?->baseUnit;
+            $lineUnit   = $item->unit ?? $baseUnit;
+            $unitSymbol = fn (?UnitType $u) => $u?->symbol ?? $u?->name;
+
             $availablePieces = [];
             if ($item->is_scanned) {
-                $availablePieces = SalesOrderPiece::with('piece')
+                $availablePieces = SalesOrderPiece::with(['piece.store', 'piece.location', 'piece.batch', 'piece.grn'])
                     ->where('so_id', $so->id)
                     ->where('so_item_id', $item->id)
                     ->get()
@@ -151,6 +161,8 @@ class DeliveryOrderService
                         'is_cut'         => (float) $sp->taken_quantity < (float) $sp->weight - self::EPSILON,
                         'store'       => $sp->piece?->store?->store_name,
                         'location'    => $sp->piece?->location?->location_name ?? $sp->piece?->location?->name,
+                        'batch_no'    => $sp->piece?->batch?->batch_no,
+                        'grn_no'      => $sp->piece?->grn?->grn_no,
                     ])
                     ->values()
                     ->all();
@@ -163,7 +175,11 @@ class DeliveryOrderService
                     'name'         => $item->product?->name,
                     'product_code' => $item->product?->product_code,
                 ],
-                'unit'               => $item->unit ? ['id' => $item->unit->id, 'name' => $item->unit->name] : null,
+                'unit'               => $lineUnit ? ['id' => $lineUnit->id, 'name' => $lineUnit->name, 'symbol' => $unitSymbol($lineUnit)] : null,
+                'base_unit'          => $baseUnit ? ['id' => $baseUnit->id, 'name' => $baseUnit->name, 'symbol' => $unitSymbol($baseUnit)] : null,
+                // Roll weights are in base UOM; dividing by this yields the line UOM the
+                // customer ordered in — the same arithmetic syncItems() applies on save.
+                'conversion_factor'  => (float) $item->conversion_factor ?: 1.0,
                 'attribute'          => $item->attribute ? ['id' => $item->attribute->id, 'name' => $item->attribute->attribute_name] : null,
                 'is_scanned'         => $item->is_scanned,
                 'quantity'           => (float) $item->quantity,
@@ -547,14 +563,19 @@ class DeliveryOrderService
                     // is what leaves stock. The rest of the roll stays, as a remnant.
                     foreach ($do->pieces->where('do_item_id', $item->id) as $doPiece) {
                         $live = $livePieces->get($doPiece->piece_id);
+                        // Grouped by DO item, and a DO item is colour-specific — so two
+                        // colours of one product never collapse into a single ledger row.
                         $key  = "{$item->id}|{$live->store_id}|{$live->location_id}|{$live->batch_id}";
                         $groups[$key] ??= [
                             'product_id' => $item->product_id,
+                            'attribute_id' => $item->attribute_id,
                             'store_id'   => $live->store_id,
                             'location_id' => $live->location_id,
                             'batch_id'   => $live->batch_id,
                             'qty'        => 0.0,
                             'unit_id'    => $baseUnitId,
+                            'entered_unit_id' => $item->unit_id ?? $baseUnitId,
+                            'line_factor'     => $lineFactor,
                             'unit_price' => $basePrice,
                             'piece_rows' => [],
                             'piece_meta' => [],
@@ -579,11 +600,14 @@ class DeliveryOrderService
 
                     $groups["{$item->id}|manual"] = [
                         'product_id' => $item->product_id,
+                        'attribute_id' => $item->attribute_id,
                         'store_id'   => $do->store_id,
                         'location_id' => $do->location_id,
                         'batch_id'   => null,
                         'qty'        => $line['qty'],
                         'unit_id'    => $baseUnitId,
+                        'entered_unit_id' => $item->unit_id ?? $baseUnitId,
+                        'line_factor'     => $lineFactor,
                         'unit_price' => $basePrice,
                         'piece_rows' => [],
                         'piece_meta' => [],
@@ -633,11 +657,17 @@ class DeliveryOrderService
             foreach ($groups as $group) {
                 $batch = $group['batch_id'] ? Batch::find($group['batch_id']) : null;
 
+                // qty_out is in the stocking UOM; entered_qty restates it in the UOM the
+                // customer actually bought in, so a sale of 300 yd does not surface in the
+                // ledger only as 274.32 m.
+                $lineFactor = (float) ($group['line_factor'] ?? 1.0) ?: 1.0;
+
                 $txn = StockTransaction::create([
                     'transaction_date' => now(),
                     'reference_type'   => StockReferenceType::CODE_SALES_DELIVERY,
                     'reference_id'     => $do->id,
                     'product_id'       => $group['product_id'],
+                    'attribute_id'     => $group['attribute_id'],
                     'store_id'         => $group['store_id'],
                     'location_id'      => $group['location_id'],
                     'batch_no'         => $batch?->batch_no,
@@ -646,6 +676,8 @@ class DeliveryOrderService
                     'qty_in'           => 0,
                     'qty_out'          => $group['qty'],
                     'unit_id'          => $group['unit_id'],
+                    'entered_unit_id'  => $group['entered_unit_id'],
+                    'entered_qty'      => $group['qty'] / $lineFactor,
                     'unit_price'       => $group['unit_price'], // SO selling price
                     'created_by'       => Auth::id(),
                 ]);

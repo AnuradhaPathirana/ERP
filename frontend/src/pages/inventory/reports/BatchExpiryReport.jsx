@@ -4,6 +4,7 @@ import { FlaskConical } from 'lucide-react'
 import { getBatchExpiryReport } from '../../../api/reports'
 import { getAllProducts } from '../../../api/products'
 import Pagination from '../../../components/ui/Pagination'
+import Money from '../../../components/ui/Money'
 import Breadcrumb from '../../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../../components/TableFilter'
 import FilterSearchSelect from '../../../components/ui/FilterSearchSelect'
@@ -176,7 +177,7 @@ export default function BatchExpiryReport() {
                           </td>
                           <td className="px-3 py-2 text-right text-slate-600">{fmt(row.initial_qty)}</td>
                           <td className="px-3 py-2 text-right font-medium text-slate-700">{fmt(row.current_qty)}</td>
-                          <td className="px-3 py-2 text-right text-slate-600">{fmt(row.unit_cost)}</td>
+                          <td className="px-3 py-2 text-right text-slate-600"><Money value={row.unit_cost} /></td>
                           <td className="px-3 py-2">
                             <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLES[row.status] ?? 'bg-slate-100 text-slate-500'}`}>
                               {row.status?.replace('_', ' ')}

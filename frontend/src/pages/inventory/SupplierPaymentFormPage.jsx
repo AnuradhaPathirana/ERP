@@ -14,7 +14,9 @@ import {
 import { getAllSuppliers } from '../../api/suppliers'
 import { getAllPaymentModes } from '../../api/paymentModes'
 import Breadcrumb from '../../components/Breadcrumb'
+import Money from '../../components/ui/Money'
 import { confirmAction, showError, showSuccess } from '../../utils/alerts'
+import { fmtMoneyWithSymbol } from '../../utils/currency'
 import { INPUT_CLS, INPUT_DISABLED_CLS, LABEL_CLS, SELECT_CLS } from '../../utils/fieldStyles'
 
 const SUPPLIER_TYPES = ['Trade', 'Service']
@@ -43,8 +45,9 @@ function emptySettlementDraft() {
   }
 }
 
+/** Every figure on this page is money. Plain-string contexts (messages, labels) only. */
 function fmt(n) {
-  return Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return fmtMoneyWithSymbol(n)
 }
 
 export default function SupplierPaymentFormPage() {
@@ -549,7 +552,7 @@ export default function SupplierPaymentFormPage() {
                         <td className="px-2 py-1 text-slate-600 whitespace-nowrap">{r.grn_date}</td>
                         <td className="px-2 py-1 text-slate-500 font-mono">{r.po_no || '—'}</td>
                         <td className="px-2 py-1 text-slate-500 font-mono">{r.reference_no || '—'}</td>
-                        <td className="px-2 py-1 text-right font-medium text-slate-700 tabular-nums">{fmt(r.amount)}</td>
+                        <td className="px-2 py-1 text-right font-medium text-slate-700"><Money value={r.amount} /></td>
                       </tr>
                     ))}
                   </tbody>
@@ -625,7 +628,7 @@ export default function SupplierPaymentFormPage() {
                       return (
                         <tr key={r.grn_id} className="hover:bg-slate-50/60">
                           <td className="px-2 py-1 font-mono text-indigo-600">{r.grn_no}</td>
-                          <td className="px-2 py-1 text-right text-slate-600 tabular-nums">{fmt(r.amount)}</td>
+                          <td className="px-2 py-1 text-right text-slate-600"><Money value={r.amount} /></td>
                           <td className="px-2 py-1">
                             <input
                               type="number" min="0" step="0.01"
@@ -724,7 +727,7 @@ export default function SupplierPaymentFormPage() {
                             <td className="px-2 py-1 text-slate-600 whitespace-nowrap">{c.created_at?.slice(0, 10)}</td>
                             <td className="px-2 py-1 text-slate-600">{c.credit_type_label}</td>
                             <td className="px-2 py-1 font-mono text-amber-600">{c.credit_note_no}</td>
-                            <td className="px-2 py-1 text-right text-slate-600 tabular-nums">{fmt(c.remaining_balance)}</td>
+                            <td className="px-2 py-1 text-right text-slate-600"><Money value={c.remaining_balance} /></td>
                             <td className="px-2 py-1">
                               <input
                                 type="number" min="0" max={c.remaining_balance} step="0.01"
@@ -734,7 +737,7 @@ export default function SupplierPaymentFormPage() {
                                 onChange={(e) => setCreditNoteAmount(c.id, e.target.value)}
                               />
                             </td>
-                            <td className="px-2 py-1 text-right text-slate-500 tabular-nums">{fmt(Math.max(0, c.remaining_balance - applied))}</td>
+                            <td className="px-2 py-1 text-right text-slate-500"><Money value={Math.max(0, c.remaining_balance - applied)} /></td>
                           </tr>
                         )
                       })}
@@ -850,7 +853,7 @@ export default function SupplierPaymentFormPage() {
                     {settlements.map((s) => (
                       <tr key={s._key} className="hover:bg-slate-50/60">
                         <td className="px-2 py-1 font-medium text-slate-700">{s.payment_mode_name}</td>
-                        <td className="px-2 py-1 text-right tabular-nums text-slate-700">{fmt(s.amount)}</td>
+                        <td className="px-2 py-1 text-right text-slate-700"><Money value={s.amount} /></td>
                         <td className="px-2 py-1 text-slate-500">{s.bank_name || '—'}</td>
                         <td className="px-2 py-1 text-slate-500">{s.bank_account_no || '—'}</td>
                         <td className="px-2 py-1 text-slate-500">{s.reference_no || '—'}</td>

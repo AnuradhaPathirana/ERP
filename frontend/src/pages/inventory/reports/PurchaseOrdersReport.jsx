@@ -6,6 +6,7 @@ import { getAllSuppliers } from '../../../api/suppliers'
 import { getAllLocations } from '../../../api/locations'
 import { getAllStores } from '../../../api/stores'
 import Pagination from '../../../components/ui/Pagination'
+import Money from '../../../components/ui/Money'
 import Breadcrumb from '../../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../../components/TableFilter'
 import FilterSearchSelect from '../../../components/ui/FilterSearchSelect'
@@ -38,7 +39,6 @@ const STATUS_OPTIONS = [
   { value: 'cancelled', label: 'Cancelled' },
 ]
 
-const fmt = (n) => Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })
 
 export default function PurchaseOrdersReport() {
   const [page, setPage] = useState(1)
@@ -143,7 +143,7 @@ export default function PurchaseOrdersReport() {
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{row.order_date}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{row.expected_delivery_date || <span className="italic text-slate-300">—</span>}</td>
                         <td className="px-3 py-2 text-right text-slate-600">{row.item_count}</td>
-                        <td className="px-3 py-2 text-right font-bold text-slate-800">{fmt(row.grand_total)}</td>
+                        <td className="px-3 py-2 text-right font-bold text-slate-800"><Money value={row.grand_total} /></td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[row.status] ?? 'bg-slate-100 text-slate-500'}`}>
                             {row.status?.replace('_', ' ')}
@@ -158,7 +158,7 @@ export default function PurchaseOrdersReport() {
                     <tr className="border-t-2 border-slate-200 bg-slate-50">
                       <td colSpan={8} className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider text-slate-600">Page Total</td>
                       <td className="px-3 py-2 text-right text-xs font-bold text-slate-800">
-                        {fmt(rows.reduce((s, r) => s + Number(r.grand_total), 0))}
+                        <Money value={rows.reduce((s, r) => s + Number(r.grand_total), 0)} />
                       </td>
                       <td />
                     </tr>

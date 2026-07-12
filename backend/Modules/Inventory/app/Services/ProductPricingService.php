@@ -11,6 +11,7 @@ use Modules\Inventory\Enums\GrnStatus;
 use Modules\Inventory\Models\GoodsReceivedNoteItem;
 use Modules\Inventory\Models\GrnItemPiece;
 use Modules\Inventory\Models\Product;
+use Modules\Inventory\Support\Quantity;
 
 /**
  * Single source of truth for product price resolution.
@@ -115,31 +116,25 @@ class ProductPricingService
      * Shipment-specific selling price: the confirmed costing's per-line price
      * for a GRN item. Unique by design — a GRN can live in only one CONFIRMED
      * costing (enforced by CostingService::confirm). Null = not costed yet.
+     *
+     * Read straight off selling_price_base — the costing already computed it per the
+     * stocking UOM using the GRN line's FROZEN conversion factor. Re-deriving it here
+     * from inv_unit_conversions would disagree with the stock ledger the moment someone
+     * edits a rate, and on pre-UOM lines (factor 1, base unit backfilled to something
+     * finer) it divided a per-kg price by 1000 and sold the roll for a thousandth of
+     * its price. The costing is the authority on what its own shipment sells for.
      */
     public function sellingPriceForGrnItem(int $grnItemId): ?float
     {
-        $row = DB::table('inv_costing_items')
+        $price = DB::table('inv_costing_items')
             ->join('inv_costings', 'inv_costings.id', '=', 'inv_costing_items.costing_id')
             ->where('inv_costing_items.grn_item_id', $grnItemId)
             ->where('inv_costings.status', CostingStatus::Confirmed->value)
             ->whereNull('inv_costings.deleted_at')
             ->orderByDesc('inv_costing_items.id')
-            ->first([
-                'inv_costing_items.selling_price',
-                'inv_costing_items.unit_id',
-                'inv_costing_items.product_id',
-            ]);
+            ->value('inv_costing_items.selling_price_base');
 
-        if ($row === null) {
-            return null;
-        }
-
-        // Costed per the shipment's receiving unit — rebase it like any other price.
-        return $this->toBasePrice(
-            (int) $row->product_id,
-            $row->unit_id !== null ? (int) $row->unit_id : null,
-            $row->selling_price !== null ? (float) $row->selling_price : null,
-        );
+        return $price !== null ? (float) $price : null;
     }
 
     /**
@@ -179,14 +174,39 @@ class ProductPricingService
      * shipment — landed cost into cost_price, costing selling price into
      * selling_price. Older shipments keep pricing from their own costing
      * (resolved per roll via resolvePieceSellingPrice).
+     *
+     * Both figures arrive per the product's STOCKING UOM. Each price-list row states
+     * the unit its own price is filed in, so every row is written a number in THAT unit
+     * — a per-Kg figure parked in a per-Roll row is read straight back as per-Roll and
+     * sells a 50 Kg roll for the price of a kilo. A row whose unit has no rate to the
+     * stocking UOM is left alone: no price beats a confidently wrong one.
      */
-    public function syncFromCosting(int $productId, ?int $unitTypeId, float $landedCost, float $sellingPrice): void
+    public function syncFromCosting(int $productId, ?int $baseUnitId, float $landedCostBase, float $sellingPriceBase): void
     {
-        $this->targetRows($productId, $unitTypeId)->update([
-            'cost_price'    => $landedCost,
-            'selling_price' => $sellingPrice,
-            'updated_at'    => now(),
-        ]);
+        $rows = DB::table(self::PIVOT_TABLE)
+            ->where('product_id', $productId)
+            ->get(['id', 'unit_type_id']);
+
+        foreach ($rows as $row) {
+            $rowUnitId = $row->unit_type_id !== null ? (int) $row->unit_type_id : null;
+
+            // A row with no unit recorded is implicitly already in the stocking UOM.
+            $factor = ($rowUnitId === null || $baseUnitId === null || $rowUnitId === $baseUnitId)
+                ? 1.0
+                : $this->units->tryFactor($rowUnitId, $baseUnitId);
+
+            if ($factor === null || $factor <= 0.0) {
+                continue;
+            }
+
+            // A price per unit U is worth factor(U → base) base units, so it scales by
+            // the same factor as the quantity: 660/Kg × 50 Kg/Roll = 33,000/Roll.
+            DB::table(self::PIVOT_TABLE)->where('id', $row->id)->update([
+                'cost_price'    => Quantity::roundPrice($landedCostBase * $factor),
+                'selling_price' => Quantity::roundPrice($sellingPriceBase * $factor),
+                'updated_at'    => now(),
+            ]);
+        }
     }
 
     /**

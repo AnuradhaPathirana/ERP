@@ -22,6 +22,8 @@ import { getAllUnitTypesFlat } from '../../api/unitTypes'
 import { getAllAttributeTypes } from '../../api/attributeTypes'
 import { getAllAttributes } from '../../api/attributes'
 import Breadcrumb from '../../components/Breadcrumb'
+import Money from '../../components/ui/Money'
+import { CURRENCY, fmtMoney } from '../../utils/currency'
 import { showError, showSuccess } from '../../utils/alerts'
 import { printPdfBlob } from '../../utils/pdf'
 
@@ -1128,10 +1130,10 @@ export default function PurchaseOrderFormPage() {
                   <th className="w-24 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Color</th>
                   <th className="w-24 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty</th>
                   <th className="w-16 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit</th>
-                  <th className="w-28 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
-                  <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Gross</th>
+                  <th className="w-28 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price ({CURRENCY})</th>
+                  <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Gross ({CURRENCY})</th>
                   <th className="w-20 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-amber-500">Disc%</th>
-                  <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-700">Amount</th>
+                  <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-700">Amount ({CURRENCY})</th>
                   <th className="w-8"></th>
                 </tr>
               </thead>
@@ -1219,7 +1221,7 @@ export default function PurchaseOrderFormPage() {
                           className="block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white" />
                       </td>
                       <td className="px-1.5 py-1 text-right font-medium text-slate-600 tabular-nums">
-                        {gross > 0 ? gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-slate-300">—</span>}
+                        {gross > 0 ? fmtMoney(gross) : <span className="text-slate-300">—</span>}
                       </td>
                       <td className="px-1.5 py-1">
                         <input
@@ -1229,7 +1231,7 @@ export default function PurchaseOrderFormPage() {
                           className="block w-full rounded border border-amber-200 bg-amber-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-amber-400 focus:bg-white" />
                       </td>
                       <td className="px-1.5 py-1 text-right font-bold text-slate-800 tabular-nums">
-                        {amount > 0 ? amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : <span className="text-slate-300 font-normal">—</span>}
+                        {amount > 0 ? fmtMoney(amount) : <span className="text-slate-300 font-normal">—</span>}
                       </td>
                       <td className="px-1.5 py-1 text-center">
                         <button type="button" onClick={() => removeRow(idx)} className="rounded p-1 text-slate-300 opacity-0 group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 transition-all" title="Remove row">
@@ -1244,23 +1246,23 @@ export default function PurchaseOrderFormPage() {
               <tfoot>
                 <tr className="border-t border-slate-200 bg-slate-50/50">
                   <td colSpan={7} className="px-2 py-1.5"></td>
-                  <td className="px-1.5 py-1.5 text-right text-xs font-semibold text-slate-600 tabular-nums">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td className="px-1.5 py-1.5 text-center text-xs font-bold text-amber-600 tabular-nums">-{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                  <td className="px-1.5 py-1.5 text-right text-sm font-black text-slate-800 tabular-nums">{totals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  <td className="px-1.5 py-1.5 text-right text-xs font-semibold text-slate-600 tabular-nums">{fmtMoney(totals.gross)}</td>
+                  <td className="px-1.5 py-1.5 text-center text-xs font-bold text-amber-600 tabular-nums">-{fmtMoney(totals.disc)}</td>
+                  <td className="px-1.5 py-1.5 text-right text-sm font-black text-slate-800 tabular-nums">{fmtMoney(totals.total)}</td>
                   <td></td>
                 </tr>
                 <tr className="bg-indigo-50 border-t border-indigo-100">
                   <td colSpan={9} className="px-3 py-1.5">
                     <div className="flex items-center gap-4 text-xs">
                       <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
-                      <span className="text-slate-500">Gross: <span className="font-bold text-slate-700">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
-                      <span className="text-amber-600">Disc: <span className="font-bold">-{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+                      <span className="text-slate-500">Gross: <Money value={totals.gross} className="font-bold text-slate-700" /></span>
+                      <span className="text-amber-600">Disc: -<Money value={totals.disc} className="font-bold" /></span>
                     </div>
                   </td>
                   <td className="px-3 py-1.5 text-right">
                     <div className="flex flex-col items-end leading-tight">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Net Total</span>
-                      <span className="text-base font-black text-indigo-700 tabular-nums">{totals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                      <Money value={totals.total} className="text-base font-black text-indigo-700" />
                     </div>
                   </td>
                   <td></td>

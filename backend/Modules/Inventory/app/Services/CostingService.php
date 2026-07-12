@@ -22,10 +22,11 @@ use Modules\Inventory\Models\GoodsReceivedNoteItem;
  * GRN-based landed costing → per-product selling prices.
  *
  * The costing loads every item line of the selected GRNs (GRN unit_price =
- * PURCHASING price) and spreads the common charges evenly per unit:
+ * PURCHASING price) and apportions the one common FOB/CIF charge BY VALUE:
  *
- *   portion            = Σ expense lines ÷ Σ quantity
- *   landed_unit_cost   = grn unit_price + portion
+ *   line_share         = charge × (line value ÷ Σ line value)
+ *   charge_portion     = line_share ÷ line quantity      (per the line's OWN unit)
+ *   landed_unit_cost   = grn unit_price + charge_portion
  *   selling_price      = landed + margin  → +SSCL% → +VAT%  (toggles cascade)
  *
  * The full per-unit build-up is stored on inv_costing_items so the user can
@@ -36,8 +37,62 @@ use Modules\Inventory\Models\GoodsReceivedNoteItem;
  */
 class CostingService
 {
-    public function __construct(private readonly ProductPricingService $pricing)
+    public function __construct(
+        private readonly ProductPricingService $pricing,
+        private readonly UnitConversionService $units,
+    ) {
+    }
+
+    /**
+     * Guard: the GRN line's frozen conversion must still agree with the product's
+     * current Stocking UOM.
+     *
+     * A line freezes `conversion_factor` at GRN confirm, against the base unit the
+     * product had THEN. Nothing stops the base unit being changed afterwards, and the
+     * line has no memory of which unit it froze against — so a product received in kg
+     * with factor 1, later re-based to g, now claims 1 kg = 1 g. Costing it would file a
+     * per-kg price as a per-gram one and sell the goods for a thousandth of their price.
+     *
+     * Refuse, loudly and specifically. A blocked costing is a nuisance; a silently
+     * 1000×-wrong selling price on live stock is not.
+     */
+    private function assertConversionIsSound(GoodsReceivedNoteItem $item): void
     {
+        $recvUnitId = $item->unit_id !== null ? (int) $item->unit_id : null;
+        $baseUnitId = $item->product?->base_unit_type_id !== null ? (int) $item->product->base_unit_type_id : null;
+
+        if ($recvUnitId === null || $baseUnitId === null) {
+            return; // Pre-UOM line with nothing to check against.
+        }
+
+        $expected   = $recvUnitId === $baseUnitId ? 1.0 : $this->units->tryFactor($recvUnitId, $baseUnitId);
+        $product    = $item->product?->name ?? "Product #{$item->product_id}";
+        $recvSymbol = $item->unit?->symbol ?? "unit #{$recvUnitId}";
+        $baseSymbol = $item->product?->baseUnit?->symbol ?? "unit #{$baseUnitId}";
+
+        // No rate at all: the goods were received in a unit that cannot even be expressed
+        // in the unit they are stocked in (metres against grams). There is no selling
+        // price per gram for something measured in metres.
+        abort_if($expected === null, 422, sprintf(
+            'Cannot cost "%s": it was received in %s but is stocked in %s, and there is no conversion between them. '
+            . 'Fix the product\'s Stocking UOM, or add the %s → %s rate in Unit Conversions.',
+            $product, $recvSymbol, $baseSymbol, $recvSymbol, $baseSymbol,
+        ));
+
+        $frozen = (float) $item->conversion_factor ?: 1.0;
+
+        if (abs($expected - $frozen) <= 1e-6 * max(1.0, abs($expected))) {
+            return;
+        }
+
+        $trim = static fn (float $n): string => rtrim(rtrim(number_format($n, 6, '.', ''), '0'), '.');
+
+        abort(422, sprintf(
+            'Cannot cost "%s": it was received in %s but is stocked in %s, and its GRN line froze a conversion of %s where %s is expected. '
+            . 'Its Stocking UOM was changed after the goods were received, so its stock and prices no longer mean what they say. '
+            . 'Fix the product\'s Stocking UOM (or the %s → %s conversion rate) before costing this shipment.',
+            $product, $recvSymbol, $baseSymbol, $trim($frozen), $trim($expected), $recvSymbol, $baseSymbol,
+        ));
     }
 
     /** @param array<string, mixed> $filters */
@@ -87,6 +142,7 @@ class CostingService
             'items.product:id,name,product_code',
             'items.attribute:id,attribute_name',
             'items.unit:id,symbol,unit_position',
+            'items.baseUnit:id,symbol,unit_position',
             'items.grn:id,grn_no',
         ])->findOrFail($id);
     }
@@ -177,14 +233,18 @@ class CostingService
             // order so, when one product appears on several lines, the last
             // line's price lands on the price list; individual rolls still
             // price from their own line via resolvePieceSellingPrice().
+            //
+            // The *_base figures go over, not the receiving-unit ones: the price list
+            // and every sales document speak the stocking UOM, and these were computed
+            // with the GRN line's frozen factor.
             CostingItem::where('costing_id', $locked->id)
                 ->orderBy('id')
                 ->get()
                 ->each(fn (CostingItem $item) => $this->pricing->syncFromCosting(
                     (int) $item->product_id,
-                    $item->unit_id !== null ? (int) $item->unit_id : null,
-                    (float) $item->landed_unit_cost,
-                    (float) $item->selling_price,
+                    $item->base_unit_id !== null ? (int) $item->base_unit_id : null,
+                    (float) $item->landed_unit_cost_base,
+                    (float) $item->selling_price_base,
                 ));
 
             return $this->find($locked->id);
@@ -245,7 +305,8 @@ class CostingService
         )->pluck('grn_id')->all();
 
         $grns = GoodsReceivedNote::with([
-            'items.product:id,name,product_code',
+            'items.product:id,name,product_code,base_unit_type_id',
+            'items.product.baseUnit:id,symbol,unit_position',
             'items.attribute:id,attribute_name',
             'items.unit:id,symbol,unit_position',
             'purchaseOrder',
@@ -263,17 +324,23 @@ class CostingService
             'po_no'        => $grn->purchaseOrder?->po_no,
             'total_amount' => (float) $grn->total_amount,
             'total_items'  => $grn->items->sum('quantity_received'),
-            // Item lines feed the client-side product breakdown (live math)
+            // Item lines feed the client-side product breakdown (live math). The frozen
+            // conversion travels with them so the form can show the same receiving-unit →
+            // stocking-UOM restatement the server will persist.
             'items'        => $grn->items->map(fn ($item) => [
-                'id'            => $item->id,
-                'product_id'    => $item->product_id,
-                'product_name'  => $item->product?->name,
-                'product_code'  => $item->product?->product_code,
-                'color'         => $item->attribute?->attribute_name,
-                'quantity'      => (float) $item->quantity_received,
-                'unit_price'    => (float) $item->unit_price,
-                'unit_symbol'   => $item->unit?->symbol,
-                'unit_position' => $item->unit?->unit_position,
+                'id'                 => $item->id,
+                'product_id'         => $item->product_id,
+                'product_name'       => $item->product?->name,
+                'product_code'       => $item->product?->product_code,
+                'color'              => $item->attribute?->attribute_name,
+                'quantity'           => (float) $item->quantity_received,
+                'unit_price'         => (float) $item->unit_price,
+                'unit_symbol'        => $item->unit?->symbol,
+                'unit_position'      => $item->unit?->unit_position,
+                'conversion_factor'  => (float) $item->conversion_factor ?: 1.0,
+                'base_quantity'      => (float) $item->base_quantity,
+                'base_unit_symbol'   => $item->product?->baseUnit?->symbol,
+                'base_unit_position' => $item->product?->baseUnit?->unit_position,
             ])->values()->all(),
         ])->all();
     }
@@ -345,39 +412,70 @@ class CostingService
         /** @var Collection<int, GoodsReceivedNoteItem> $grnItems */
         $grnItems = $grns->flatMap(fn (GoodsReceivedNote $grn) => $grn->items);
 
-        $totalQty      = (float) $grnItems->sum('quantity_received');
         // One typed total FOB/CIF charge wins; itemised expense rows are the
         // legacy fallback so older drafts keep computing.
         $totalExpenses = $commonCharge !== null
             ? (float) $commonCharge
             : (float) collect($expenses)->sum('amount');
 
-        if ($totalExpenses > 0 && $totalQty <= 0) {
-            abort(422, 'Cannot apportion charges: the selected GRNs have no received quantity.');
-        }
+        // ── Apportionment basis: VALUE, never quantity ────────────────────────────
+        //
+        // A shipment carries ONE common FOB/CIF charge, but its lines can be received
+        // in different units — 500 Kg of fabric, 10 rolls, 200 m of trim. Σ quantity
+        // over those lines adds kilograms to rolls to metres; dividing the charge by
+        // that sum hands a gram and a 50 Kg roll the identical charge, which inflates
+        // the cheap line's cost by tens of percent while the expensive line absorbs
+        // almost nothing. Converting to base_quantity first does not rescue it either:
+        // base UOM is defined per PRODUCT, so the sum is still Kg + metres.
+        //
+        // Value carries no unit, so it is the one basis that survives a mixed-unit
+        // shipment — and FOB/CIF/duty are levied on value in the first place. Each
+        // line's share is then divided by ITS OWN quantity, so charge_portion always
+        // lands denominated in that line's unit and `unit_price + charge_portion`
+        // stays a legal addition.
+        $lineValueOf = static fn (GoodsReceivedNoteItem $i): float
+            => (float) $i->quantity_received * (float) $i->unit_price;
 
-        // The user's apportionment rule: every unit of every product carries
-        // an equal share of the common charges.
-        $portion = $totalQty > 0 ? $totalExpenses / $totalQty : 0.0;
+        $totalValue = (float) $grnItems->sum($lineValueOf);
+        $totalQty   = (float) $grnItems->sum('quantity_received');
+
+        if ($totalExpenses > 0.0 && $totalValue <= 0.0) {
+            abort(422, 'Cannot apportion charges: the selected GRNs have no purchase value to spread them over.');
+        }
 
         // Tax multiplier for back-computing a typed (final) selling price
         $multiplier = ($applySscl ? 1 + $ssclPct / 100 : 1) * ($applyVat ? 1 + $vatPct / 100 : 1);
 
         $items = $grnItems->map(function (GoodsReceivedNoteItem $item) use (
-            $portion, $defaultMarginPct, $applySscl, $ssclPct, $applyVat, $vatPct, $multiplier, $overrides,
+            $lineValueOf, $totalValue, $totalExpenses,
+            $defaultMarginPct, $applySscl, $ssclPct, $applyVat, $vatPct, $multiplier, $overrides,
         ): array {
+            $this->assertConversionIsSound($item);
+
+            $qty       = (float) $item->quantity_received;
             $unitPrice = (float) $item->unit_price;
-            $landed    = $unitPrice + $portion;
+
+            $share   = $totalValue > 0.0 ? $totalExpenses * ($lineValueOf($item) / $totalValue) : 0.0;
+            $portion = $qty > 0.0 ? $share / $qty : 0.0;
+            $landed  = $unitPrice + $portion;
+
+            // The GRN line froze this at confirm time — reuse it rather than re-reading
+            // inv_unit_conversions, whose rates are editable and may since have moved.
+            $factor  = (float) $item->conversion_factor ?: 1.0;
+            $baseQty = (float) $item->base_quantity ?: $qty * $factor;
 
             $override     = $overrides->get($item->id, []);
             $linePct      = isset($override['margin_pct']) && $override['margin_pct'] !== null && $override['margin_pct'] !== ''
                 ? (float) $override['margin_pct'] : null;
-            $typedSelling = isset($override['selling_price']) && $override['selling_price'] !== null && $override['selling_price'] !== ''
-                ? (float) $override['selling_price'] : null;
+            // A typed price is quoted per the STOCKING UOM — that is the unit the customer
+            // is invoiced in. Lift it into the receiving unit so the whole build-up below
+            // stays in one denomination.
+            $typedSellingBase = isset($override['selling_price_base']) && $override['selling_price_base'] !== null && $override['selling_price_base'] !== ''
+                ? (float) $override['selling_price_base'] : null;
 
-            if ($typedSelling !== null) {
+            if ($typedSellingBase !== null) {
                 // User typed the FINAL selling price — back-compute the pieces
-                $selling      = $typedSelling;
+                $selling      = $typedSellingBase * $factor;
                 $base         = $multiplier > 0 ? $selling / $multiplier : $selling;
                 $marginAmount = $base - $landed;
                 $ssclAmount   = $applySscl ? $base * ($ssclPct / 100) : 0.0;
@@ -394,30 +492,39 @@ class CostingService
                 $overridden   = false;
             }
 
+            $toBase = static fn (float $price): float => $factor > 0.0 ? $price / $factor : $price;
+
             return [
-                // Persisted columns (per unit)
-                'grn_id'              => (int) $item->grn_id,
-                'grn_item_id'         => (int) $item->id,
-                'product_id'          => (int) $item->product_id,
-                'attribute_id'        => $item->attribute_id !== null ? (int) $item->attribute_id : null,
-                'unit_id'             => $item->unit_id !== null ? (int) $item->unit_id : null,
-                'quantity'            => (float) $item->quantity_received,
-                'unit_price'          => round($unitPrice, 4),
-                'charge_portion'      => round($portion, 4),
-                'landed_unit_cost'    => round($landed, 4),
-                'margin_pct'          => $linePct,
-                'margin_amount'       => round($marginAmount, 4),
-                'sscl_amount'         => round($ssclAmount, 4),
-                'vat_amount'          => round($vatAmount, 4),
-                'selling_price'       => round($selling, 4),
-                'is_price_overridden' => $overridden,
+                // Persisted columns — per the RECEIVING unit unless suffixed _base
+                'grn_id'                => (int) $item->grn_id,
+                'grn_item_id'           => (int) $item->id,
+                'product_id'            => (int) $item->product_id,
+                'attribute_id'          => $item->attribute_id !== null ? (int) $item->attribute_id : null,
+                'unit_id'               => $item->unit_id !== null ? (int) $item->unit_id : null,
+                'base_unit_id'          => $item->product?->base_unit_type_id !== null ? (int) $item->product->base_unit_type_id : null,
+                'quantity'              => $qty,
+                'conversion_factor'     => $factor,
+                'base_quantity'         => round($baseQty, 6),
+                'unit_price'            => round($unitPrice, 8),
+                'charge_portion'        => round($portion, 8),
+                'landed_unit_cost'      => round($landed, 8),
+                'landed_unit_cost_base' => round($toBase($landed), 8),
+                'margin_pct'            => $linePct,
+                'margin_amount'         => round($marginAmount, 8),
+                'sscl_amount'           => round($ssclAmount, 8),
+                'vat_amount'            => round($vatAmount, 8),
+                'selling_price'         => round($selling, 8),
+                'selling_price_base'    => round($toBase($selling), 8),
+                'is_price_overridden'   => $overridden,
                 // Display-only extras (preview payload; stripped before insert)
-                'product_name'        => $item->product?->name,
-                'product_code'        => $item->product?->product_code,
-                'color'               => $item->attribute?->attribute_name,
-                'grn_no'              => $item->grn?->grn_no,
-                'unit_symbol'         => $item->unit?->symbol,
-                'unit_position'       => $item->unit?->unit_position,
+                'product_name'          => $item->product?->name,
+                'product_code'          => $item->product?->product_code,
+                'color'                 => $item->attribute?->attribute_name,
+                'grn_no'                => $item->grn?->grn_no,
+                'unit_symbol'           => $item->unit?->symbol,
+                'unit_position'         => $item->unit?->unit_position,
+                'base_unit_symbol'      => $item->product?->baseUnit?->symbol,
+                'base_unit_position'    => $item->product?->baseUnit?->unit_position,
             ];
         })->values();
 
@@ -503,7 +610,8 @@ class CostingService
     private function loadGrns(array $grnIds): Collection
     {
         return GoodsReceivedNote::with([
-            'items.product:id,name,product_code',
+            'items.product:id,name,product_code,base_unit_type_id',
+            'items.product.baseUnit:id,symbol,unit_position',
             'items.attribute:id,attribute_name',
             'items.unit:id,symbol,unit_position',
         ])
@@ -561,10 +669,11 @@ class CostingService
         CostingItem::where('costing_id', $costing->id)->delete();
 
         $columns = [
-            'grn_id', 'grn_item_id', 'product_id', 'attribute_id', 'unit_id',
-            'quantity', 'unit_price', 'charge_portion', 'landed_unit_cost',
+            'grn_id', 'grn_item_id', 'product_id', 'attribute_id', 'unit_id', 'base_unit_id',
+            'quantity', 'conversion_factor', 'base_quantity',
+            'unit_price', 'charge_portion', 'landed_unit_cost', 'landed_unit_cost_base',
             'margin_pct', 'margin_amount', 'sscl_amount', 'vat_amount',
-            'selling_price', 'is_price_overridden',
+            'selling_price', 'selling_price_base', 'is_price_overridden',
         ];
 
         $rows = collect($items)->map(fn (array $item) => array_merge(

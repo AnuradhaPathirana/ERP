@@ -6,6 +6,7 @@ import { getAllSuppliers } from '../../../api/suppliers'
 import { getAllLocations } from '../../../api/locations'
 import { getAllStores } from '../../../api/stores'
 import Pagination from '../../../components/ui/Pagination'
+import Money from '../../../components/ui/Money'
 import Breadcrumb from '../../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../../components/TableFilter'
 import FilterSearchSelect from '../../../components/ui/FilterSearchSelect'
@@ -133,7 +134,7 @@ export default function GrnReport() {
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{row.grn_date}</td>
                         <td className="px-3 py-2 text-right text-slate-600">{row.item_count}</td>
                         <td className="px-3 py-2 text-right text-slate-600">{fmt(row.total_qty)}</td>
-                        <td className="px-3 py-2 text-right font-bold text-slate-800">{fmt(row.total_amount)}</td>
+                        <td className="px-3 py-2 text-right font-bold text-slate-800"><Money value={row.total_amount} /></td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLES[row.status] ?? 'bg-slate-100 text-slate-500'}`}>
                             {row.status}
@@ -148,7 +149,7 @@ export default function GrnReport() {
                     <tr className="border-t-2 border-slate-200 bg-slate-50">
                       <td colSpan={9} className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider text-slate-600">Page Total</td>
                       <td className="px-3 py-2 text-right text-xs font-bold text-slate-800">
-                        {fmt(rows.reduce((s, r) => s + Number(r.total_amount), 0))}
+                        <Money value={rows.reduce((s, r) => s + Number(r.total_amount), 0)} />
                       </td>
                       <td />
                     </tr>

@@ -10,6 +10,7 @@ use Illuminate\Support\Str;
 use Modules\Inventory\Models\Location;
 use Modules\Inventory\Models\ProductLocationStore;
 use Modules\Inventory\Models\StockReferenceType;
+use Modules\Inventory\Support\Money;
 
 class BinCardService
 {
@@ -46,10 +47,17 @@ class BinCardService
         $dateFrom   = $filters['date_from'] ?? null;
         $dateTo     = $filters['date_to'] ?? null;
 
-        $openingBalance = $dateFrom ? $this->openingBalance($productId, $locationId, $storeId, $dateFrom) : 0.0;
+        // Narrowing to one colour must narrow the OPENING balance too, or the running
+        // balance opens with every colour's stock and then only ever moves by one of them.
+        $attributeId = !empty($filters['attribute_id']) ? (int) $filters['attribute_id'] : null;
+
+        $openingBalance = $dateFrom
+            ? $this->openingBalance($productId, $locationId, $storeId, $attributeId, $dateFrom)
+            : 0.0;
 
         $query = DB::table('inv_stock_transactions')
             ->where('product_id', $productId)
+            ->when($attributeId, fn ($q) => $q->where('attribute_id', $attributeId))
             ->when($locationId, fn ($q) => $q->where('location_id', $locationId))
             ->when($storeId, fn ($q) => $q->where('store_id', $storeId))
             ->when($dateFrom, fn ($q) => $q->whereDate('transaction_date', '>=', $dateFrom))
@@ -62,10 +70,19 @@ class BinCardService
         $transactions = $query
             ->orderBy('transaction_date')
             ->orderBy('id')
-            ->get(['id', 'transaction_date', 'reference_type', 'reference_id', 'batch_no', 'qty_in', 'qty_out']);
+            ->get([
+                'id', 'transaction_date', 'reference_type', 'reference_id', 'batch_no',
+                'qty_in', 'qty_out', 'attribute_id', 'entered_qty', 'entered_unit_id', 'unit_price',
+            ]);
 
         $labels     = DB::table('inv_stock_reference_types')->pluck('label', 'code');
         $docNumbers = $this->resolveDocumentNumbers($transactions);
+        $colours    = DB::table('inv_attributes')
+            ->whereIn('id', $transactions->pluck('attribute_id')->filter()->unique()->all())
+            ->pluck('attribute_name', 'id');
+        $unitSymbols = DB::table('inv_unit_types')
+            ->whereIn('id', $transactions->pluck('entered_unit_id')->filter()->unique()->all())
+            ->pluck('symbol', 'id');
 
         $rows     = [];
         $balance  = $openingBalance;
@@ -86,8 +103,13 @@ class BinCardService
                 'description' => $labels[$t->reference_type] ?? Str::headline($t->reference_type),
                 'document_no' => $docNumbers[$t->reference_type][$t->reference_id] ?? (string) $t->reference_id,
                 'batch_no'    => $t->batch_no,
+                'color'       => $t->attribute_id !== null ? ($colours[$t->attribute_id] ?? null) : null,
                 'qty_in'      => $qtyIn,
                 'qty_out'     => $qtyOut,
+                // What the document said, before it was rebased into the stocking UOM.
+                'entered_qty' => (float) $t->entered_qty,
+                'entered_uom' => $t->entered_unit_id !== null ? ($unitSymbols[$t->entered_unit_id] ?? null) : null,
+                'unit_price'  => $t->unit_price !== null ? (float) $t->unit_price : null,
                 'balance'     => $balance,
             ];
         }
@@ -108,10 +130,11 @@ class BinCardService
     }
 
     /** Balance brought forward: every movement strictly before the report period. */
-    private function openingBalance(int $productId, ?int $locationId, ?int $storeId, string $dateFrom): float
+    private function openingBalance(int $productId, ?int $locationId, ?int $storeId, ?int $attributeId, string $dateFrom): float
     {
         return (float) DB::table('inv_stock_transactions')
             ->where('product_id', $productId)
+            ->when($attributeId, fn ($q) => $q->where('attribute_id', $attributeId))
             ->when($locationId, fn ($q) => $q->where('location_id', $locationId))
             ->when($storeId, fn ($q) => $q->where('store_id', $storeId))
             ->whereDate('transaction_date', '<', $dateFrom)
@@ -149,7 +172,14 @@ class BinCardService
     {
         $product = DB::table('inv_products')
             ->where('id', $productId)
-            ->first(['id', 'product_code', 'name', 'reorder_level', 'reorder_qty', 'reorder_period']);
+            ->first(['id', 'product_code', 'name', 'reorder_level', 'reorder_qty', 'reorder_period', 'base_unit_type_id']);
+
+        // Every quantity on a bin card — opening, in, out, balance, stock in hand — is in
+        // the product's stocking UOM, so the report names it once in the header instead of
+        // leaving the reader to guess whether 2,509 is kilograms or metres.
+        $uom = $product?->base_unit_type_id
+            ? DB::table('inv_unit_types')->where('id', $product->base_unit_type_id)->value('symbol')
+            : null;
 
         // Stock in hand from the running balance cache, scoped like the ledger query.
         // This is current stock (as of now), not as of date_to.
@@ -173,6 +203,10 @@ class BinCardService
             'company_email'   => $company->company_email ?? null,
             'product_code'    => $product->product_code ?? null,
             'product_name'    => $product->name ?? null,
+            'uom'             => $uom,
+            // Single-currency deployment (Support\Money) — named so prices are unambiguous.
+            'currency_code'   => Money::code(),
+            'currency_symbol' => Money::symbol(),
             'location_name'   => $location?->location_name,
             'store_name'      => $store->store_name ?? null,
             'stock_in_hand'   => $stockInHand,

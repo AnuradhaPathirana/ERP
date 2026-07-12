@@ -4,7 +4,9 @@ import { Ban, BadgeCheck, Download, Pencil, Printer, RefreshCw, Send, Trash2 } f
 import { useState } from 'react'
 import { deleteInvoice, downloadInvoicePdf, getInvoice, updateInvoiceStatus } from '../../api/invoices'
 import Breadcrumb from '../../components/Breadcrumb'
+import Money from '../../components/ui/Money'
 import { confirmAction, confirmDelete, showError, showSuccess } from '../../utils/alerts'
+import { fmtMoneyWithSymbol } from '../../utils/currency'
 import { printPdfBlob } from '../../utils/pdf'
 
 const STATUS_STYLES = {
@@ -13,8 +15,6 @@ const STATUS_STYLES = {
   paid:      'bg-green-100 text-green-700',
   cancelled: 'bg-red-100 text-red-500',
 }
-
-const fmt = (n) => Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 function Field({ label, value, mono = false }) {
   return (
@@ -155,7 +155,7 @@ export default function InvoiceViewPage() {
               onClick={async () => {
                 if (await confirmAction({
                   title: 'Mark as Paid?',
-                  message: `Record ${inv.invoice_no} (${fmt(inv.grand_total)}) as fully paid?`,
+                  message: `Record ${inv.invoice_no} (${fmtMoneyWithSymbol(inv.grand_total)}) as fully paid?`,
                   confirmText: 'Yes, Mark Paid',
                   confirmColor: '#16a34a',
                 })) statusMutation.mutate('paid')
@@ -207,12 +207,14 @@ export default function InvoiceViewPage() {
         {/* Details */}
         <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
           <div className="grid grid-cols-2 gap-x-4 gap-y-2 md:grid-cols-4 lg:grid-cols-6">
+            <Field label="Supplier" value={inv.company?.name} />
             <Field label="Customer" value={inv.customer?.name} />
             <Field label="Sales Order" value={inv.sales_order?.so_no} mono />
             <Field label="Delivery Order" value={inv.delivery_order?.do_no ?? 'Direct billing'} mono />
             <Field label="Invoice Date" value={inv.invoice_date} />
             <Field label="Due Date" value={inv.due_date} />
             <Field label="Issued / Paid" value={[inv.issued_at?.slice(0, 10), inv.paid_at?.slice(0, 10)].filter(Boolean).join(' / ')} />
+            <Field label="Mode of Payment" value={inv.mode_of_payment_label} />
             <div className="col-span-2">
               <Field label="Billing / Delivery Address" value={inv.delivery_address} />
             </div>
@@ -251,10 +253,10 @@ export default function InvoiceViewPage() {
                     <td className="px-2 py-1.5 text-slate-600">{it.attribute?.name || <span className="italic text-slate-300">—</span>}</td>
                     <td className="px-2 py-1.5 text-slate-500">{it.unit?.name}</td>
                     <td className="px-2 py-1.5 text-right text-slate-600 tabular-nums">{Number(it.quantity).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
-                    <td className="px-2 py-1.5 text-right text-slate-600 tabular-nums">{fmt(it.unit_price)}</td>
+                    <td className="px-2 py-1.5 text-right text-slate-600"><Money value={it.unit_price} /></td>
                     <td className="px-2 py-1.5 text-right text-amber-600 tabular-nums">{Number(it.discount) > 0 ? Number(it.discount) : '—'}</td>
                     <td className="px-2 py-1.5 text-right text-sky-600 tabular-nums">{Number(it.tax) > 0 ? Number(it.tax) : '—'}</td>
-                    <td className="px-2 py-1.5 text-right font-bold text-slate-800 tabular-nums">{fmt(it.line_total)}</td>
+                    <td className="px-2 py-1.5 text-right font-bold text-slate-800"><Money value={it.line_total} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -263,14 +265,14 @@ export default function InvoiceViewPage() {
                   <td colSpan={8} className="px-3 py-1.5">
                     <div className="flex items-center gap-4 text-xs">
                       <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
-                      <span className="text-slate-500">Sub Total: <span className="font-bold text-slate-700">{fmt(inv.subtotal)}</span></span>
-                      <span className="text-slate-500">Transport: <span className="font-bold text-slate-700">{fmt(inv.transport_charge)}</span></span>
+                      <span className="text-slate-500">Sub Total: <Money value={inv.subtotal} className="font-bold text-slate-700" /></span>
+                      <span className="text-slate-500">Transport: <Money value={inv.transport_charge} className="font-bold text-slate-700" /></span>
                     </div>
                   </td>
                   <td colSpan={2} className="px-3 py-1.5 text-right">
                     <div className="flex flex-col items-end leading-tight">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Invoice Total</span>
-                      <span className="text-base font-black text-indigo-700 tabular-nums">{fmt(inv.grand_total)}</span>
+                      <Money value={inv.grand_total} className="text-base font-black text-indigo-700" />
                     </div>
                   </td>
                 </tr>

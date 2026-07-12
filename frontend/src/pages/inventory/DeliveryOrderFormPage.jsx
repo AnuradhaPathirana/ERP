@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { CalendarDays, CheckCircle2, Package, RefreshCw, Save, Truck } from 'lucide-react'
+import { CalendarDays, CheckCircle2, Layers, MapPin, Package, RefreshCw, Save, Scissors, Truck } from 'lucide-react'
 import {
   createDeliveryOrder,
   getDeliveryOrder,
@@ -68,6 +68,92 @@ function RollCheckbox({ checked, onChange, disabled }) {
         </svg>
       )}
     </span>
+  )
+}
+
+/**
+ * One tickable roll. The picker has to recognise the physical roll from this card alone,
+ * so it carries what it holds vs. what this sale takes off it (they differ on a cut roll),
+ * where it is stored, and where it came from.
+ *
+ * Rolls are weighed in the STOCKING UOM, but the order was placed — and must be issued and
+ * invoiced — in the SELLING UOM chosen on the sales order. Ships therefore carries both:
+ * the storeman counts in one unit and the customer is owed the other, and nobody should be
+ * left dividing 152.50 Kg by 0.9144 in their head on the loading bay.
+ */
+function RollCard({ piece, checked, onToggle, baseUom, sellingUom, factor = 1 }) {
+  const holds = parseFloat(piece.weight) || 0
+  const ships = piece.taken_quantity != null ? (parseFloat(piece.taken_quantity) || 0) : holds
+  const cut   = Boolean(piece.is_cut)
+
+  // Only worth the ink when the two units actually differ.
+  const showSelling  = Boolean(sellingUom) && sellingUom !== baseUom && factor > 0
+  const shipsSelling = showSelling ? ships / factor : null
+
+  const where = [piece.store, piece.location].filter(Boolean).join(' · ')
+  const trace = [piece.batch_no && `Batch ${piece.batch_no}`, piece.grn_no].filter(Boolean).join(' · ')
+
+  return (
+    <div
+      onClick={onToggle}
+      title={`${piece.piece_code} — ships ${fmt(ships)} ${baseUom}${showSelling ? ` (= ${fmt(shipsSelling, 4)} ${sellingUom} to issue)` : ''} of ${fmt(holds)} ${baseUom}`}
+      className={`cursor-pointer rounded border px-2 py-1.5 transition-colors ${
+        checked
+          ? 'border-indigo-300 bg-indigo-50/70'
+          : 'border-slate-200 bg-slate-50/60 hover:border-indigo-200 hover:bg-white'
+      }`}
+    >
+      <div className="flex items-center gap-1.5">
+        <RollCheckbox checked={checked} onChange={onToggle} />
+        <span className="truncate font-mono text-[11px] font-bold text-slate-700">{piece.piece_code}</span>
+        <span className="shrink-0 rounded bg-slate-100 px-1 py-px text-[9px] font-semibold text-slate-500">
+          Roll {piece.roll_no || '—'}
+        </span>
+        {cut && (
+          <span className="ml-auto flex shrink-0 items-center gap-0.5 rounded bg-amber-100 px-1 py-px text-[9px] font-bold text-amber-700" title="Only part of this roll is sold — a remnant label will be printed on confirm">
+            <Scissors size={8} /> CUT
+          </span>
+        )}
+      </div>
+
+      <div className="mt-1 grid grid-cols-2 gap-1 border-t border-dashed border-slate-200 pt-1">
+        <div>
+          <div className="text-[8px] font-bold uppercase tracking-wider text-slate-400">Holds</div>
+          <div className="text-[11px] tabular-nums text-slate-500">
+            {fmt(holds)} <span className="text-[9px] font-semibold">{baseUom}</span>
+          </div>
+        </div>
+        <div>
+          <div className={`text-[8px] font-bold uppercase tracking-wider ${cut ? 'text-amber-500' : 'text-slate-400'}`}>Ships</div>
+          {/* Stocking UOM and selling UOM sit on one line: the storeman reads the weight he
+              can verify on the scale, and the amount to issue against the order, together. */}
+          <div className="flex flex-wrap items-baseline gap-x-1">
+            <span className={`text-[11px] font-bold tabular-nums ${cut ? 'text-amber-600' : 'text-slate-700'}`}>
+              {fmt(ships)} <span className="text-[9px] font-semibold">{baseUom}</span>
+            </span>
+            {showSelling && (
+              <span
+                className="text-[10px] font-bold tabular-nums text-indigo-600"
+                title={`Issue this much in the selling UOM — 1 ${sellingUom} = ${fmt(factor, 4)} ${baseUom}`}
+              >
+                = {fmt(shipsSelling)} <span className="text-[9px] font-semibold">{sellingUom}</span>
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {where && (
+        <div className="mt-1 flex items-center gap-1 truncate text-[9px] text-slate-500" title={where}>
+          <MapPin size={9} className="shrink-0 text-slate-400" /> {where}
+        </div>
+      )}
+      {trace && (
+        <div className="flex items-center gap-1 truncate text-[9px] text-slate-400" title={trace}>
+          <Layers size={9} className="shrink-0" /> {trace}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -174,11 +260,19 @@ export default function DeliveryOrderFormPage() {
     for (const item of doc.items ?? []) {
       if (item.is_scanned) {
         nextSelection[item.so_item_id] = { pieceIds: new Set(item.pieces.map((p) => p.piece_id)), quantity: '' }
+        // This DO's own rolls are excluded from the availability feed (they're "taken"),
+        // so they are merged back in — with the same shape, or the cards lose their detail.
         nextOwn[item.so_item_id] = item.pieces.map((p) => ({
-          piece_id:   p.piece_id,
-          piece_code: p.piece_code,
-          roll_no:    p.roll_no ?? '',
-          weight:     p.weight,
+          piece_id:       p.piece_id,
+          piece_code:     p.piece_code,
+          roll_no:        p.roll_no ?? '',
+          weight:         p.weight,
+          taken_quantity: p.taken_quantity,
+          is_cut:         p.is_cut,
+          store:          p.store,
+          location:       p.location,
+          batch_no:       p.batch_no,
+          grn_no:         p.grn_no,
         }))
       } else {
         nextSelection[item.so_item_id] = { pieceIds: new Set(), quantity: String(item.quantity) }
@@ -233,24 +327,37 @@ export default function DeliveryOrderFormPage() {
     })
   }, [soSource, ownPieces])
 
-  /* ── Totals ───────────────────────────────────────────────── */
+  /* ── Per-line shipped quantity ────────────────────────────────
+   * Rolls are weighed in the stocking UOM (Kg) and each carries taken_quantity — the
+   * slice this sale takes off it, which is less than its weight when the roll is cut.
+   * The saved line quantity is that sum rebased into the UOM the customer ordered in,
+   * exactly as DeliveryOrderService::syncItems() computes it. Summing piece.weight
+   * instead would over-report every cut roll and quote it in the wrong unit. */
+  const shippedOf = (line) => {
+    const sel = getSel(line.so_item_id)
+    if (!line.is_scanned) {
+      const qty = parseFloat(sel.quantity) || 0
+      return { lineQty: qty, baseQty: 0, rolls: 0 }
+    }
+    const picked  = line.available_pieces.filter((p) => sel.pieceIds.has(p.piece_id))
+    const baseQty = picked.reduce((s, p) => s + (parseFloat(p.taken_quantity) || 0), 0)
+    const factor  = parseFloat(line.conversion_factor) || 1
+    return { lineQty: baseQty / factor, baseQty, rolls: picked.length }
+  }
+
+  /* ── Totals ───────────────────────────────────────────────────
+   * Lines can be sold in different UOMs (Yard here, Kg there), so a single cross-line
+   * quantity sum would be meaningless — count lines and rolls instead, and let each
+   * line carry its own quantity in its own unit. */
   const totals = useMemo(() => {
-    let qty = 0
+    let lines = 0
     let rolls = 0
     for (const line of linesWithAvailability) {
-      const sel = getSel(line.so_item_id)
-      if (line.is_scanned) {
-        for (const piece of line.available_pieces) {
-          if (sel.pieceIds.has(piece.piece_id)) {
-            qty   += parseFloat(piece.weight) || 0
-            rolls += 1
-          }
-        }
-      } else {
-        qty += parseFloat(sel.quantity) || 0
-      }
+      const { lineQty, rolls: r } = shippedOf(line)
+      if (lineQty > 0 || r > 0) lines += 1
+      rolls += r
     }
-    return { qty, rolls }
+    return { lines, rolls }
   }, [linesWithAvailability, selection])
 
   const hasManualQty = linesWithAvailability.some(
@@ -346,8 +453,8 @@ export default function DeliveryOrderFormPage() {
         </div>
         <div className="flex gap-2">
           <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-center">
-            <div className="text-sm font-black leading-tight text-indigo-700 tabular-nums">{fmt(totals.qty)}</div>
-            <div className="text-[9px] font-bold uppercase tracking-wider text-indigo-400">Quantity</div>
+            <div className="text-sm font-black leading-tight text-indigo-700 tabular-nums">{totals.lines}</div>
+            <div className="text-[9px] font-bold uppercase tracking-wider text-indigo-400">Lines</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-1.5 text-center">
             <div className="text-sm font-black leading-tight text-slate-700 tabular-nums">{totals.rolls}</div>
@@ -481,11 +588,18 @@ export default function DeliveryOrderFormPage() {
           {soSource && (
             <div className="divide-y divide-slate-100">
               {linesWithAvailability.map((line) => {
-                const sel = getSel(line.so_item_id)
-                const selWeight = line.is_scanned
-                  ? line.available_pieces.filter((p) => sel.pieceIds.has(p.piece_id)).reduce((s, p) => s + (parseFloat(p.weight) || 0), 0)
-                  : parseFloat(sel.quantity) || 0
-                const isDone = line.fully_delivered
+                const sel     = getSel(line.so_item_id)
+                const isDone  = line.fully_delivered
+                const lineUom = line.unit?.symbol ?? line.unit?.name ?? ''
+                const baseUom = line.base_unit?.symbol ?? line.base_unit?.name ?? lineUom
+                const factor  = parseFloat(line.conversion_factor) || 1
+                // The rolls are weighed in one unit and the order was placed in another —
+                // say so, or the picker cannot reconcile "300 Yard" with a 152.50 Kg roll.
+                const showBase  = line.is_scanned && baseUom && baseUom !== lineUom
+                const shipped   = shippedOf(line)
+                const cutCount  = line.is_scanned
+                  ? line.available_pieces.filter((p) => sel.pieceIds.has(p.piece_id) && p.is_cut).length
+                  : 0
 
                 return (
                   <div key={line.so_item_id} className={`px-3 py-2 ${isDone ? 'opacity-45' : ''}`}>
@@ -496,16 +610,39 @@ export default function DeliveryOrderFormPage() {
                         <span className="rounded-full bg-slate-100 px-1.5 py-px text-[9px] font-semibold text-slate-500">{line.attribute.name}</span>
                       )}
                       <span className="text-[10px] text-slate-400">
-                        Ordered {fmt(line.quantity)} · Delivered {fmt(line.quantity_delivered)} · Remaining {fmt(line.remaining)}
+                        Ordered <b className="font-semibold text-slate-500">{fmt(line.quantity)} {lineUom}</b>
+                        {' · '}Delivered <b className="font-semibold text-slate-500">{fmt(line.quantity_delivered)} {lineUom}</b>
+                        {' · '}Remaining <b className="font-semibold text-indigo-500">{fmt(line.remaining)} {lineUom}</b>
                       </span>
+                      {/* The unit chosen on the sales order — what this line is issued and
+                          invoiced in, whatever unit the rolls happen to be weighed in. */}
+                      {lineUom && (
+                        <span
+                          className="rounded border border-emerald-200 bg-emerald-50 px-1.5 py-px text-[9px] font-bold text-emerald-700"
+                          title="The UOM this line was sold in on the sales order — issue and invoice in this unit"
+                        >
+                          Selling UOM: {lineUom}
+                        </span>
+                      )}
+                      {showBase && (
+                        <span
+                          className="rounded bg-slate-100 px-1.5 py-px text-[9px] font-semibold text-slate-500"
+                          title={`Rolls are weighed in ${baseUom}; this line was ordered in ${lineUom}`}
+                        >
+                          Rolls in {baseUom} · 1 {lineUom} = {fmt(factor, 4)} {baseUom}
+                        </span>
+                      )}
                       {isDone && (
                         <span className="flex items-center gap-1 rounded-full bg-green-100 px-1.5 py-px text-[9px] font-bold text-green-700">
                           <CheckCircle2 size={9} /> Fully delivered
                         </span>
                       )}
-                      {selWeight > 0 && (
+                      {shipped.lineQty > 0 && (
                         <span className="ml-auto rounded bg-indigo-100 px-2 py-0.5 text-[10px] font-bold text-indigo-700 tabular-nums">
-                          Shipping {fmt(selWeight)}
+                          Shipping {fmt(shipped.lineQty)} {lineUom}
+                          {showBase && (
+                            <span className="ml-1 font-semibold text-indigo-400">({fmt(shipped.baseQty)} {baseUom})</span>
+                          )}
                         </span>
                       )}
                     </div>
@@ -514,35 +651,52 @@ export default function DeliveryOrderFormPage() {
                       line.available_pieces.length === 0 ? (
                         !isDone && <p className="text-[11px] italic text-slate-400">All allocated rolls of this line are already on another delivery order.</p>
                       ) : (
-                        <div className="grid grid-cols-1 gap-1 sm:grid-cols-2 lg:grid-cols-3">
-                          {line.available_pieces.map((piece) => {
-                            const checked = sel.pieceIds.has(piece.piece_id)
-                            return (
-                              <div
+                        <>
+                          {cutCount > 0 && (
+                            <p className="mb-1 flex items-center gap-1 text-[10px] font-semibold text-amber-600">
+                              <Scissors size={10} />
+                              {cutCount === 1
+                                ? '1 selected roll is cut — 1 remnant label to print on confirm.'
+                                : `${cutCount} selected rolls are cut — ${cutCount} remnant labels to print on confirm.`}
+                            </p>
+                          )}
+                          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+                            {line.available_pieces.map((piece) => (
+                              <RollCard
                                 key={piece.piece_id}
-                                onClick={() => togglePiece(line.so_item_id, piece.piece_id)}
-                                className={`flex cursor-pointer items-center gap-2 rounded border px-2 py-1 transition-colors ${checked ? 'border-indigo-300 bg-indigo-50/70' : 'border-slate-200 bg-slate-50/60 hover:border-indigo-200'}`}
-                              >
-                                <RollCheckbox checked={checked} onChange={() => togglePiece(line.so_item_id, piece.piece_id)} />
-                                <span className="font-mono text-[10px] text-slate-500">{piece.piece_code}</span>
-                                <span className="text-[10px] text-slate-400">Roll {piece.roll_no || '—'}</span>
-                                <span className="ml-auto text-[11px] font-bold text-slate-700 tabular-nums">{fmt(piece.weight, 2)}</span>
-                              </div>
-                            )
-                          })}
-                        </div>
+                                piece={piece}
+                                baseUom={baseUom}
+                                sellingUom={lineUom}
+                                factor={factor}
+                                checked={sel.pieceIds.has(piece.piece_id)}
+                                onToggle={() => togglePiece(line.so_item_id, piece.piece_id)}
+                              />
+                            ))}
+                          </div>
+                        </>
                       )
                     ) : (
                       !isDone && (
                         <div className="flex items-center gap-2">
-                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Deliver Qty</label>
-                          <input
-                            type="number" min="0" max={line.remaining} step="0.0001" placeholder="0"
-                            value={sel.quantity}
-                            onChange={(e) => setQty(line.so_item_id, e.target.value)}
-                            className="block w-32 rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white"
-                          />
-                          <span className="text-[10px] text-slate-400">of {fmt(line.remaining)} remaining</span>
+                          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                            Deliver Qty{lineUom && ` (${lineUom})`}
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number" min="0" max={line.remaining} step="0.0001" placeholder="0"
+                              value={sel.quantity}
+                              onChange={(e) => setQty(line.so_item_id, e.target.value)}
+                              className="block w-32 rounded border border-slate-200 bg-slate-50 py-0.5 pl-1.5 pr-9 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white"
+                            />
+                            {lineUom && (
+                              <span className="pointer-events-none absolute inset-y-0 right-1.5 flex items-center text-[9px] font-semibold text-slate-400">
+                                {lineUom}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-[10px] text-slate-400">
+                            of {fmt(line.remaining)} {lineUom} remaining
+                          </span>
                         </div>
                       )
                     )}

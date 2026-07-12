@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteInvoice, downloadInvoicePdf, getInvoices } from '../../api/invoices'
 import { getAllCustomers } from '../../api/customers'
 import Pagination from '../../components/ui/Pagination'
+import Money from '../../components/ui/Money'
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
 import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
@@ -169,7 +170,7 @@ export default function InvoicesPage() {
                         </td>
                         <td className="px-3 py-2 font-medium text-slate-700">{row.customer?.name || <span className="italic text-slate-300">—</span>}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{row.invoice_date}</td>
-                        <td className="px-3 py-2 text-right font-medium text-slate-700 tabular-nums">{Number(row.grand_total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-700"><Money value={row.grand_total} /></td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[row.status] ?? 'bg-slate-100 text-slate-500'}`}>
                             {row.status_label}

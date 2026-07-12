@@ -10,6 +10,7 @@ import {
 } from '../../api/goodsReceivedNotes'
 import { getAllSuppliers } from '../../api/suppliers'
 import Pagination from '../../components/ui/Pagination'
+import Money from '../../components/ui/Money'
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
 import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
@@ -194,7 +195,7 @@ export default function GoodsReceivedNotesPage() {
                           {grn.store?.name || <span className="italic text-slate-300">—</span>}
                         </td>
                         <td className="px-3 py-2 text-right font-medium text-slate-700">
-                          {Number(grn.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          <Money value={grn.total_amount} />
                         </td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[grn.status] ?? 'bg-slate-100 text-slate-500'}`}>

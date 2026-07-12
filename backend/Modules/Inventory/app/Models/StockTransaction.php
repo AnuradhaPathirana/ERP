@@ -16,6 +16,7 @@ class StockTransaction extends Model
         'reference_type',
         'reference_id',
         'product_id',
+        'attribute_id',
         'store_id',
         'location_id',
         'batch_no',
@@ -24,6 +25,8 @@ class StockTransaction extends Model
         'qty_in',
         'qty_out',
         'unit_id',
+        'entered_unit_id',
+        'entered_qty',
         'unit_price',
         'created_by',
     ];
@@ -34,13 +37,17 @@ class StockTransaction extends Model
         // Ledger movements are in the product's base UOM — decimal(20,6).
         'qty_in'           => 'decimal:6',
         'qty_out'          => 'decimal:6',
+        // What the user actually keyed, in the unit they keyed it in (10 Roll, not 500 Kg).
+        'entered_qty'      => 'decimal:6',
         'unit_price'       => 'decimal:8',
         'reference_id'     => 'integer',
         'product_id'       => 'integer',
+        'attribute_id'     => 'integer',
         'store_id'         => 'integer',
         'location_id'      => 'integer',
         'batch_id'         => 'integer',
         'unit_id'          => 'integer',
+        'entered_unit_id'  => 'integer',
         'created_by'       => 'integer',
     ];
 
@@ -62,5 +69,23 @@ class StockTransaction extends Model
     public function batch(): BelongsTo
     {
         return $this->belongsTo(Batch::class, 'batch_id');
+    }
+
+    /** Colour (or other variant attribute) this movement was of. */
+    public function attribute(): BelongsTo
+    {
+        return $this->belongsTo(Attribute::class, 'attribute_id');
+    }
+
+    /** The stocking UOM qty_in/qty_out are denominated in. */
+    public function unit(): BelongsTo
+    {
+        return $this->belongsTo(UnitType::class, 'unit_id');
+    }
+
+    /** The UOM the movement was transacted in — what entered_qty is denominated in. */
+    public function enteredUnit(): BelongsTo
+    {
+        return $this->belongsTo(UnitType::class, 'entered_unit_id');
     }
 }

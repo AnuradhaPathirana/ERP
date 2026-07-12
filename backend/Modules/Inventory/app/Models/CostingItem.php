@@ -11,6 +11,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * Per-product landed-cost breakdown line of a costing. Monetary values are
  * PER UNIT: unit_price (GRN purchase) + charge_portion = landed_unit_cost,
  * + margin_amount (±SSCL/±VAT when toggled) = selling_price.
+ *
+ * That build-up is denominated in the GRN's RECEIVING unit (unit_id) — the unit the
+ * supplier quoted. The *_base columns restate the two figures that leave this table
+ * (landed cost and selling price) per the product's stocking UOM, which is what the
+ * price list and every sales document speak. conversion_factor is the GRN line's own
+ * frozen factor, so a costing values a shipment exactly as the stock ledger did.
  */
 class CostingItem extends Model
 {
@@ -24,34 +30,44 @@ class CostingItem extends Model
         'attribute_id',
         'unit_id',
         'quantity',
+        'conversion_factor',
+        'base_quantity',
+        'base_unit_id',
         'unit_price',
         'charge_portion',
         'landed_unit_cost',
+        'landed_unit_cost_base',
         'margin_pct',
         'margin_amount',
         'sscl_amount',
         'vat_amount',
         'selling_price',
+        'selling_price_base',
         'is_price_overridden',
     ];
 
     protected $casts = [
-        'costing_id'          => 'integer',
-        'grn_id'              => 'integer',
-        'grn_item_id'         => 'integer',
-        'product_id'          => 'integer',
-        'attribute_id'        => 'integer',
-        'unit_id'             => 'integer',
-        'quantity'            => 'decimal:4',
-        'unit_price'          => 'decimal:4',
-        'charge_portion'      => 'decimal:4',
-        'landed_unit_cost'    => 'decimal:4',
-        'margin_pct'          => 'decimal:4',
-        'margin_amount'       => 'decimal:4',
-        'sscl_amount'         => 'decimal:4',
-        'vat_amount'          => 'decimal:4',
-        'selling_price'       => 'decimal:4',
-        'is_price_overridden' => 'boolean',
+        'costing_id'            => 'integer',
+        'grn_id'                => 'integer',
+        'grn_item_id'           => 'integer',
+        'product_id'            => 'integer',
+        'attribute_id'          => 'integer',
+        'unit_id'               => 'integer',
+        'base_unit_id'          => 'integer',
+        'quantity'              => 'decimal:4',
+        'conversion_factor'     => 'decimal:10',
+        'base_quantity'         => 'decimal:6',
+        'unit_price'            => 'decimal:8',
+        'charge_portion'        => 'decimal:8',
+        'landed_unit_cost'      => 'decimal:8',
+        'landed_unit_cost_base' => 'decimal:8',
+        'margin_pct'            => 'decimal:4',
+        'margin_amount'         => 'decimal:8',
+        'sscl_amount'           => 'decimal:8',
+        'vat_amount'            => 'decimal:8',
+        'selling_price'         => 'decimal:8',
+        'selling_price_base'    => 'decimal:8',
+        'is_price_overridden'   => 'boolean',
     ];
 
     public function costing(): BelongsTo
@@ -82,5 +98,11 @@ class CostingItem extends Model
     public function unit(): BelongsTo
     {
         return $this->belongsTo(UnitType::class, 'unit_id');
+    }
+
+    /** The product's stocking UOM at costing time — what *_base is denominated in. */
+    public function baseUnit(): BelongsTo
+    {
+        return $this->belongsTo(UnitType::class, 'base_unit_id');
     }
 }

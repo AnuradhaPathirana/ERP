@@ -105,16 +105,27 @@ class ReportController extends Controller
             ->join('inv_products as p', 'p.id', '=', 'st.product_id')
             ->join('inv_locations as l', 'l.id', '=', 'st.location_id')
             ->join('inv_stores as s', 's.id', '=', 'st.store_id')
+            // Colour is on the ledger row itself — reference_id names the document, not the
+            // line, so it could never have been joined back to reliably.
+            ->leftJoin('inv_attributes as a', 'a.id', '=', 'st.attribute_id')
+            // qty_in/qty_out speak the stocking UOM; entered_* speak the UOM transacted in.
+            ->leftJoin('inv_unit_types as u', 'u.id', '=', 'st.unit_id')
+            ->leftJoin('inv_unit_types as eu', 'eu.id', '=', 'st.entered_unit_id')
             ->select([
                 'st.id',
                 'st.transaction_date',
                 'p.product_code',
                 'p.name as product_name',
+                'st.attribute_id',
+                'a.attribute_name as color',
                 'st.reference_type',
                 'st.reference_id',
                 'st.batch_no',
                 'st.qty_in',
                 'st.qty_out',
+                'u.symbol as uom',
+                'st.entered_qty',
+                'eu.symbol as entered_uom',
                 'st.unit_price',
                 'l.location_name',
                 's.store_name',
@@ -126,12 +137,17 @@ class ReportController extends Controller
             $query->where(function ($q) use ($search) {
                 $q->where('p.name', 'like', $search)
                   ->orWhere('p.product_code', 'like', $search)
+                  ->orWhere('a.attribute_name', 'like', $search)
                   ->orWhere('st.batch_no', 'like', $search);
             });
         }
 
         if ($request->filled('product_id')) {
             $query->where('st.product_id', $request->integer('product_id'));
+        }
+
+        if ($request->filled('attribute_id')) {
+            $query->where('st.attribute_id', $request->integer('attribute_id'));
         }
 
         if ($request->filled('location_id')) {
@@ -902,15 +918,16 @@ class ReportController extends Controller
     public function binCard(Request $request, BinCardService $service): JsonResponse
     {
         $request->validate([
-            'product_id'  => ['required', 'integer', 'exists:inv_products,id'],
-            'location_id' => ['nullable', 'integer', 'exists:inv_locations,id'],
-            'store_id'    => ['nullable', 'integer', 'exists:inv_stores,id'],
-            'date_from'   => ['nullable', 'date'],
-            'date_to'     => ['nullable', 'date', 'after_or_equal:date_from'],
+            'product_id'   => ['required', 'integer', 'exists:inv_products,id'],
+            'attribute_id' => ['nullable', 'integer', 'exists:inv_attributes,id'],
+            'location_id'  => ['nullable', 'integer', 'exists:inv_locations,id'],
+            'store_id'     => ['nullable', 'integer', 'exists:inv_stores,id'],
+            'date_from'    => ['nullable', 'date'],
+            'date_to'      => ['nullable', 'date', 'after_or_equal:date_from'],
         ]);
 
         return response()->json($service->build(
-            $request->only(['product_id', 'location_id', 'store_id', 'date_from', 'date_to'])
+            $request->only(['product_id', 'attribute_id', 'location_id', 'store_id', 'date_from', 'date_to'])
         ));
     }
 

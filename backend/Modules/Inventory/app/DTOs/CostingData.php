@@ -12,9 +12,10 @@ final class CostingData
     /**
      * @param array<int>   $grnIds
      * @param array<array{expense_type_id:int, amount:float, note:?string}> $expenses
-     * @param array<array{grn_item_id:int, margin_pct:?float, selling_price:?float}> $items
+     * @param array<array{grn_item_id:int, margin_pct:?float, selling_price_base:?float}> $items
      *        Per-line overrides for the product breakdown: a line margin that
-     *        differs from the default, or a directly-typed selling price.
+     *        differs from the default, or a directly-typed selling price — the
+     *        latter quoted per the product's STOCKING UOM, not the receiving unit.
      */
     public function __construct(
         public readonly int     $supplierId,

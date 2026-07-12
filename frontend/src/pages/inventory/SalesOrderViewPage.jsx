@@ -6,7 +6,9 @@ import {
 import { useState } from 'react'
 import { getSalesOrder, updateSalesOrderStatus } from '../../api/salesOrders'
 import Breadcrumb from '../../components/Breadcrumb'
+import Money from '../../components/ui/Money'
 import { confirmAction, showError, showSuccess } from '../../utils/alerts'
+import { fmtMoneyWithSymbol } from '../../utils/currency'
 
 const STATUS_STYLES = {
   draft:     'bg-slate-100 text-slate-600',
@@ -14,8 +16,6 @@ const STATUS_STYLES = {
   completed: 'bg-green-100 text-green-700',
   cancelled: 'bg-red-100 text-red-500',
 }
-
-const fmt = (n) => Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 function Field({ label, value, mono = false }) {
   return (
@@ -216,7 +216,7 @@ export default function SalesOrderViewPage() {
                   <FileText size={11} />
                   <span className="font-mono">{inv.invoice_no}</span>
                   <span className="text-[9px] font-normal text-blue-400">
-                    {inv.status_label} · {Number(inv.grand_total).toLocaleString(undefined, { minimumFractionDigits: 2 })}{inv.do_id == null ? ' · Direct' : ''}
+                    {inv.status_label} · {fmtMoneyWithSymbol(inv.grand_total)}{inv.do_id == null ? ' · Direct' : ''}
                   </span>
                 </Link>
               ))}
@@ -272,7 +272,7 @@ export default function SalesOrderViewPage() {
                       </td>
                       <td className="px-2 py-1.5 text-slate-600">{it.attribute?.name || <span className="italic text-slate-300">—</span>}</td>
                       <td className="px-2 py-1.5 text-slate-500">{it.unit?.name}</td>
-                      <td className="px-2 py-1.5 text-right text-slate-600 tabular-nums">{fmt(it.unit_price)}</td>
+                      <td className="px-2 py-1.5 text-right text-slate-600"><Money value={it.unit_price} /></td>
                       <td className="px-2 py-1.5 text-right text-slate-600 tabular-nums">{Number(it.quantity).toLocaleString(undefined, { maximumFractionDigits: 4 })}</td>
                       <td className="px-2 py-1.5 text-right tabular-nums">
                         <span className={Number(it.quantity_delivered) >= Number(it.quantity) - 0.0001 && Number(it.quantity) > 0 ? 'font-bold text-green-600' : 'text-slate-500'}>
@@ -281,7 +281,7 @@ export default function SalesOrderViewPage() {
                       </td>
                       <td className="px-2 py-1.5 text-right text-amber-600 tabular-nums">{Number(it.discount) > 0 ? Number(it.discount) : '—'}</td>
                       <td className="px-2 py-1.5 text-right text-sky-600 tabular-nums">{Number(it.tax) > 0 ? Number(it.tax) : '—'}</td>
-                      <td className="px-2 py-1.5 text-right font-bold text-slate-800 tabular-nums">{fmt(it.line_total)}</td>
+                      <td className="px-2 py-1.5 text-right font-bold text-slate-800"><Money value={it.line_total} /></td>
                     </tr>
                     {it.is_scanned && expanded[it.id] && (
                       <tr>
@@ -323,15 +323,15 @@ export default function SalesOrderViewPage() {
                   <td colSpan={9} className="px-3 py-1.5">
                     <div className="flex items-center gap-4 text-xs">
                       <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
-                      <span className="text-slate-500">Sub Total: <span className="font-bold text-slate-700">{fmt(so.subtotal)}</span></span>
-                      <span className="text-slate-500">Transport: <span className="font-bold text-slate-700">{fmt(so.transport_charge)}</span></span>
+                      <span className="text-slate-500">Sub Total: <Money value={so.subtotal} className="font-bold text-slate-700" /></span>
+                      <span className="text-slate-500">Transport: <Money value={so.transport_charge} className="font-bold text-slate-700" /></span>
                       <span className="text-slate-500">Total Qty: <span className="font-bold text-slate-700">{so.total_quantity != null ? Number(so.total_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}</span></span>
                     </div>
                   </td>
                   <td colSpan={2} className="px-3 py-1.5 text-right">
                     <div className="flex flex-col items-end leading-tight">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Net Total</span>
-                      <span className="text-base font-black text-indigo-700 tabular-nums">{fmt(so.grand_total)}</span>
+                      <Money value={so.grand_total} className="text-base font-black text-indigo-700" />
                     </div>
                   </td>
                 </tr>

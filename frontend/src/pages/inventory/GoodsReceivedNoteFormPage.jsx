@@ -26,6 +26,8 @@ import { getAllUnitTypesFlat } from '../../api/unitTypes'
 import { getAllAttributeTypes } from '../../api/attributeTypes'
 import { getAllAttributes } from '../../api/attributes'
 import Breadcrumb from '../../components/Breadcrumb'
+import Money from '../../components/ui/Money'
+import { CURRENCY, fmtMoney, fmtMoneyWithSymbol } from '../../utils/currency'
 import BatchAssignModal from '../../components/inventory/BatchAssignModal'
 import RollAssignModal from '../../components/inventory/RollAssignModal'
 import { showError, showSuccess } from '../../utils/alerts'
@@ -41,6 +43,10 @@ const TABLE_INPUT   = 'block w-full rounded border border-slate-200 bg-slate-50 
 const TABLE_ERR     = 'block w-full rounded border border-red-400 bg-red-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-red-500 focus:bg-white'
 const LABEL_CLS   = 'text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap'
 const ERR_CLS     = 'mt-0.5 text-[10px] text-red-500'
+
+/* Beyond this many lines the items table scrolls inside itself (sticky header + totals)
+   instead of pushing the save actions off-screen. */
+const ITEMS_SCROLL_AFTER = 15
 
 /* ── Header field validation rules ───────────────────────────── */
 const HEADER_RULES = {
@@ -117,10 +123,21 @@ function FormDropdown({ groups, value, onChange, onNext, onBlur, placeholder = '
     setOpen(true)
   }
 
+  // The menu is portalled + fixed-positioned, so it has to be re-measured while any
+  // ancestor scrolls (the items table scrolls on its own once it gets long).
   useEffect(() => {
-    if (open && btnRef.current) {
+    if (!open) return
+    const place = () => {
+      if (!btnRef.current) return
       const rect = btnRef.current.getBoundingClientRect()
       setDropPos({ top: rect.bottom + 2, left: rect.left, width: Math.max(rect.width, compact ? 140 : 200) })
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
     }
   }, [open, compact])
 
@@ -286,13 +303,22 @@ function ProductSearchCell({ row, productSearch, onQueryChange, onSelect, onClea
 
   // Recalculate dropdown position whenever it opens
   useEffect(() => {
-    if (isOpen && inputRef.current) {
+    if (!isOpen) return
+    const place = () => {
+      if (!inputRef.current) return
       const rect = inputRef.current.getBoundingClientRect()
       setDropPos({
         top:   rect.bottom + 2,
         left:  rect.left,
         width: Math.max(rect.width, 420),
       })
+    }
+    place()
+    window.addEventListener('scroll', place, true)
+    window.addEventListener('resize', place)
+    return () => {
+      window.removeEventListener('scroll', place, true)
+      window.removeEventListener('resize', place)
     }
   }, [isOpen])
 
@@ -759,9 +785,7 @@ export default function GoodsReceivedNoteFormPage() {
     if (!lastGrnData) return
     setLastGrnDate(lastGrnData.grn_date ?? '')
     setLastGrnAmount(
-      lastGrnData.total_amount != null
-        ? Number(lastGrnData.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })
-        : ''
+      lastGrnData.total_amount != null ? fmtMoneyWithSymbol(lastGrnData.total_amount) : ''
     )
   }, [lastGrnData])
 
@@ -924,8 +948,13 @@ export default function GoodsReceivedNoteFormPage() {
       attribute_id:      '',
       color_options:     [],
     }])
-    // Auto-focus the product search input on the new row
-    setTimeout(() => cellRefs.current[key]?.product?.focus(), 50)
+    // Auto-focus the product search input on the new row and pull it into view —
+    // on long GRNs the new row lands below the fold of the scrolling items table.
+    setTimeout(() => {
+      const el = cellRefs.current[key]?.product
+      el?.focus()
+      el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    }, 50)
   }, [])
 
   /* ── Alt+N shortcut to add a new item row ─────────────────── */
@@ -1071,6 +1100,10 @@ export default function GoodsReceivedNoteFormPage() {
     },
     { gross: 0, disc: 0, tax: 0, total: 0 },
   )
+
+  /* ── Items table scrolling ────────────────────────────────── */
+  const itemsScroll = items.length > ITEMS_SCROLL_AFTER
+  const footCell    = itemsScroll ? 'sticky bottom-0 z-10 bg-indigo-50' : ''
 
   /* ── Save ─────────────────────────────────────────────────── */
   const saveMutation = useMutation({
@@ -1659,7 +1692,7 @@ export default function GoodsReceivedNoteFormPage() {
                       <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Date</th>
                       <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Supplier</th>
                       <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Status</th>
-                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">Amount</th>
+                      <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">Amount ({CURRENCY})</th>
                       <th className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">Items</th>
                     </tr>
                   </thead>
@@ -1687,9 +1720,7 @@ export default function GoodsReceivedNoteFormPage() {
                             <StatusBadge label={po.status_label ?? po.status} value={po.status} />
                           </td>
                           <td className="px-3 py-1.5 text-right text-slate-700 font-medium">
-                            {po.total_amount != null
-                              ? Number(po.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })
-                              : '—'}
+                            {po.total_amount != null ? <Money value={po.total_amount} /> : '—'}
                           </td>
                           <td className="px-3 py-1.5 text-right text-slate-500">
                             {po.items_count ?? po.items?.length ?? '—'}
@@ -1715,7 +1746,16 @@ export default function GoodsReceivedNoteFormPage() {
                 {loadingItems
                   ? <span className="text-[10px] text-blue-400 italic">Loading items…</span>
                   : items.length > 0
-                    ? <span className="text-[10px] text-slate-500">{items.length} line{items.length !== 1 ? 's' : ''}</span>
+                    ? (
+                      <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                        {items.length} line{items.length !== 1 ? 's' : ''}
+                        {itemsScroll && (
+                          <span className="rounded bg-indigo-50 px-1 py-px text-[9px] font-semibold text-indigo-600" title="Scroll inside the table — header and totals stay visible">
+                            scrollable
+                          </span>
+                        )}
+                      </span>
+                    )
                     : null}
                 <CheckToggle checked={discountEnabled} onChange={setDiscountEnabled} label="Discount %" title="Show/hide the line discount column" />
                 <div className="h-4 w-px bg-blue-200" />
@@ -1740,9 +1780,12 @@ export default function GoodsReceivedNoteFormPage() {
                 : 'Select a PO above to load items, or click "+ Add Item" to add items manually.'}
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div
+              className={`overflow-x-auto ${itemsScroll ? 'thin-scroll overflow-y-auto' : ''}`}
+              style={itemsScroll ? { maxHeight: 'min(62vh, 620px)' } : undefined}
+            >
               <table className="w-full text-xs">
-                <thead>
+                <thead className={itemsScroll ? 'sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]' : ''}>
                   <tr className="bg-slate-50 text-left border-b border-slate-200">
                     <th className="w-8 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">#</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Code</th>
@@ -1753,7 +1796,7 @@ export default function GoodsReceivedNoteFormPage() {
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">UOM</th>
                     <th className="w-28 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Qty Received</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Rolls</th>
-                    <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price</th>
+                    <th className="w-32 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Purchasing Unit Price ({CURRENCY})</th>
                     {discountEnabled && <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-center">Disc %</th>}
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Batch</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] text-right font-bold uppercase tracking-wider text-slate-500">Total</th>
@@ -1941,7 +1984,7 @@ export default function GoodsReceivedNoteFormPage() {
                                   <input
                                     ref={setCellRef(row._key, 'price')}
                                     type="number" min="0" step="0.01"
-                                    className={(getItemErr(row._key, 'price') ? TABLE_ERR : TABLE_INPUT) + ' w-20'}
+                                    className={(getItemErr(row._key, 'price') ? TABLE_ERR : TABLE_INPUT) + ' w-28'}
                                     value={row.unit_price}
                                     onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
                                     onBlur={() => touchItemField(row._key, 'price')}
@@ -2022,7 +2065,7 @@ export default function GoodsReceivedNoteFormPage() {
 
                         {/* Total */}
                         <td className="px-2 py-1 text-right font-bold text-slate-800 tabular-nums">
-                          {amount > 0 ? amount.toLocaleString(undefined, { minimumFractionDigits: 2 }) : <span className="text-slate-300 font-normal">—</span>}
+                          {amount > 0 ? fmtMoney(amount) : <span className="text-slate-300 font-normal">—</span>}
                         </td>
 
                         {/* Delete */}
@@ -2045,33 +2088,32 @@ export default function GoodsReceivedNoteFormPage() {
                     {discountEnabled && (
                       <>
                         <td className="px-1.5 py-1.5 text-center text-xs font-bold text-amber-600 tabular-nums">
-                          -{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          -{fmtMoney(totals.disc)}
                         </td>
                         <td colSpan={1} />
                       </>
                     )}
                     <td className="px-2 py-1.5 text-right text-sm font-black text-slate-800 tabular-nums">
-                      {totals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      {fmtMoney(totals.total)}
                     </td>
                     <td />
                   </tr>
+                  {/* Net total stays pinned to the bottom edge while the lines scroll */}
                   <tr className="bg-indigo-50 border-t border-indigo-100">
-                    <td colSpan={discountEnabled ? 12 : 11} className="px-3 py-1.5">
+                    <td colSpan={discountEnabled ? 12 : 11} className={`px-3 py-1.5 ${footCell}`}>
                       <div className="flex items-center gap-4 text-xs">
                         <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
-                        <span className="text-slate-500">Gross: <span className="font-bold text-slate-700">{totals.gross.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
-                        {discountEnabled && <span className="text-amber-600">Disc: <span className="font-bold">-{totals.disc.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>}
+                        <span className="text-slate-500">Gross: <Money value={totals.gross} className="font-bold text-slate-700" /></span>
+                        {discountEnabled && <span className="text-amber-600">Disc: -<Money value={totals.disc} className="font-bold" /></span>}
                       </div>
                     </td>
-                    <td className="px-3 py-1.5 text-right">
+                    <td className={`px-3 py-1.5 text-right ${footCell}`}>
                       <div className="flex flex-col items-end leading-tight">
                         <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Net Total</span>
-                        <span className="text-base font-black text-indigo-700 tabular-nums">
-                          {totals.total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </span>
+                        <Money value={totals.total} className="text-base font-black text-indigo-700" />
                       </div>
                     </td>
-                    <td />
+                    <td className={footCell} />
                   </tr>
                 </tfoot>
               </table>

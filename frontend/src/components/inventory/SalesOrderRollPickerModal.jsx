@@ -2,7 +2,9 @@ import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Boxes, RefreshCw, Search, Wand2, X } from 'lucide-react'
 import { getAvailablePieces } from '../../api/salesOrders'
+import Money from '../ui/Money'
 
+/** Weights and quantities only — money goes through <Money />. */
 const fmt = (n, d = 2) => Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })
 
 /**
@@ -139,10 +141,18 @@ export default function SalesOrderRollPickerModal({
                 {data && <> · {data.count} roll{data.count !== 1 ? 's' : ''} in stock · {fmt(data.total_weight)} {uom} total</>}
                 {listPrice != null && (
                   <span className="ml-1.5 rounded bg-emerald-100 px-1.5 py-px font-bold text-emerald-700 tabular-nums" title="Product price-list price — rolls from costed shipments show their own costing price per row">
-                    List @ {fmt(listPrice)}{uom && `/${uom}`}
+                    List @ <Money value={listPrice} />{uom && `/${uom}`}
                   </span>
                 )}
               </p>
+              {/* Say the unit once, plainly: every weight and price below is per the
+                  product's stocking UOM, which is what the costing prices in. */}
+              {uom && (
+                <p className="mt-px text-[9px] text-indigo-400/80">
+                  Weights and prices are per <span className="font-bold text-indigo-500">{uom}</span> — the stocking UOM.
+                  Selling = each roll&rsquo;s confirmed-costing <span className="font-semibold">Selling / Stocking UOM</span> price.
+                </p>
+              )}
             </div>
           </div>
           <button type="button" onClick={onClose} className="rounded p-1 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-600 transition-colors">
@@ -221,7 +231,10 @@ export default function SalesOrderRollPickerModal({
                   <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
                     GRN Cost{uom && <span className="ml-0.5 font-semibold normal-case text-indigo-500">(/{uom})</span>}
                   </th>
-                  <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                  <th
+                    className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                    title={`The roll's confirmed-costing "Selling / Stocking UOM" price${uom ? ` — per ${uom}` : ''}. This is what the sales order line is priced at; it is re-expressed if the line sells in another unit.`}
+                  >
                     Selling{uom && <span className="ml-0.5 font-semibold normal-case text-indigo-500">(/{uom})</span>}
                   </th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN</th>
@@ -251,12 +264,18 @@ export default function SalesOrderRollPickerModal({
                       <td className="px-2 py-1 font-mono text-slate-500">{p.piece_code}</td>
                       <td className="px-2 py-1 text-slate-600">{p.color || <span className="italic text-slate-300">—</span>}</td>
                       <td className="px-2 py-1 text-right tabular-nums text-slate-600">{fmt(p.weight, 4)}</td>
-                      <td className="px-2 py-1 text-right tabular-nums text-slate-600">{p.grn_unit_price ? fmt(p.grn_unit_price) : '—'}</td>
+                      <td className="px-2 py-1 text-right text-slate-600">{p.grn_unit_price ? <Money value={p.grn_unit_price} /> : '—'}</td>
                       <td className={`px-2 py-1 text-right tabular-nums ${p.selling_price != null && Number(p.grn_unit_price) > Number(p.selling_price) ? 'font-semibold text-amber-600' : 'text-emerald-700'}`}
                           title={p.selling_price != null && Number(p.grn_unit_price) > Number(p.selling_price)
                             ? 'GRN cost is above this roll\'s selling price — selling at this price makes a loss'
-                            : p.price_source === 'costing' ? 'Confirmed costing price for this shipment' : p.price_source === 'price_list' ? 'Price-list fallback — shipment not costed' : undefined}>
-                        {p.selling_price != null ? fmt(p.selling_price) : '—'}
+                            : p.price_source === 'costing' ? `Confirmed costing — "Selling / Stocking UOM"${uom ? ` (per ${uom})` : ''} for this roll's shipment` : p.price_source === 'price_list' ? 'Price-list fallback — this roll\'s shipment has no confirmed costing' : undefined}>
+                        {p.selling_price != null ? <Money value={p.selling_price} /> : '—'}
+                        {/* Old stock at old price, new at new — say which shipment set this. */}
+                        {p.selling_price != null && p.price_source && (
+                          <div className={`text-[9px] font-semibold normal-case ${p.price_source === 'costing' ? 'text-emerald-500' : 'text-slate-400'}`}>
+                            {p.price_source === 'costing' ? 'costing' : 'list price'}
+                          </div>
+                        )}
                       </td>
                       <td className="px-2 py-1 font-mono text-[10px] text-slate-400">{p.grn_no || '—'}</td>
                       <td className="px-2 py-1 text-slate-500">

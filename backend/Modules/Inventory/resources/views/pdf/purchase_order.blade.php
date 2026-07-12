@@ -80,7 +80,10 @@
     $discountPct = $gross > 0 ? round($discount / $gross * 100, 2) : 0;
     $totalQty    = $po->items->sum(fn ($it) => (float) $it->quantity_ordered);
 
-    $amountInWords = \Modules\Inventory\Support\NumberToWords::convert($net, $po->location?->base_currency ?? '');
+    $amountInWords = \Modules\Inventory\Support\NumberToWords::convert($net, \Modules\Inventory\Support\Money::code());
+
+    // Cells carry the bare number; the column header says which currency it is.
+    $money = fn ($n) => \Modules\Inventory\Support\Money::number((float) $n);
   @endphp
 
   {{-- ══ HEADER ══════════════════════════════════════════════ --}}
@@ -165,8 +168,8 @@
           <th>Description</th>
           <th class="ta-c" style="width:55px;">Color</th>
           <th class="ta-r" style="width:70px;">Quantity</th>
-          <th class="ta-r" style="width:78px;">Unit Price</th>
-          <th class="ta-r" style="width:80px;">Amount</th>
+          <th class="ta-r" style="width:78px;">{{ \Modules\Inventory\Support\Money::label('Unit Price') }}</th>
+          <th class="ta-r" style="width:80px;">{{ \Modules\Inventory\Support\Money::label('Amount') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -179,8 +182,8 @@
             {{ number_format((float) $item->quantity_ordered, 2) }}
             <span class="unit">{{ $item->unit?->symbol ?? $item->unit?->name }}</span>
           </td>
-          <td class="ta-r">{{ number_format((float) $item->unit_price, 2) }}</td>
-          <td class="ta-r bold">{{ number_format((float) $item->line_total, 2) }}</td>
+          <td class="ta-r">{{ $money($item->unit_price) }}</td>
+          <td class="ta-r bold">{{ $money($item->line_total) }}</td>
         </tr>
         @endforeach
       </tbody>
@@ -202,17 +205,17 @@
     <table class="totals-box">
       <tr>
         <td class="meta-label">Subtotal</td>
-        <td class="ta-r">{{ number_format($gross, 2) }}</td>
+        <td class="ta-r">{{ $money($gross) }}</td>
       </tr>
       @if($discount > 0)
       <tr>
         <td class="meta-label">Discount {{ rtrim(rtrim(number_format($discountPct, 2), '0'), '.') }}%</td>
-        <td class="ta-r">- {{ number_format($discount, 2) }}</td>
+        <td class="ta-r">- {{ $money($discount) }}</td>
       </tr>
       @endif
       <tr class="totals-sep">
         <td>Total</td>
-        <td class="ta-r">{{ number_format($net, 2) }}</td>
+        <td class="ta-r">{{ \Modules\Inventory\Support\Money::format($net) }}</td>
       </tr>
     </table>
   </div>

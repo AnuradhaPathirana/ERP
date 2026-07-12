@@ -8,6 +8,7 @@ import {
   getPurchaseOrders,
 } from '../../api/purchaseOrders'
 import Pagination from '../../components/ui/Pagination'
+import Money from '../../components/ui/Money'
 import { getAllSuppliers } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
@@ -199,7 +200,7 @@ export default function PurchaseOrdersPage() {
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{po.order_date}</td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{po.expected_delivery_date || <span className="italic text-slate-300">—</span>}</td>
-                        <td className="px-3 py-2 text-right font-medium text-slate-700">{Number(po.grand_total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-700"><Money value={po.grand_total} /></td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[po.status] ?? 'bg-slate-100 text-slate-500'}`}>
                             {po.status_label}

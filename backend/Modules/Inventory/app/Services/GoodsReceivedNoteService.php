@@ -371,12 +371,16 @@ class GoodsReceivedNoteService
                         $batch     = $assignment->batch;
                         $batchBase = $this->units->toBase($item->product, $item->unit_id, (float) $assignment->quantity);
 
-                        // Create stock transaction per batch slice
+                        // Create stock transaction per batch slice.
+                        // reference_id names the GRN, not this line — so colour has to
+                        // travel on the row itself, or a ledger row of a GRN that received
+                        // two colours of one product could never be told apart.
                         $stockTransaction = StockTransaction::create([
                             'transaction_date' => now(),
                             'reference_type'   => StockReferenceType::CODE_GRN,
                             'reference_id'     => $grn->id,
                             'product_id'       => $item->product_id,
+                            'attribute_id'     => $item->attribute_id,
                             'store_id'         => $grn->store_id,
                             'location_id'      => $grn->location_id,
                             'batch_no'         => $batch->batch_no,
@@ -385,6 +389,9 @@ class GoodsReceivedNoteService
                             'qty_in'           => $batchBase['qty'],
                             'qty_out'          => 0,
                             'unit_id'          => $baseUnitId,
+                            // The balance moves in base units; the document said 10 Roll.
+                            'entered_unit_id'  => $item->unit_id,
+                            'entered_qty'      => (float) $assignment->quantity,
                             'unit_price'       => $basePrice,
                             'created_by'       => auth()->id(),
                         ]);
@@ -411,6 +418,7 @@ class GoodsReceivedNoteService
                         'reference_type'   => StockReferenceType::CODE_GRN,
                         'reference_id'     => $grn->id,
                         'product_id'       => $item->product_id,
+                        'attribute_id'     => $item->attribute_id,
                         'store_id'         => $grn->store_id,
                         'location_id'      => $grn->location_id,
                         'batch_no'         => $item->batch_no,
@@ -419,6 +427,8 @@ class GoodsReceivedNoteService
                         'qty_in'           => $line['qty'],
                         'qty_out'          => 0,
                         'unit_id'          => $baseUnitId,
+                        'entered_unit_id'  => $item->unit_id,
+                        'entered_qty'      => (float) $item->quantity_received,
                         'unit_price'       => $basePrice,
                         'created_by'       => auth()->id(),
                     ]);

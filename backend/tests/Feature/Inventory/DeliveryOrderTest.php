@@ -421,6 +421,64 @@ class DeliveryOrderTest extends TestCase
             ->assertJsonPath('data.items.0.available_pieces.0.piece_id', $seed['pieces'][1]->id);
     }
 
+    /**
+     * The DO form's roll cards are the tick target — the picker identifies the physical roll
+     * from them alone. So the recall payload has to carry where the roll is, where it came
+     * from, what it holds, and the slice this sale takes off it (less, on a cut roll), plus
+     * the two UOM symbols the figures are quoted in.
+     */
+    public function test_from_so_recall_carries_roll_identity_uom_and_cut_slice(): void
+    {
+        $product = Product::factory()->create();
+        [$storeId, $locationId] = $this->makeStoreAndLocation();
+        $seed = $this->makeGrnWithPieces($product, [10.0, 20.0], 250.0, $storeId, $locationId);
+
+        // Sell 25 of the 30 on the rack — the rolls cannot all ship whole, so one is cut.
+        $response = $this->actingAs($this->user)
+            ->postJson('/api/v1/sales-orders', [
+                'order_date'      => '2026-07-09',
+                'customer_id'     => $this->customer->id,
+                'sales_person_id' => $this->user->id,
+                'status'          => 'confirmed',
+                'items'           => [[
+                    'product_id'  => $product->id,
+                    'quantity'    => 25,
+                    'unit_price'  => 1000.0,
+                    'piece_codes' => array_map(fn (GrnItemPiece $p) => $p->piece_code, $seed['pieces']),
+                ]],
+            ])->assertCreated();
+
+        $soId = $response->json('data.id');
+
+        $payload = $this->actingAs($this->user)
+            ->getJson("/api/v1/delivery-orders/from-so/{$soId}")
+            ->assertOk()
+            ->json('data.items.0');
+
+        // Both UOM symbols travel with the line, along with the factor that bridges them.
+        $this->assertNotNull($payload['unit']['symbol'] ?? null);
+        $this->assertNotNull($payload['base_unit']['symbol'] ?? null);
+        $this->assertGreaterThan(0, $payload['conversion_factor']);
+
+        $pieces = collect($payload['available_pieces']);
+        $this->assertCount(2, $pieces);
+
+        foreach ($pieces as $piece) {
+            $this->assertStringStartsWith('Test Store', $piece['store']);
+            $this->assertStringStartsWith('Test Location', $piece['location']);
+            $this->assertStringStartsWith('GRN-2026-', $piece['grn_no']);
+            $this->assertArrayHasKey('batch_no', $piece);
+            $this->assertGreaterThan(0, $piece['weight']);
+        }
+
+        // 25 off 30 leaves exactly one roll cut, and the shipped slices still sum to the order.
+        $this->assertSame(1, $pieces->where('is_cut', true)->count());
+        $this->assertEqualsWithDelta(25.0, $pieces->sum('taken_quantity'), 0.0001);
+
+        $cut = $pieces->firstWhere('is_cut', true);
+        $this->assertLessThan($cut['weight'], $cut['taken_quantity']);
+    }
+
     // ── Confirm: the outbound stock posting ─────────────────────────────────
 
     public function test_confirm_posts_sales_delivery_ledger_rows_and_decrements_stock(): void

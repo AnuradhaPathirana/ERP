@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ClipboardList } from 'lucide-react'
 import { getPurchaseRequestsReport } from '../../../api/reports'
 import Pagination from '../../../components/ui/Pagination'
+import Money from '../../../components/ui/Money'
 import Breadcrumb from '../../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../../components/TableFilter'
 import { useTableFilter } from '../../../hooks/useTableFilter'
@@ -34,7 +35,6 @@ const STATUS_OPTIONS = [
   { value: 'completed', label: 'Completed' },
 ]
 
-const fmt = (n) => Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })
 
 export default function PurchaseRequestsReport() {
   const [page, setPage] = useState(1)
@@ -126,7 +126,7 @@ export default function PurchaseRequestsReport() {
                         <td className="max-w-[180px] truncate px-3 py-2 text-slate-600" title={row.purpose}>{row.purpose || <span className="italic text-slate-300">—</span>}</td>
                         <td className="px-3 py-2 text-slate-500">{row.requested_by_name || <span className="italic text-slate-300">—</span>}</td>
                         <td className="px-3 py-2 text-right font-medium text-slate-700">{row.item_count}</td>
-                        <td className="px-3 py-2 text-right font-medium text-slate-700">{fmt(row.estimated_value)}</td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-700"><Money value={row.estimated_value} /></td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLES[row.status] ?? 'bg-slate-100 text-slate-500'}`}>
                             {row.status}

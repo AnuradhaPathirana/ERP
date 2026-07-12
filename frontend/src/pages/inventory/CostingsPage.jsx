@@ -12,6 +12,7 @@ import { confirmDelete, confirmAction, showError, showSuccess } from '../../util
 import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
 import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 import Pagination from '../../components/ui/Pagination'
+import Money from '../../components/ui/Money'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
@@ -174,7 +175,7 @@ export default function CostingsPage() {
                         </td>
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{c.transaction_date || '—'}</td>
                         <td className="px-3 py-2 text-right font-semibold text-slate-700">
-                          {Number(c.total_price_with_vat).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          <Money value={c.total_price_with_vat} />
                         </td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[c.status] ?? 'bg-slate-100 text-slate-500'}`}>

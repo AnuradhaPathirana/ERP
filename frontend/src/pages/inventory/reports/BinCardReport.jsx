@@ -5,6 +5,7 @@ import { downloadBinCardCsv, downloadBinCardPdf, getBinCardReport } from '../../
 import { getAllLocations } from '../../../api/locations'
 import { getAllStores } from '../../../api/stores'
 import { getAllProducts } from '../../../api/products'
+import { getAllAttributes } from '../../../api/attributes'
 import Breadcrumb from '../../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../../components/TableFilter'
 import CollapsibleCard from '../../../components/ui/CollapsibleCard'
@@ -23,6 +24,7 @@ const CRUMBS = [
 
 const INITIAL_FILTERS = {
   product_id: '',
+  attribute_id: '',
   location_id: '',
   store_id: '',
   date_from: '',
@@ -72,6 +74,16 @@ export default function BinCardReport() {
   const productOptions = (productsData ?? []).map((p) => ({
     value: p.id,
     label: p.product_code ? `[${p.product_code}] ${p.name}` : p.name,
+  }))
+
+  const { data: attributesData } = useQuery({
+    queryKey: ['attributes-all'],
+    queryFn: getAllAttributes,
+    staleTime: Infinity,
+  })
+  const colorOptions = (attributesData ?? []).map((a) => ({
+    value: a.id,
+    label: a.attribute_name,
   }))
 
   const setLocation = (val) => setDraft((d) => {
@@ -149,6 +161,14 @@ export default function BinCardReport() {
             placeholder="Select product…"
           />
         </FilterField>
+        <FilterField label="Colour">
+          <FilterSearchSelect
+            value={draft.attribute_id}
+            onChange={(val) => setDraft((d) => ({ ...d, attribute_id: val }))}
+            options={colorOptions}
+            placeholder="All colours"
+          />
+        </FilterField>
         <FilterField label="Location">
           <FilterSearchSelect
             value={draft.location_id}
@@ -200,8 +220,11 @@ export default function BinCardReport() {
                 <HeaderItem label="Product Name" value={header.product_name} />
                 <HeaderItem label="Store" value={header.store_name ?? 'All'} />
                 <HeaderItem label="Generated Time" value={header.generated_at} />
+                {/* Every quantity on this card is in the stocking UOM; every price in this currency. */}
+                <HeaderItem label="UOM" value={header.uom} />
+                <HeaderItem label="Currency" value={header.currency_code ? `${header.currency_code} (${header.currency_symbol})` : null} />
+                <HeaderItem label="Stock In Hand" value={`${fmt(header.stock_in_hand)}${header.uom ? ` ${header.uom}` : ''}`} />
                 <HeaderItem label="Reorder Level" value={fmt(header.reorder_level)} />
-                <HeaderItem label="Stock In Hand" value={fmt(header.stock_in_hand)} />
                 <HeaderItem label="Reorder Qty / Period" value={`${fmt(header.reorder_qty)} / ${header.reorder_period ?? '—'}`} />
               </div>
             </CollapsibleCard>
@@ -221,9 +244,20 @@ export default function BinCardReport() {
                       <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Date</th>
                       <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Description</th>
                       <th className="w-32 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Document No</th>
-                      <th className="w-28 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Stock IN</th>
-                      <th className="w-28 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Stock Out</th>
-                      <th className="w-32 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Stock Balance</th>
+                      <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Colour</th>
+                      {/* Cells stay bare numbers — the header names the unit/currency once. */}
+                      <th className="w-28 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">
+                        Unit Price{header?.currency_code && <span className="ml-0.5 font-semibold normal-case text-indigo-500">({header.currency_code})</span>}
+                      </th>
+                      <th className="w-28 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">
+                        Stock IN{header?.uom && <span className="ml-0.5 font-semibold normal-case text-indigo-500">({header.uom})</span>}
+                      </th>
+                      <th className="w-28 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">
+                        Stock Out{header?.uom && <span className="ml-0.5 font-semibold normal-case text-indigo-500">({header.uom})</span>}
+                      </th>
+                      <th className="w-32 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">
+                        Stock Balance{header?.uom && <span className="ml-0.5 font-semibold normal-case text-indigo-500">({header.uom})</span>}
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -233,6 +267,8 @@ export default function BinCardReport() {
                         <td className="whitespace-nowrap px-3 py-2 text-slate-500">{header?.date_from}</td>
                         <td className="px-3 py-2 text-slate-700">Opening Balance</td>
                         <td className="px-3 py-2 text-slate-300">—</td>
+                        <td className="px-3 py-2 text-slate-300">—</td>
+                        <td className="px-3 py-2 text-right text-slate-300">—</td>
                         <td className="px-3 py-2 text-right text-slate-300">—</td>
                         <td className="px-3 py-2 text-right text-slate-300">—</td>
                         <td className="px-3 py-2 text-right font-bold text-slate-800 tabular-nums">{fmt(opening.balance)}</td>
@@ -240,7 +276,7 @@ export default function BinCardReport() {
                     )}
                     {rows.length === 0 && !opening?.show ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-400">No stock transactions found for the selected filters.</td>
+                        <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">No stock transactions found for the selected filters.</td>
                       </tr>
                     ) : (
                       rows.map((row, i) => (
@@ -249,6 +285,14 @@ export default function BinCardReport() {
                           <td className="whitespace-nowrap px-3 py-2 text-slate-500">{row.date}</td>
                           <td className="px-3 py-2 font-medium text-slate-700">{row.description}</td>
                           <td className="px-3 py-2 font-mono text-indigo-600">{row.document_no}</td>
+                          <td className="px-3 py-2">
+                            {row.color
+                              ? <span className="rounded-full bg-slate-100 px-1.5 py-px text-[10px] font-semibold text-slate-600">{row.color}</span>
+                              : <span className="italic text-slate-300">—</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right tabular-nums text-slate-600">
+                            {row.unit_price != null ? fmt(row.unit_price) : <span className="text-slate-300">—</span>}
+                          </td>
                           <td className={`px-3 py-2 text-right font-semibold tabular-nums ${Number(row.qty_in) > 0 ? 'text-green-700' : 'text-slate-300'}`}>
                             {Number(row.qty_in) > 0 ? fmt(row.qty_in) : '—'}
                           </td>
@@ -263,7 +307,7 @@ export default function BinCardReport() {
                   {summary && (
                     <tfoot>
                       <tr className="border-t border-slate-300 bg-slate-50 font-bold text-slate-800">
-                        <td colSpan={4} className="px-3 py-2 text-right uppercase tracking-wider text-slate-500">Total</td>
+                        <td colSpan={6} className="px-3 py-2 text-right uppercase tracking-wider text-slate-500">Total</td>
                         <td className="px-3 py-2 text-right tabular-nums text-green-700">{fmt(summary.total_in)}</td>
                         <td className="px-3 py-2 text-right tabular-nums text-red-600">{fmt(summary.total_out)}</td>
                         <td className="px-3 py-2 text-right tabular-nums">{fmt(summary.closing_balance)}</td>

@@ -79,7 +79,9 @@ const NAV_ITEMS = [
           { label: 'Stock Levels',       to: '/inventory/reports/stock-levels',       icon: BarChart2,      permissionGuard: 'view_reports', disabled: true },
           { label: 'Stock Movements',    to: '/inventory/reports/stock-movements',    icon: ArrowLeftRight, permissionGuard: 'view_reports', disabled: true },
           { label: 'Bin Card',           to: '/inventory/reports/bin-card',           icon: BookOpen,       permissionGuard: 'view_reports' },
-          { label: 'Movement Summary',   to: '/inventory/reports/movement-summary',   icon: TrendingUp,     permissionGuard: 'view_reports' },
+          // Disabled until the value columns are redesigned — one latest-cost price per
+          // product values purchases and sales alike, so neither spend nor revenue is real.
+          { label: 'Movement Summary',   to: '/inventory/reports/movement-summary',   icon: TrendingUp,     permissionGuard: 'view_reports', disabled: true },
           { label: 'Low Stock Alert',    to: '/inventory/reports/low-stock',          icon: AlertTriangle,  permissionGuard: 'view_reports', disabled: true },
           { label: 'Stock Valuation',    to: '/inventory/reports/stock-valuation',    icon: DollarSign,     permissionGuard: 'view_reports', disabled: true },
           { label: 'Batch / Expiry',     to: '/inventory/reports/batch-expiry',       icon: FlaskConical,   permissionGuard: 'view_reports', disabled: true },

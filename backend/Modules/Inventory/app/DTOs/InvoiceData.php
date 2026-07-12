@@ -13,11 +13,13 @@ final class InvoiceData
     public function __construct(
         public readonly ?int    $soId,
         public readonly ?int    $doId,
+        public readonly ?int    $companyId,
         public readonly string  $invoiceDate,
         public readonly ?string $dueDate,
         public readonly ?float  $transportCharge,
         public readonly ?string $deliveryAddress,
         public readonly ?string $remarks,
+        public readonly ?string $modeOfPayment,
         public readonly array   $items,
     ) {}
 
@@ -31,6 +33,9 @@ final class InvoiceData
             doId:            $request->validated('do_id') !== null
                                  ? (int) $request->validated('do_id')
                                  : null,
+            companyId:       $request->validated('company_id') !== null
+                                 ? (int) $request->validated('company_id')
+                                 : null,
             invoiceDate:     $request->validated('invoice_date'),
             dueDate:         $request->validated('due_date'),
             transportCharge: $request->validated('transport_charge') !== null
@@ -38,6 +43,7 @@ final class InvoiceData
                                  : null,
             deliveryAddress: $request->validated('delivery_address'),
             remarks:         $request->validated('remarks'),
+            modeOfPayment:   $request->validated('mode_of_payment'),
             items:           (array) ($request->validated('items') ?? []),
         );
     }

@@ -4,6 +4,7 @@ import { Receipt } from 'lucide-react'
 import { getLandedCostsReport } from '../../../api/reports'
 import { getAllSuppliers } from '../../../api/suppliers'
 import Pagination from '../../../components/ui/Pagination'
+import Money from '../../../components/ui/Money'
 import Breadcrumb from '../../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../../components/TableFilter'
 import FilterSearchSelect from '../../../components/ui/FilterSearchSelect'
@@ -28,7 +29,6 @@ const TYPE_STYLES = {
   cif: 'bg-purple-100 text-purple-700',
 }
 
-const fmt = (n) => Number(n ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })
 
 export default function LandedCostsReport() {
   const [page, setPage] = useState(1)
@@ -133,10 +133,10 @@ export default function LandedCostsReport() {
                           </span>
                         </td>
                         <td className="px-3 py-2 text-right text-slate-600">{row.grn_count}</td>
-                        <td className="px-3 py-2 text-right text-slate-700">{fmt(row.material_cost)}</td>
-                        <td className="px-3 py-2 text-right text-slate-700">{fmt(row.total_additional_expenses)}</td>
-                        <td className="px-3 py-2 text-right text-slate-700">{fmt(row.vat_amount)}</td>
-                        <td className="px-3 py-2 text-right font-bold text-blue-700">{fmt(row.total_landed_cost)}</td>
+                        <td className="px-3 py-2 text-right text-slate-700"><Money value={row.material_cost} /></td>
+                        <td className="px-3 py-2 text-right text-slate-700"><Money value={row.total_additional_expenses} /></td>
+                        <td className="px-3 py-2 text-right text-slate-700"><Money value={row.vat_amount} /></td>
+                        <td className="px-3 py-2 text-right font-bold text-blue-700"><Money value={row.total_landed_cost} /></td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${STATUS_STYLES[row.status] ?? 'bg-slate-100 text-slate-500'}`}>
                             {row.status}
@@ -150,10 +150,10 @@ export default function LandedCostsReport() {
                   <tfoot>
                     <tr className="border-t-2 border-slate-200 bg-slate-50">
                       <td colSpan={7} className="px-3 py-2 text-right text-xs font-bold uppercase tracking-wider text-slate-600">Page Total</td>
-                      <td className="px-3 py-2 text-right text-xs font-bold text-slate-800">{fmt(rows.reduce((s, r) => s + Number(r.material_cost), 0))}</td>
-                      <td className="px-3 py-2 text-right text-xs font-bold text-slate-800">{fmt(rows.reduce((s, r) => s + Number(r.total_additional_expenses), 0))}</td>
-                      <td className="px-3 py-2 text-right text-xs font-bold text-slate-800">{fmt(rows.reduce((s, r) => s + Number(r.vat_amount), 0))}</td>
-                      <td className="px-3 py-2 text-right text-xs font-bold text-blue-700">{fmt(rows.reduce((s, r) => s + Number(r.total_landed_cost), 0))}</td>
+                      <td className="px-3 py-2 text-right text-xs font-bold text-slate-800"><Money value={rows.reduce((s, r) => s + Number(r.material_cost), 0)} /></td>
+                      <td className="px-3 py-2 text-right text-xs font-bold text-slate-800"><Money value={rows.reduce((s, r) => s + Number(r.total_additional_expenses), 0)} /></td>
+                      <td className="px-3 py-2 text-right text-xs font-bold text-slate-800"><Money value={rows.reduce((s, r) => s + Number(r.vat_amount), 0)} /></td>
+                      <td className="px-3 py-2 text-right text-xs font-bold text-blue-700"><Money value={rows.reduce((s, r) => s + Number(r.total_landed_cost), 0)} /></td>
                       <td />
                     </tr>
                   </tfoot>

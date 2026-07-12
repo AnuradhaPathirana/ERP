@@ -7,6 +7,7 @@ import { getAllLocations } from '../../../api/locations'
 import { getAllStores } from '../../../api/stores'
 import { getAllProducts } from '../../../api/products'
 import Pagination from '../../../components/ui/Pagination'
+import Money from '../../../components/ui/Money'
 import Breadcrumb from '../../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../../components/TableFilter'
 import FilterSearchSelect from '../../../components/ui/FilterSearchSelect'
@@ -135,7 +136,7 @@ export default function OutstandingPOsReport() {
                         <td className="px-3 py-2 text-right text-slate-600">{fmt(row.quantity_ordered)}</td>
                         <td className="px-3 py-2 text-right text-green-700">{fmt(row.quantity_received)}</td>
                         <td className="px-3 py-2 text-right font-bold text-amber-700">{fmt(row.remaining_qty)}</td>
-                        <td className="px-3 py-2 text-right font-bold text-slate-800">{fmt(row.remaining_value)}</td>
+                        <td className="px-3 py-2 text-right font-bold text-slate-800"><Money value={row.remaining_value} /></td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold ${PO_STATUS_STYLES[row.po_status] ?? 'bg-slate-100 text-slate-500'}`}>
                             {row.po_status?.replace('_', ' ')}

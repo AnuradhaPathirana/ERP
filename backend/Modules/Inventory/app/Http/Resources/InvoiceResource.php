@@ -18,6 +18,7 @@ class InvoiceResource extends JsonResource
             'so_id'            => $this->so_id,
             'do_id'            => $this->do_id,
             'customer_id'      => $this->customer_id,
+            'company_id'       => $this->company_id,
             'invoice_date'     => $this->invoice_date?->toDateString(),
             'due_date'         => $this->due_date?->toDateString(),
             'status'           => $this->status->value,
@@ -27,6 +28,10 @@ class InvoiceResource extends JsonResource
             'grand_total'      => (float) $this->grand_total,
             'delivery_address' => $this->delivery_address,
             'remarks'          => $this->remarks,
+
+            'mode_of_payment'       => $this->mode_of_payment?->value,
+            'mode_of_payment_label' => $this->mode_of_payment?->label(),
+
             'issued_at'        => $this->issued_at?->toDateTimeString(),
             'paid_at'          => $this->paid_at?->toDateTimeString(),
 
@@ -37,6 +42,10 @@ class InvoiceResource extends JsonResource
             'delivery_order' => $this->whenLoaded('deliveryOrder', fn () => $this->deliveryOrder ? [
                 'id'    => $this->deliveryOrder->id,
                 'do_no' => $this->deliveryOrder->do_no,
+            ] : null),
+            'company' => $this->whenLoaded('company', fn () => $this->company ? [
+                'id'   => $this->company->id,
+                'name' => $this->company->company_name,
             ] : null),
             'customer' => $this->whenLoaded('customer', fn () => $this->customer ? [
                 'id'            => $this->customer->id,

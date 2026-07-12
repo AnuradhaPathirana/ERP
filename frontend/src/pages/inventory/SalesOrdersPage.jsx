@@ -6,6 +6,7 @@ import { deleteSalesOrder, getSalesOrders } from '../../api/salesOrders'
 import { getAllCustomers } from '../../api/customers'
 import { getUsersAll } from '../../api/users'
 import Pagination from '../../components/ui/Pagination'
+import Money from '../../components/ui/Money'
 import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
 import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
@@ -180,7 +181,7 @@ export default function SalesOrdersPage() {
                         <td className="px-3 py-2 text-right text-slate-600 tabular-nums">
                           {so.total_quantity != null ? Number(so.total_quantity).toLocaleString(undefined, { maximumFractionDigits: 2 }) : '—'}
                         </td>
-                        <td className="px-3 py-2 text-right font-medium text-slate-700">{Number(so.grand_total).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-700"><Money value={so.grand_total} /></td>
                         <td className="px-3 py-2">
                           <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[so.status] ?? 'bg-slate-100 text-slate-500'}`}>
                             {so.status_label}

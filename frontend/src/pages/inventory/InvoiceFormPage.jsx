@@ -10,8 +10,11 @@ import {
   getNextInvoiceNo,
   updateInvoice,
 } from '../../api/invoices'
+import { getAllCompanies } from '../../api/companies'
 import Breadcrumb from '../../components/Breadcrumb'
+import Money from '../../components/ui/Money'
 import { showError, showSuccess } from '../../utils/alerts'
+import { fmtMoney } from '../../utils/currency'
 
 const INPUT_CLS =
   'block w-full rounded border border-slate-300 bg-slate-50 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20'
@@ -19,14 +22,21 @@ const INPUT_ERR_CLS =
   'block w-full rounded border border-red-300 bg-red-50/40 px-2 py-1 text-xs text-slate-800 placeholder-slate-400 outline-none transition-all focus:border-red-500 focus:bg-white focus:ring-1 focus:ring-red-500/20'
 const INPUT_RO_CLS =
   'block w-full rounded border border-slate-200 bg-slate-100 px-2 py-1 text-xs font-mono text-slate-500 outline-none cursor-not-allowed'
+const SELECT_CLS =
+  'block w-full rounded border border-slate-300 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white focus:ring-1 focus:ring-indigo-500/20 cursor-pointer'
 const LABEL_CLS   = 'block text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-0.5'
 const ERR_CLS     = 'text-[10px] text-red-500 leading-tight'
+
+const PAYMENT_MODES = [
+  { value: 'cash',          label: 'Cash' },
+  { value: 'cheque',        label: 'Cheque' },
+  { value: 'bank_transfer', label: 'Bank Transfer' },
+  { value: 'credit',        label: 'Credit' },
+]
 const TABLE_INPUT =
   'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-400 focus:bg-white'
 const TABLE_INPUT_RO =
   'block w-full rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500 outline-none cursor-not-allowed'
-
-const fmt = (n) => Number(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 function calcLine(row) {
   const qty     = parseFloat(row.quantity)   || 0
@@ -57,6 +67,8 @@ export default function InvoiceFormPage() {
     transport_charge: '',
     delivery_address: '',
     remarks:          '',
+    mode_of_payment:  '',
+    company_id:       '',
   })
   const [lines, setLines]   = useState([]) // {so_item_id, do_item_id, product, unit, attribute, quantity, unit_price, discount, tax}
   const [errors, setErrors] = useState({})
@@ -67,6 +79,20 @@ export default function InvoiceFormPage() {
     enabled:  !isEdit,
     staleTime: 0,
   })
+
+  // The supplier printed on the tax invoice.
+  const { data: companiesRes } = useQuery({
+    queryKey: ['companies-all'],
+    queryFn:  getAllCompanies,
+    staleTime: 5 * 60 * 1000,
+  })
+  const companies = companiesRes?.data ?? []
+
+  // A tax invoice must name a supplier, so a new invoice starts on the first company.
+  useEffect(() => {
+    if (isEdit || form.company_id || companies.length === 0) return
+    setForm((f) => ({ ...f, company_id: String(companies[0].id) }))
+  }, [companies, isEdit, form.company_id])
 
   /* ── Billing source (create mode) ─────────────────────────── */
   const { data: source, isLoading: loadingSource, isError: sourceError, error: sourceErrorObj } = useQuery({
@@ -112,6 +138,8 @@ export default function InvoiceFormPage() {
       transport_charge: String(inv.transport_charge ?? 0),
       delivery_address: inv.delivery_address ?? '',
       remarks:          inv.remarks ?? '',
+      mode_of_payment:  inv.mode_of_payment ?? '',
+      company_id:       inv.company_id ? String(inv.company_id) : '',
     })
     setLines((inv.items ?? []).map((it) => ({
       so_item_id: it.so_item_id,
@@ -168,6 +196,8 @@ export default function InvoiceFormPage() {
       transport_charge: parseFloat(form.transport_charge) || 0,
       delivery_address: form.delivery_address.trim() || null,
       remarks:          form.remarks.trim() || null,
+      mode_of_payment:  form.mode_of_payment || null,
+      company_id:       form.company_id ? Number(form.company_id) : null,
       items: lines.map((row) => ({
         so_item_id: row.so_item_id,
         unit_price: parseFloat(row.unit_price) || 0,
@@ -219,7 +249,7 @@ export default function InvoiceFormPage() {
           <Breadcrumb crumbs={CRUMBS} />
         </div>
         <div className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-1.5 text-center">
-          <div className="text-sm font-black leading-tight text-indigo-700 tabular-nums">{fmt(totals.grand)}</div>
+          <Money value={totals.grand} className="block text-sm font-black leading-tight text-indigo-700" />
           <div className="text-[9px] font-bold uppercase tracking-wider text-indigo-400">Invoice Total</div>
         </div>
       </div>
@@ -260,6 +290,15 @@ export default function InvoiceFormPage() {
                 />
               </div>
               <div>
+                <label className={LABEL_CLS}>Supplier (Company)</label>
+                <select className={SELECT_CLS} value={form.company_id} onChange={(e) => setForm((f) => ({ ...f, company_id: e.target.value }))}>
+                  <option value="">— Select —</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>{c.company_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
                 <label className={LABEL_CLS}>Invoice Date <span className="text-red-500 normal-case font-bold">*</span></label>
                 <input type="date" className={err('invoice_date') ? INPUT_ERR_CLS : INPUT_CLS} value={form.invoice_date} onChange={(e) => setForm((f) => ({ ...f, invoice_date: e.target.value }))} />
                 {err('invoice_date') && <p className={ERR_CLS}>{err('invoice_date')}</p>}
@@ -273,10 +312,19 @@ export default function InvoiceFormPage() {
                 <label className={LABEL_CLS}>
                   Transport Charge
                   {!isEdit && source && Number(source.sales_order?.transport_charge) > 0 && (
-                    <span className="ml-1 normal-case font-medium text-slate-400">(SO: {fmt(source.sales_order.transport_charge)})</span>
+                    <span className="ml-1 normal-case font-medium text-slate-400">(SO: {fmtMoney(source.sales_order.transport_charge)})</span>
                   )}
                 </label>
                 <input type="number" min="0" step="0.01" className={INPUT_CLS} value={form.transport_charge} onChange={(e) => setForm((f) => ({ ...f, transport_charge: e.target.value }))} />
+              </div>
+              <div>
+                <label className={LABEL_CLS}>Mode of Payment</label>
+                <select className={SELECT_CLS} value={form.mode_of_payment} onChange={(e) => setForm((f) => ({ ...f, mode_of_payment: e.target.value }))}>
+                  <option value="">— Select —</option>
+                  {PAYMENT_MODES.map((m) => (
+                    <option key={m.value} value={m.value}>{m.label}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className={LABEL_CLS}>Remarks</label>
@@ -328,7 +376,7 @@ export default function InvoiceFormPage() {
                     <td className="px-2 py-1">
                       <input type="number" min="0" max="100" step="0.01" placeholder="0" value={row.tax} onChange={(e) => setLineField(idx, 'tax', e.target.value)} className="block w-full rounded border border-sky-200 bg-sky-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-sky-400 focus:bg-white" />
                     </td>
-                    <td className="px-2 py-1 text-right font-bold text-slate-800 tabular-nums">{fmt(calcLine(row))}</td>
+                    <td className="px-2 py-1 text-right font-bold text-slate-800"><Money value={calcLine(row)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -337,14 +385,14 @@ export default function InvoiceFormPage() {
                   <td colSpan={8} className="px-3 py-1.5">
                     <div className="flex items-center gap-4 text-xs">
                       <span className="font-bold uppercase tracking-wider text-indigo-600">Summary</span>
-                      <span className="text-slate-500">Lines: <span className="font-bold text-slate-700">{fmt(totals.lineTotal)}</span></span>
-                      <span className="text-slate-500">Transport: <span className="font-bold text-slate-700">{fmt(totals.transport)}</span></span>
+                      <span className="text-slate-500">Lines: <Money value={totals.lineTotal} className="font-bold text-slate-700" /></span>
+                      <span className="text-slate-500">Transport: <Money value={totals.transport} className="font-bold text-slate-700" /></span>
                     </div>
                   </td>
                   <td colSpan={2} className="px-3 py-1.5 text-right">
                     <div className="flex flex-col items-end leading-tight">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">Invoice Total</span>
-                      <span className="text-base font-black text-indigo-700 tabular-nums">{fmt(totals.grand)}</span>
+                      <Money value={totals.grand} className="text-base font-black text-indigo-700" />
                     </div>
                   </td>
                 </tr>
