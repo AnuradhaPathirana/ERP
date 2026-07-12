@@ -35,6 +35,9 @@ const ERR_CLS    = 'mt-0.5 text-[10px] text-red-500'
 const TABLE_INP  = 'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white'
 const PCT_INP    = 'w-12 rounded border-2 border-slate-200 bg-slate-50 px-1 py-0.5 text-right text-xs outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400'
 
+/* Line count beyond which the breakdown table gets its own scrollbar. */
+const ITEMS_SCROLL_AFTER = 15
+
 function SectionHeader({ icon: Icon, title, colorClass = 'text-indigo-700 bg-indigo-50 border-indigo-100', extra }) {
   return (
     <div className={`flex items-center justify-between gap-1.5 px-3 py-2 border-b ${colorClass}`}>
@@ -291,6 +294,11 @@ export default function CostingFormPage() {
   // True when at least one line is received in a unit other than how it's stocked —
   // that's when the receiving → stocking restatement is worth the extra ink.
   const anyConverted = breakdownItems.some((i) => Math.abs((i.conversion_factor ?? 1) - 1) > 1e-9)
+
+  // Past this many lines the breakdown scrolls inside itself (sticky header + totals)
+  // rather than pushing the save actions off-screen.
+  const itemsScroll = breakdownItems.length > ITEMS_SCROLL_AFTER
+  const footCell    = itemsScroll ? 'sticky bottom-0 z-10 bg-slate-50' : ''
 
   /* ── Fetch suppliers list ─────────────────────────────────── */
   const { data: suppliers = [] } = useQuery({
@@ -604,7 +612,7 @@ export default function CostingFormPage() {
               }
             />
             {errors.grn_ids && <p className="px-3 pt-1 text-[10px] text-red-500">{errors.grn_ids}</p>}
-            <div className="overflow-x-auto max-h-56 overflow-y-auto">
+            <div className="thin-scroll overflow-x-auto max-h-56 overflow-y-auto">
               <table className="w-full text-xs">
                 <thead className="sticky top-0 z-10">
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
@@ -683,6 +691,19 @@ export default function CostingFormPage() {
                   <span className="text-slate-400">
                     GRN Price + Charges = Landed → + Margin{form.apply_sscl ? ' → +SSCL' : ''}{form.apply_vat ? ' → +VAT' : ''} = Selling
                   </span>
+                  {breakdownItems.length > 0 && (
+                    <span className="flex items-center gap-1 text-slate-500">
+                      {breakdownItems.length} line{breakdownItems.length !== 1 ? 's' : ''}
+                      {itemsScroll && (
+                        <span
+                          className="rounded bg-indigo-50 px-1 py-px text-[9px] font-semibold text-indigo-600"
+                          title="Scroll inside the table — header and totals stay visible"
+                        >
+                          scrollable
+                        </span>
+                      )}
+                    </span>
+                  )}
                   {totalExpenses > 0 && (
                     <span
                       className="rounded bg-emerald-100 px-1.5 py-px font-bold text-emerald-700"
@@ -694,9 +715,12 @@ export default function CostingFormPage() {
                 </div>
               }
             />
-            <div className="overflow-x-auto">
+            <div
+              className={`overflow-x-auto ${itemsScroll ? 'thin-scroll overflow-y-auto' : ''}`}
+              style={itemsScroll ? { maxHeight: 'min(62vh, 620px)' } : undefined}
+            >
               <table className="w-full text-xs">
-                <thead>
+                <thead className={itemsScroll ? 'sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]' : ''}>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
                     <th className="px-2 py-2 font-semibold uppercase tracking-wider text-slate-500">Product</th>
                     <th className="px-2 py-2 font-semibold uppercase tracking-wider text-slate-500">Colour</th>
@@ -819,17 +843,17 @@ export default function CostingFormPage() {
                     /* Money columns total to shipment VALUES, which are additive across units.
                        Quantity is not, so it becomes one chip per unit rather than a fake sum. */
                     <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold">
-                      <td className="px-2 py-1.5 text-slate-700" colSpan={3}>Totals</td>
-                      <td className="px-2 py-1.5 text-right"><QtyChips groups={qtyGroups} /></td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-700" title="Total purchase value of the selected GRNs"><Money value={totals.purchaseValue} /></td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-emerald-700" title="Total common charge — fully distributed across the lines above">+<Money value={totals.charges} /></td>
-                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-800" title="Total landed value (purchase + charges)"><Money value={totals.landedValue} /></td>
-                      <td />
-                      <td className="px-2 py-1.5 text-right tabular-nums text-slate-700"><Money value={totals.marginValue} /></td>
-                      {anyTax && <td className="px-2 py-1.5 text-right tabular-nums text-amber-700"><Money value={totals.ssclValue + totals.vatValue} /></td>}
-                      <td />
-                      <td className="px-2 py-1.5 text-right tabular-nums text-indigo-700" title="Total selling value of the shipment"><Money value={totals.sellingValue} /></td>
-                      {!readOnly && <td />}
+                      <td className={`px-2 py-1.5 text-slate-700 ${footCell}`} colSpan={3}>Totals</td>
+                      <td className={`px-2 py-1.5 text-right ${footCell}`}><QtyChips groups={qtyGroups} /></td>
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-slate-700 ${footCell}`} title="Total purchase value of the selected GRNs"><Money value={totals.purchaseValue} /></td>
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-emerald-700 ${footCell}`} title="Total common charge — fully distributed across the lines above">+<Money value={totals.charges} /></td>
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-slate-800 ${footCell}`} title="Total landed value (purchase + charges)"><Money value={totals.landedValue} /></td>
+                      <td className={footCell} />
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-slate-700 ${footCell}`}><Money value={totals.marginValue} /></td>
+                      {anyTax && <td className={`px-2 py-1.5 text-right tabular-nums text-amber-700 ${footCell}`}><Money value={totals.ssclValue + totals.vatValue} /></td>}
+                      <td className={footCell} />
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-indigo-700 ${footCell}`} title="Total selling value of the shipment"><Money value={totals.sellingValue} /></td>
+                      {!readOnly && <td className={footCell} />}
                     </tr>
                   )}
                 </tbody>
