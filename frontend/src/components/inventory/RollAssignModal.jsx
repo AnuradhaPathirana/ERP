@@ -6,6 +6,7 @@ const INPUT = 'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 p
 const LABEL = 'block whitespace-nowrap text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-0.5'
 
 const SHORTCUTS = [
+  { keys: ['Enter'], desc: 'No Of Pieces → Starting Roll No → Roll 1 measure' },
   { keys: ['Enter'], desc: 'Roll No → focus Weight, then Weight → focus next Roll No' },
   { keys: ['Tab'],   desc: 'Standard field-to-field navigation' },
 ]
@@ -36,7 +37,9 @@ export default function RollAssignModal({ item, unit, conversion = null, onApply
   const [noOfPieces, setNoOfPieces]       = useState('')
   const [startingRollNo, setStartingRollNo] = useState('')
   const [error, setError]                 = useState('')
-  const cellRefs = useRef({}) // { [index]: { roll, weight } }
+  const cellRefs        = useRef({}) // { [index]: { roll, weight } }
+  const noOfPiecesRef   = useRef(null)
+  const startingRollRef = useRef(null)
 
   /* Seed from existing rolls on open — pre-existing entries are treated as manually
      fixed (not auto-renumbered) since they represent already-confirmed data. */
@@ -52,6 +55,9 @@ export default function RollAssignModal({ item, unit, conversion = null, onApply
       )
       setNoOfPieces(String(item.rolls.length))
     }
+    // Entry starts here — the modal is reached straight from Enter on Qty Received
+    noOfPiecesRef.current?.focus()
+    noOfPiecesRef.current?.select()
   }, [])
 
   const setCellRef = (index, field) => (el) => {
@@ -174,19 +180,28 @@ export default function RollAssignModal({ item, unit, conversion = null, onApply
             <div className="flex items-center gap-1.5">
               <label className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-wider text-slate-500">No Of Pieces</label>
               <input
+                ref={noOfPiecesRef}
                 type="number" min="0" step="1" placeholder="0"
                 className={INPUT + ' w-16'}
                 value={noOfPieces}
                 onChange={(e) => handleNoOfPiecesChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); startingRollRef.current?.focus(); startingRollRef.current?.select() }
+                }}
               />
             </div>
             <div className="flex items-center gap-1.5">
               <label className="whitespace-nowrap text-[10px] font-semibold uppercase tracking-wider text-slate-500">Starting Roll No</label>
               <input
+                ref={startingRollRef}
                 type="number" min="0" step="1" placeholder="1001"
                 className={INPUT + ' w-20'}
                 value={startingRollNo}
                 onChange={(e) => handleStartingRollNoChange(e.target.value)}
+                onKeyDown={(e) => {
+                  // Roll numbers are auto-filled from here, so the first thing left to type is Roll 1's measure
+                  if (e.key === 'Enter') { e.preventDefault(); setTimeout(() => focusCell(0, 'weight'), 0) }
+                }}
               />
             </div>
           </div>

@@ -434,7 +434,7 @@ export default function GoodsReceivedNoteFormPage() {
   const [lastGrnAmount, setLastGrnAmount] = useState('')
 
   /* ── Save status & PDF ────────────────────────────────────── */
-  const [saveStatus,      setSaveStatus]      = useState('confirmed')  // 'draft' | 'confirmed'
+  const [saveStatus,      setSaveStatus]      = useState('draft')  // 'draft' | 'confirmed'
   const [isDownloading,   setIsDownloading]   = useState(false)
   const [isPrinting,      setIsPrinting]      = useState(false)
   const [isPrintingLabels, setIsPrintingLabels] = useState(false)
@@ -685,6 +685,7 @@ export default function GoodsReceivedNoteFormPage() {
     if (!existingGRN?.data) return
     const grn = existingGRN.data
     setGrnNoPreview(grn.grn_no ?? '')
+    setSaveStatus(grn.status === 'confirmed' ? 'confirmed' : 'draft')
     setTouched({})
     setItemTouched({})
     originalShippingCodeRef.current = (grn.shipping_code ?? '').trim()
@@ -1352,13 +1353,19 @@ export default function GoodsReceivedNoteFormPage() {
     setItemTouched((t) => ({ ...t, [rowKey]: { ...t[rowKey], [field]: true } }))
 
   const getItemErr = (rowKey, field) => {
-    if (!itemTouched[rowKey]?.[field]) return null
     const row = items.find((r) => r._key === rowKey)
     if (!row) return null
+
+    // Color is validated in real time — a product that carries colors can't be
+    // received without one, so flag it the moment the product lands on the row.
+    if (field === 'color') {
+      return (row.product_id && row.color_options?.length > 0 && !row.attribute_id) ? 'Required' : null
+    }
+
+    if (!itemTouched[rowKey]?.[field]) return null
     if (field === 'uom')   return row.unit_id ? null : 'Required'
     if (field === 'qty')   return parseFloat(row.quantity_received) > 0 ? null : 'Required'
     if (field === 'price') return row.unit_price !== '' && parseFloat(row.unit_price) >= 0 ? null : 'Required'
-    if (field === 'color') return (row.color_options?.length > 0 && !row.attribute_id) ? 'Required' : null
     if (field === 'rolls') return (parseFloat(row.quantity_received) > 0 && !(row.rolls?.length > 0)) ? 'Required' : null
     return null
   }
@@ -1790,7 +1797,9 @@ export default function GoodsReceivedNoteFormPage() {
                     <th className="w-8 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">#</th>
                     <th className="w-24 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Code</th>
                     <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Product</th>
-                    <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Color</th>
+                    <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                      Color <span className="text-red-500">*</span>
+                    </th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 text-right">PO Qty</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-amber-600 text-right">Pending Qty</th>
                     <th className="w-20 px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">UOM</th>
@@ -1854,7 +1863,7 @@ export default function GoodsReceivedNoteFormPage() {
                                 onChange={(val) => { setRowField(idx, 'attribute_id', val); touchItemField(row._key, 'color') }}
                                 onNext={() => focusCell(row._key, 'uom')}
                                 onBlur={() => touchItemField(row._key, 'color')}
-                                placeholder={!row.product_id ? '—' : row.color_options.length === 0 ? 'No colors' : '—'}
+                                placeholder={!row.product_id ? '—' : row.color_options.length === 0 ? 'No colors' : 'Select'}
                                 disabled={!row.product_id || row.color_options.length === 0}
                                 error={!!getItemErr(row._key, 'color')}
                               />
@@ -1921,7 +1930,7 @@ export default function GoodsReceivedNoteFormPage() {
                               onChange={(e) => setRowField(idx, 'quantity_received', e.target.value)}
                               onBlur={() => touchItemField(row._key, 'qty')}
                               onKeyDown={(e) => {
-                                if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'rolls') }
+                                if (e.key === 'Enter') { e.preventDefault(); openRollModal(idx) }
                               }}
                             />
                             {getItemErr(row._key, 'qty') && (
@@ -2211,7 +2220,7 @@ export default function GoodsReceivedNoteFormPage() {
         <div className="flex flex-wrap gap-x-5 gap-y-1">
           {[
             { keys: ['Alt', 'N'],   desc: 'Add new item row' },
-            { keys: ['Enter'],      desc: 'Move to next field in row (UOM → Qty → Rolls → Price → Disc → Batch)' },
+            { keys: ['Enter'],      desc: 'Move to next field in row (UOM → Qty → opens Manage Rolls → Price → Disc → Batch)' },
             { keys: ['↑', '↓'],    desc: 'Navigate product search results' },
             { keys: ['Esc'],        desc: 'Close product search dropdown' },
           ].map(({ keys, desc }) => (
