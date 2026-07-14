@@ -266,6 +266,8 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.piece-labels.index');
     Route::get('piece-labels/shipping-codes', [PieceLabelController::class, 'shippingCodes'])
         ->name('inventory.piece-labels.shipping-codes');
+    Route::get('piece-labels/grn-nos', [PieceLabelController::class, 'grnNos'])
+        ->name('inventory.piece-labels.grn-nos');
     Route::get('piece-labels/pdf', [PieceLabelController::class, 'pdf'])
         ->name('inventory.piece-labels.pdf');
 

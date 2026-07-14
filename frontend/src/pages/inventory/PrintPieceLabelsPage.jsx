@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { QrCode } from 'lucide-react'
-import { downloadPieceLabelsPdf, getPieceLabels, getShippingCodes } from '../../api/pieceLabels'
+import { downloadPieceLabelsPdf, getGrnNos, getPieceLabels, getShippingCodes } from '../../api/pieceLabels'
 import { getAllProducts } from '../../api/products'
 import { getAllAttributeTypes } from '../../api/attributeTypes'
 import { getAllAttributes } from '../../api/attributes'
@@ -19,14 +19,15 @@ const CRUMBS = [
   { label: 'Print Piece Labels' },
 ]
 
-// Opens on the work queue: every roll whose sticker does not exist yet — a GRN nobody
-// printed, or an offcut a sale just cut. Printing stamps printed_at, so the list empties
-// itself. Clear the filter to browse all labels.
+// Opens empty on purpose: generating hundreds of QR data-URIs is heavy, so nothing
+// loads until the user applies at least one filter. Picking "Not printed yet" shows
+// the work queue — printing stamps printed_at, so that list empties itself.
 const INITIAL_FILTERS = {
   product_id: '',
   shipping_code: '',
   attribute_id: '',
-  print_status: 'pending',
+  grn_no: '',
+  print_status: '',
 }
 
 const PRINT_STATUS_OPTIONS = [
@@ -57,7 +58,7 @@ function getCategoryAncestorIds(categoryId, categories) {
   return ids
 }
 
-const hasAnyFilter = (f) => Boolean(f.product_id || f.shipping_code || f.attribute_id || f.print_status)
+const hasAnyFilter = (f) => Boolean(f.product_id || f.shipping_code || f.attribute_id || f.grn_no || f.print_status)
 
 // Strip empty filters so the backend's required_without_all validation sees only real values
 const cleanFilters = (f) =>
@@ -88,6 +89,13 @@ export default function PrintPieceLabelsPage() {
     staleTime: 5 * 60 * 1000,
   })
   const shippingCodeOptions = (shippingCodesData ?? []).map((c) => ({ value: c, label: c }))
+
+  const { data: grnNosData } = useQuery({
+    queryKey: ['piece-label-grn-nos'],
+    queryFn: getGrnNos,
+    staleTime: 5 * 60 * 1000,
+  })
+  const grnNoOptions = (grnNosData ?? []).map((n) => ({ value: n, label: n }))
 
   const { data: attributeTypes = [] } = useQuery({ queryKey: ['attribute-types-all'], queryFn: getAllAttributeTypes })
   const { data: allAttributes = [] }  = useQuery({ queryKey: ['attributes-all'],      queryFn: getAllAttributes })
@@ -146,7 +154,7 @@ export default function PrintPieceLabelsPage() {
 
   const handleApply = () => {
     if (!hasAnyFilter(draft)) {
-      showError('Select at least one filter — Label Status, Product, Shipping Code or Color.')
+      showError('Select at least one filter — Label Status, Product, GRN No, Shipping Code or Color.')
       return
     }
     apply()
@@ -208,6 +216,14 @@ export default function PrintPieceLabelsPage() {
             placeholder="All products"
           />
         </FilterField>
+        <FilterField label="GRN No">
+          <FilterSearchSelect
+            value={draft.grn_no}
+            onChange={(val) => setDraft((d) => ({ ...d, grn_no: val }))}
+            options={grnNoOptions}
+            placeholder="All GRNs"
+          />
+        </FilterField>
         <FilterField label="Shipping Code">
           <FilterSearchSelect
             value={draft.shipping_code}
@@ -228,7 +244,7 @@ export default function PrintPieceLabelsPage() {
 
       {!hasAnyFilter(applied) ? (
         <div className="mt-3 rounded-xl border border-slate-200 bg-white py-16 text-center text-sm text-slate-400 shadow-sm">
-          Select a Label Status, Product, Shipping Code or Color in the filters above to load the QR piece labels.
+          Select a Label Status, Product, GRN No, Shipping Code or Color in the filters above to load the QR piece labels.
         </div>
       ) : (
         <div className="mt-3 rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -268,7 +284,6 @@ export default function PrintPieceLabelsPage() {
                       )}
                       <img src={label.qr_data_uri} alt={label.piece_code} className="h-24 w-24" />
                       <div className="mt-1 font-mono text-[10px] font-bold text-slate-800">{label.piece_code}</div>
-                      <div className="line-clamp-1 text-[10px] text-slate-500" title={label.product_name}>{label.product_name}</div>
                       <div className="text-[10px] text-slate-500">
                         {label.color && <span className="mr-1">Color: {label.color}</span>}
                         {label.roll_no && <span>Roll: {label.roll_no}</span>}
@@ -281,6 +296,7 @@ export default function PrintPieceLabelsPage() {
                         )}
                         {label.batch_no && <span>Batch: {label.batch_no}</span>}
                       </div>
+                      <div className="line-clamp-1 text-[10px] text-slate-500" title={label.product_name}>{label.product_name}</div>
                       <div className="text-[10px] text-slate-400">{label.grn_no}{label.shipping_code ? ` · ${label.shipping_code}` : ''}</div>
                       {/* The roll still wears the old sticker — say which one to peel off. */}
                       {label.replaces && (

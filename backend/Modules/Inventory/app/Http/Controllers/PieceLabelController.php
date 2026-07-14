@@ -25,6 +25,12 @@ class PieceLabelController extends Controller
 {
     private const MAX_LABELS = 500;
 
+    // The PDF page is one physical row of the 2-up sticker roll loaded in the
+    // TSC label printer: [38mm sticker][3mm gap][38mm sticker] x 25mm high.
+    // The driver's stock must be configured to the same 79x25mm size.
+    private const PAGE_WIDTH_PT  = 79 * 72 / 25.4; // 79mm
+    private const PAGE_HEIGHT_PT = 25 * 72 / 25.4; // 25mm
+
     public function __construct()
     {
         $this->middleware('permission:view_grns');
@@ -57,9 +63,8 @@ class PieceLabelController extends Controller
         abort_if($pieces->isEmpty(), 404, 'No pieces found for the selected filters.');
 
         $pdf = Pdf::loadView('inventory::pdf.piece-labels-filtered', [
-            'labels'  => $this->buildLabels($pieces),
-            'filters' => $this->filterSummary($filters, $pieces),
-        ])->setPaper('a4', 'portrait')
+            'labels' => $this->buildLabels($pieces),
+        ])->setPaper([0, 0, self::PAGE_WIDTH_PT, self::PAGE_HEIGHT_PT])
           ->setOptions([
               'defaultFont'          => 'DejaVu Sans',
               'isHtml5ParserEnabled' => true,
@@ -72,6 +77,20 @@ class PieceLabelController extends Controller
             ->update(['printed_at' => now()]);
 
         return $pdf->download('Piece_Labels.pdf');
+    }
+
+    /** GET /piece-labels/grn-nos — GRN numbers of confirmed GRNs for the filter dropdown */
+    public function grnNos(): JsonResponse
+    {
+        $numbers = GoodsReceivedNote::query()
+            ->where('status', GrnStatus::Confirmed)
+            ->orderByDesc('id')
+            ->pluck('grn_no')
+            ->filter()
+            ->unique()
+            ->values();
+
+        return response()->json(['data' => $numbers]);
     }
 
     /** GET /piece-labels/shipping-codes — distinct codes of confirmed GRNs for the filter dropdown */
@@ -89,15 +108,16 @@ class PieceLabelController extends Controller
         return response()->json(['data' => $codes]);
     }
 
-    /** @return array{product_id?: int, shipping_code?: string, attribute_id?: int, print_status?: string} */
+    /** @return array{product_id?: int, shipping_code?: string, attribute_id?: int, grn_no?: string, print_status?: string} */
     private function validateFilters(Request $request): array
     {
         // print_status counts as a filter in its own right: "every sticker I still owe"
         // is a complete question, and the most common reason to open this page.
         return $request->validate([
-            'product_id'    => ['nullable', 'integer', 'exists:inv_products,id', 'required_without_all:shipping_code,attribute_id,print_status'],
-            'shipping_code' => ['nullable', 'string', 'max:100', 'required_without_all:product_id,attribute_id,print_status'],
-            'attribute_id'  => ['nullable', 'integer', 'exists:inv_attributes,id', 'required_without_all:product_id,shipping_code,print_status'],
+            'product_id'    => ['nullable', 'integer', 'exists:inv_products,id', 'required_without_all:shipping_code,attribute_id,grn_no,print_status'],
+            'shipping_code' => ['nullable', 'string', 'max:100', 'required_without_all:product_id,attribute_id,grn_no,print_status'],
+            'attribute_id'  => ['nullable', 'integer', 'exists:inv_attributes,id', 'required_without_all:product_id,shipping_code,grn_no,print_status'],
+            'grn_no'        => ['nullable', 'string', 'max:100', 'required_without_all:product_id,shipping_code,attribute_id,print_status'],
             'print_status'  => ['nullable', 'in:pending,printed'],
         ]);
     }
@@ -113,6 +133,9 @@ class PieceLabelController extends Controller
                 $query->where('status', GrnStatus::Confirmed);
                 if (!empty($filters['shipping_code'])) {
                     $query->where('shipping_code', $filters['shipping_code']);
+                }
+                if (!empty($filters['grn_no'])) {
+                    $query->where('grn_no', $filters['grn_no']);
                 }
             })
             ->when(!empty($filters['product_id']), fn (Builder $query) => $query->where('product_id', (int) $filters['product_id']))
@@ -171,31 +194,13 @@ class PieceLabelController extends Controller
             'printed_at'    => $piece->printed_at?->toDateTimeString(),
             'qr_data_uri'   => $writer->write(
                 new QrCode(
+                    // 300px so the 18mm print on the thermal sticker stays crisp;
+                    // margin 2 keeps a quiet zone without shrinking the modules.
                     data:   "{$frontendUrl}/inventory/pieces/{$piece->piece_code}",
-                    size:   180,
-                    margin: 4,
+                    size:   300,
+                    margin: 2,
                 )
             )->getDataUri(),
         ])->values();
-    }
-
-    /** Human-readable filter summary shown in the PDF title area. */
-    private function filterSummary(array $filters, Collection $pieces): string
-    {
-        $parts = [];
-        if (!empty($filters['product_id'])) {
-            $parts[] = 'Product: ' . ($pieces->first()?->product?->name ?? $filters['product_id']);
-        }
-        if (!empty($filters['shipping_code'])) {
-            $parts[] = 'Shipping Code: ' . $filters['shipping_code'];
-        }
-        if (!empty($filters['attribute_id'])) {
-            $parts[] = 'Color: ' . ($pieces->first()?->grnItem?->attribute?->attribute_name ?? $filters['attribute_id']);
-        }
-        if (!empty($filters['print_status'])) {
-            $parts[] = 'Labels: ' . ($filters['print_status'] === 'pending' ? 'Not printed yet' : 'Already printed');
-        }
-
-        return implode('  |  ', $parts);
     }
 }
