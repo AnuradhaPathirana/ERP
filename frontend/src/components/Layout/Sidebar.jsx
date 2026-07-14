@@ -136,13 +136,13 @@ const NAV_ITEMS = [
     label: 'Team Management',
     to: '/admin/users',
     icon: UserCog,
-    roleGuard: ['super_admin', 'admin'],
+    permGuard: 'view_users',
   },
   {
     label: 'Roles & Permissions',
     to: '/admin/roles',
     icon: Shield,
-    roleGuard: ['super_admin', 'admin'],
+    permGuard: 'manage_roles',
   },
 ]
 
@@ -246,9 +246,35 @@ export default function Sidebar({ collapsed, onToggleCollapse, mobileOpen, onClo
         {/* ── Navigation ── */}
         <nav className="flex-1 overflow-y-auto px-2 py-4 space-y-1">
           {NAV_ITEMS.map((item) => {
-            const { label, to, icon: Icon, moduleKey, roleGuard, children } = item
+            const { label, to, icon: Icon, moduleKey, roleGuard, permGuard, children } = item
 
-            // ── Role-gated standalone link (e.g. Team Management) ──
+            // ── Permission-gated standalone link (e.g. Team Management, Roles) ──
+            if (permGuard) {
+              const hasAccess = isSuperAdmin || userPermissions.includes(permGuard)
+              if (!hasAccess) return null
+
+              return (
+                <NavLink
+                  key={label}
+                  to={to}
+                  title={collapsed ? label : undefined}
+                  className={({ isActive }) =>
+                    [
+                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150',
+                      collapsed ? 'justify-center' : '',
+                      isActive
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-400 hover:bg-slate-800 hover:text-white',
+                    ].join(' ')
+                  }
+                >
+                  <Icon size={20} className="shrink-0" />
+                  {!collapsed && <span>{label}</span>}
+                </NavLink>
+              )
+            }
+
+            // ── Role-gated standalone link ──
             if (roleGuard) {
               const hasAccess = roleGuard.some((r) => userRoles.includes(r))
               if (!hasAccess) return null

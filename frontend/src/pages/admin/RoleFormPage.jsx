@@ -7,8 +7,13 @@ import { createRole, getRole, syncRolePermissions, updateRole } from '../../api/
 import Breadcrumb from '../../components/Breadcrumb'
 import { showError, showSuccess } from '../../utils/alerts'
 
-const ACTIONS = ['view', 'create', 'edit', 'delete']
-const ACTION_LABELS = { view: 'View', create: 'Create', edit: 'Edit', delete: 'Delete' }
+// Column order used across every group; a group only renders the columns
+// its resources actually use.
+const ACTION_ORDER = ['view', 'create', 'edit', 'delete', 'approve', 'confirm', 'manage']
+const ACTION_LABELS = {
+  view: 'View', create: 'Create', edit: 'Edit', delete: 'Delete',
+  approve: 'Approve', confirm: 'Confirm', manage: 'Manage',
+}
 
 // ── Indeterminate checkbox ────────────────────────────────────────────────────
 function IndeterminateCheckbox({ checked, indeterminate, onChange, disabled }) {
@@ -80,76 +85,85 @@ function PermissionMatrix({ groups, selected, onChange, disabled }) {
         </span>
       </div>
 
-      {Object.entries(groups).map(([moduleKey, module]) => (
-        <div key={moduleKey}>
-          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-            {module.label} Module
-          </p>
+      {Object.entries(groups).map(([moduleKey, module]) => {
+        // Columns for this group = every action used by at least one of its
+        // resources, kept in the canonical ACTION_ORDER.
+        const columns = ACTION_ORDER.filter((a) =>
+          Object.values(module.resources).some((r) => (r.actions ?? []).includes(a))
+        )
 
-          <div className="overflow-hidden rounded-lg border border-slate-200">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-slate-100 bg-slate-50">
-                  <th className="w-8 px-3 py-2" />
-                  <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Resource</th>
-                  {ACTIONS.map((a) => (
-                    <th key={a} className="px-3 py-2 text-center text-xs font-semibold text-slate-500 w-20">
-                      {ACTION_LABELS[a]}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {Object.entries(module.resources).map(([resourceKey, resource]) => {
-                  const perms = resource.permissions
-                  const rowChecked  = perms.every((p) => selected.has(p))
-                  const rowPartial  = perms.some((p) => selected.has(p))
+        return (
+          <div key={moduleKey}>
+            <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+              {module.label}
+            </p>
 
-                  return (
-                    <tr key={resourceKey} className="hover:bg-slate-50/50">
-                      {/* Row select-all checkbox */}
-                      <td className="px-3 py-2 text-center">
-                        <IndeterminateCheckbox
-                          checked={rowChecked}
-                          indeterminate={rowPartial}
-                          onChange={() => toggleRow(perms)}
-                          disabled={disabled}
-                        />
-                      </td>
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50">
+                    <th className="w-8 px-3 py-2" />
+                    <th className="px-3 py-2 text-left text-xs font-semibold text-slate-500">Resource</th>
+                    {columns.map((a) => (
+                      <th key={a} className="px-3 py-2 text-center text-xs font-semibold text-slate-500 w-20">
+                        {ACTION_LABELS[a]}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {Object.entries(module.resources).map(([resourceKey, resource]) => {
+                    const perms = resource.permissions
+                    const actions = resource.actions ?? []
+                    const rowChecked  = perms.every((p) => selected.has(p))
+                    const rowPartial  = perms.some((p) => selected.has(p))
 
-                      {/* Resource label */}
-                      <td className="px-3 py-2 font-medium text-slate-700">
-                        {resource.label}
-                      </td>
+                    return (
+                      <tr key={resourceKey} className="hover:bg-slate-50/50">
+                        {/* Row select-all checkbox */}
+                        <td className="px-3 py-2 text-center">
+                          <IndeterminateCheckbox
+                            checked={rowChecked}
+                            indeterminate={rowPartial}
+                            onChange={() => toggleRow(perms)}
+                            disabled={disabled}
+                          />
+                        </td>
 
-                      {/* Action cells */}
-                      {ACTIONS.map((action) => {
-                        const perm   = `${action}_${resourceKey}`
-                        const exists = perms.includes(perm)
-                        return (
-                          <td key={action} className="px-3 py-2 text-center">
-                            {exists ? (
-                              <input
-                                type="checkbox"
-                                checked={selected.has(perm)}
-                                onChange={() => toggle(perm)}
-                                disabled={disabled}
-                                className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30 disabled:cursor-default disabled:opacity-50"
-                              />
-                            ) : (
-                              <span className="text-slate-200">—</span>
-                            )}
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                        {/* Resource label */}
+                        <td className="px-3 py-2 font-medium text-slate-700 whitespace-nowrap">
+                          {resource.label}
+                        </td>
+
+                        {/* Action cells */}
+                        {columns.map((action) => {
+                          const perm   = `${action}_${resourceKey}`
+                          const exists = actions.includes(action)
+                          return (
+                            <td key={action} className="px-3 py-2 text-center">
+                              {exists ? (
+                                <input
+                                  type="checkbox"
+                                  checked={selected.has(perm)}
+                                  onChange={() => toggle(perm)}
+                                  disabled={disabled}
+                                  className="h-4 w-4 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500/30 disabled:cursor-default disabled:opacity-50"
+                                />
+                              ) : (
+                                <span className="text-slate-200">—</span>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
