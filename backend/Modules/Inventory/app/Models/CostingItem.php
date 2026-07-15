@@ -6,6 +6,7 @@ namespace Modules\Inventory\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Per-product landed-cost breakdown line of a costing. Monetary values are
@@ -39,8 +40,16 @@ class CostingItem extends Model
         'landed_unit_cost_base',
         'margin_pct',
         'margin_amount',
+        'sscl_pct',
         'sscl_amount',
+        'vat_pct',
         'vat_amount',
+        'expense_total_base',
+        'margin_amount_base',
+        'sscl_amount_base',
+        'vat_amount_base',
+        'before_tax_price',
+        'before_tax_price_base',
         'selling_price',
         'selling_price_base',
         'is_price_overridden',
@@ -63,8 +72,16 @@ class CostingItem extends Model
         'landed_unit_cost_base' => 'decimal:8',
         'margin_pct'            => 'decimal:4',
         'margin_amount'         => 'decimal:8',
+        'sscl_pct'              => 'decimal:2',
         'sscl_amount'           => 'decimal:8',
+        'vat_pct'               => 'decimal:2',
         'vat_amount'            => 'decimal:8',
+        'expense_total_base'    => 'decimal:8',
+        'margin_amount_base'    => 'decimal:8',
+        'sscl_amount_base'      => 'decimal:8',
+        'vat_amount_base'       => 'decimal:8',
+        'before_tax_price'      => 'decimal:8',
+        'before_tax_price_base' => 'decimal:8',
         'selling_price'         => 'decimal:8',
         'selling_price_base'    => 'decimal:8',
         'is_price_overridden'   => 'boolean',
@@ -104,5 +121,11 @@ class CostingItem extends Model
     public function baseUnit(): BelongsTo
     {
         return $this->belongsTo(UnitType::class, 'base_unit_id');
+    }
+
+    /** This line's typed expense amounts (per base unit, one row per expense type). */
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(CostingItemExpense::class, 'costing_item_id');
     }
 }

@@ -259,6 +259,8 @@ class SalesOrderService
             // roll's GRN line, price-list fallback (null = neither configured).
             'selling_price'      => $resolved['price'] ?? null,
             'price_source'       => $resolved['source'] ?? null,
+            // Costing "Before-Tax" price (VAT stripped) — Tax invoices bill this.
+            'before_tax_price'   => $resolved['before_tax_price'] ?? null,
             'available'          => $available,
             'unavailable_reason' => $reason,
         ];
@@ -300,6 +302,8 @@ class SalesOrderService
                 // Shipment-specific sale price (confirmed costing → price list)
                 'selling_price'  => $resolve($piece)['price'],
                 'price_source'   => $resolve($piece)['source'],
+                // Costing "Before-Tax" price — null on price-list fallback rolls
+                'before_tax_price' => $resolve($piece)['before_tax_price'],
                 'attribute_id'   => $piece->grnItem?->attribute_id,
                 'color'          => $piece->grnItem?->attribute?->attribute_name,
             ])

@@ -4,6 +4,8 @@ import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   Calculator,
   CheckCircle,
+  ChevronDown,
+  ChevronRight,
   ClipboardList,
   Package,
   RotateCcw,
@@ -15,6 +17,7 @@ import {
   confirmCosting,
   createCosting,
   getCosting,
+  getCostingExpenseTypes,
   getNextDocumentNo,
   getNextReferenceNo,
   getSupplierGrns,
@@ -32,7 +35,7 @@ const INPUT_RO   = 'block w-full rounded border-2 border-slate-100 bg-slate-100 
 const SELECT_CLS = 'block w-full rounded border-2 border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white focus:ring-2 focus:ring-indigo-500/15 cursor-pointer'
 const LABEL_CLS  = 'text-[10px] font-semibold uppercase tracking-wider text-slate-500 whitespace-nowrap'
 const ERR_CLS    = 'mt-0.5 text-[10px] text-red-500'
-const TABLE_INP  = 'block w-full rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white'
+const PANEL_INP  = 'block w-full rounded border-2 border-slate-200 bg-white px-1.5 py-0.5 text-right text-xs tabular-nums text-slate-800 outline-none transition-all focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/15 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400'
 const PCT_INP    = 'w-12 rounded border-2 border-slate-200 bg-slate-50 px-1 py-0.5 text-right text-xs outline-none focus:border-indigo-500 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400'
 
 /* Line count beyond which the breakdown table gets its own scrollbar. */
@@ -89,7 +92,7 @@ function QtyUnit({ value, symbol, position }) {
     : <>{fmt(value)}<span className="ml-0.5">{tag}</span></>
 }
 
-/** A per-unit money figure — reads "27,500.00 /Roll". */
+/** A per-unit money figure — reads "27,500.00 /Kg". */
 function PerUnit({ value, symbol, className = '' }) {
   return (
     <span className={`tabular-nums ${className}`}>
@@ -127,98 +130,79 @@ function QtyChips({ groups }) {
 }
 
 /* ── Canonical per-line calculation (mirrors CostingService::computeBreakdown) ──
- * The shipment's one common charge is apportioned BY VALUE, never by quantity: a
- * shipment's lines can arrive in Kg, Rolls and metres, and Σqty over those is not a
- * number that means anything. Each line takes charge × (its value ÷ total value), then
- * divides that share by ITS OWN quantity — so the portion always lands denominated in
- * that line's unit and `unit_price + portion` stays a legal addition.
+ * Every product line prices ITSELF — no cross-line apportionment. All amounts are
+ * per the product's BASE (stocking) unit, the denomination the user types in:
  *
- *   portion = charge × (line value ÷ Σ line value) ÷ line qty
- *   landed  = grn unit_price + portion
- *   selling = landed + margin → +SSCL% → +VAT% (cascading toggles)
+ *   fob/cif    = grn unit_price ÷ conversion_factor
+ *   expenses   = Σ typed amounts per expense type
+ *   sscl       = sscl% × fob/cif ONLY (never the expenses)
+ *   before_tax = fob/cif + expenses + sscl + margin (typed addon amount)
+ *   after_tax  = before_tax + VAT%
  *
- * The build-up runs in the RECEIVING unit; ÷ conversion_factor restates it per the
- * product's stocking UOM, which is the price the customer actually pays. A typed
- * selling price is FINAL and is quoted per stocking UOM — the pieces back-compute. */
-function calcBreakdown(lines, totalExpenses, cfg, overrides) {
-  const valueOf    = (l) => (parseFloat(l.quantity) || 0) * (parseFloat(l.unit_price) || 0)
-  const totalValue = lines.reduce((s, l) => s + valueOf(l), 0)
-  const totalQty   = lines.reduce((s, l) => s + (parseFloat(l.quantity) || 0), 0)
-  const mult       = (cfg.applySscl ? 1 + cfg.ssclPct / 100 : 1) * (cfg.applyVat ? 1 + cfg.vatPct / 100 : 1)
-  // Value apportionment makes every line land at exactly this uplift over its GRN
-  // price — the one figure that describes the whole shipment regardless of units.
-  const upliftPct  = totalValue > 0 ? (totalExpenses / totalValue) * 100 : 0
-
+ * before_tax feeds non-VAT invoices later, after_tax feeds VAT invoices. */
+function calcBreakdown(lines, cfg, lineCosting) {
   const items = lines.map((line) => {
     const qty       = parseFloat(line.quantity) || 0
     const unitPrice = parseFloat(line.unit_price) || 0
     const factor    = parseFloat(line.conversion_factor) || 1
     const baseQty   = parseFloat(line.base_quantity) || qty * factor
 
-    const share   = totalValue > 0 ? totalExpenses * (valueOf(line) / totalValue) : 0
-    const portion = qty > 0 ? share / qty : 0
-    const landed  = unitPrice + portion
+    const lc      = lineCosting[line.id] ?? {}
+    const numOr   = (v, fallback) => (v !== undefined && v !== null && v !== '' && !Number.isNaN(parseFloat(v)) ? parseFloat(v) : fallback)
 
-    const ov      = overrides[line.id] ?? {}
-    const typed   = ov.selling_price_base !== undefined && ov.selling_price_base !== '' ? parseFloat(ov.selling_price_base) : null
-    const linePct = ov.margin_pct !== undefined && ov.margin_pct !== '' ? parseFloat(ov.margin_pct) : null
+    const fobBase = factor > 0 ? unitPrice / factor : unitPrice
+    const expBase = Object.values(lc.expenses ?? {}).reduce((s, v) => s + (parseFloat(v) || 0), 0)
 
-    let marginAmount, ssclAmount, vatAmount, selling, overridden
-    if (typed !== null && !Number.isNaN(typed)) {
-      selling      = typed * factor // stocking UOM → receiving unit
-      const base   = mult > 0 ? selling / mult : selling
-      marginAmount = base - landed
-      ssclAmount   = cfg.applySscl ? base * (cfg.ssclPct / 100) : 0
-      vatAmount    = cfg.applyVat ? (base + ssclAmount) * (cfg.vatPct / 100) : 0
-      overridden   = true
-    } else {
-      const pct    = linePct ?? cfg.defaultMarginPct
-      marginAmount = landed * (pct / 100)
-      const base   = landed + marginAmount
-      ssclAmount   = cfg.applySscl ? base * (cfg.ssclPct / 100) : 0
-      const after  = base + ssclAmount
-      vatAmount    = cfg.applyVat ? after * (cfg.vatPct / 100) : 0
-      selling      = after + vatAmount
-      overridden   = false
-    }
+    const effSsclPct = cfg.applySscl ? numOr(lc.sscl_pct, cfg.ssclPct) : 0
+    const effVatPct  = cfg.applyVat ? numOr(lc.vat_pct, cfg.vatPct) : 0
+    const marginBase = numOr(lc.margin, 0)
 
-    const toBase = (p) => (factor > 0 ? p / factor : p)
+    // SSCL is levied on the FOB/CIF amount ONLY — never on the expenses
+    const ssclBase      = fobBase * (effSsclPct / 100)
+    const beforeTaxBase = fobBase + expBase + ssclBase + marginBase
+    const vatBase       = beforeTaxBase * (effVatPct / 100)
+    const afterTaxBase  = beforeTaxBase + vatBase
 
     return {
       ...line,
       quantity:              qty,
       conversion_factor:     factor,
       base_quantity:         baseQty,
-      charge_share:          share,
-      charge_portion:        portion,
-      landed_unit_cost:      landed,
-      landed_unit_cost_base: toBase(landed),
-      margin_pct:            linePct,
-      margin_amount:         marginAmount,
-      sscl_amount:           ssclAmount,
-      vat_amount:            vatAmount,
-      selling_price:         selling,
-      selling_price_base:    toBase(selling),
-      is_price_overridden:   overridden,
+      fob_base:              fobBase,
+      expense_total_base:    expBase,
+      eff_sscl_pct:          effSsclPct,
+      sscl_amount_base:      ssclBase,
+      margin_amount_base:    marginBase,
+      before_tax_price_base: beforeTaxBase,
+      eff_vat_pct:           effVatPct,
+      vat_amount_base:       vatBase,
+      after_tax_price_base:  afterTaxBase,
+      line_total:            afterTaxBase * baseQty,
     }
   })
 
-  const sum = (key) => items.reduce((s, i) => s + i.quantity * i[key], 0)
+  const sum = (key) => items.reduce((s, i) => s + i.base_quantity * i[key], 0)
 
   return {
     items,
     totals: {
-      qty:           totalQty,
-      upliftPct,
-      charges:       totalExpenses,
-      purchaseValue: totalValue,
-      landedValue:   sum('landed_unit_cost'),
-      marginValue:   sum('margin_amount'),
-      ssclValue:     sum('sscl_amount'),
-      vatValue:      sum('vat_amount'),
-      sellingValue:  sum('selling_price'),
+      purchaseValue:  items.reduce((s, i) => s + i.quantity * (parseFloat(i.unit_price) || 0), 0),
+      expensesValue:  sum('expense_total_base'),
+      landedValue:    items.reduce((s, i) => s + i.base_quantity * (i.fob_base + i.expense_total_base), 0),
+      ssclValue:      sum('sscl_amount_base'),
+      marginValue:    sum('margin_amount_base'),
+      beforeTaxValue: sum('before_tax_price_base'),
+      vatValue:       sum('vat_amount_base'),
+      afterTaxValue:  sum('after_tax_price_base'),
     },
   }
+}
+
+/** True when the line's per-product panel holds any typed value. */
+function lineHasData(lc) {
+  if (!lc) return false
+  const anyExpense = Object.values(lc.expenses ?? {}).some((v) => v !== '' && v !== undefined && parseFloat(v) > 0)
+  return anyExpense || (lc.margin ?? '') !== '' || (lc.sscl_pct ?? '') !== '' || (lc.vat_pct ?? '') !== ''
 }
 
 /* ════════════════════════════════════════════════════════════ */
@@ -236,18 +220,16 @@ export default function CostingFormPage() {
 
   /* ── Core form state ──────────────────────────────────────── */
   const [form, setForm] = useState({
-    supplier_id:          '',
-    costing_type:         'fob',
-    bill_of_lading:       '',
-    expected_date:        '',
-    transaction_date:     today,
-    note:                 '',
-    common_charge_amount: '', // one total FOB/CIF charge, spread per unit
-    default_margin_pct:   '',
-    apply_sscl:           false,
-    sscl_pct:             2.5,
-    apply_vat:            false,
-    vat_pct:              18,
+    supplier_id:      '',
+    costing_type:     'fob',
+    bill_of_lading:   '',
+    expected_date:    '',
+    transaction_date: today,
+    note:             '',
+    apply_sscl:       true,
+    sscl_pct:         2.5,
+    apply_vat:        true,
+    vat_pct:          18,
   })
   const [docNoPreview, setDocNoPreview] = useState('')
   const [refNoPreview, setRefNoPreview] = useState('')
@@ -262,10 +244,17 @@ export default function CostingFormPage() {
   // the "available" API excludes GRNs that belong to confirmed costings.
   const linkedGrnsRef = useRef([])
 
-  /* ── Per-line overrides of the product breakdown ──────────── */
-  // { [grn_item_id]: { margin_pct?: string, selling_price_base?: string } }
-  // selling_price_base is per the product's stocking UOM, never the receiving unit.
-  const [lineOverrides, setLineOverrides] = useState({})
+  /* ── Per-product costing inputs (all amounts per BASE unit) ─ */
+  // { [grn_item_id]: { expenses: { [expense_type_id]: 'amt' }, sscl_pct: '', margin: '', vat_pct: '' } }
+  const [lineCosting,  setLineCosting]  = useState({})
+  const [expandedRows, setExpandedRows] = useState(new Set())
+
+  /* ── Expense types for the selected FOB/CIF list ──────────── */
+  const { data: expenseTypes = [] } = useQuery({
+    queryKey: ['costing-expense-types', form.costing_type],
+    queryFn:  () => getCostingExpenseTypes(form.costing_type),
+    staleTime: 5 * 60 * 1000,
+  })
 
   /* ── Derived data ─────────────────────────────────────────── */
   const filteredGrns  = grnSearch
@@ -273,27 +262,22 @@ export default function CostingFormPage() {
     : supplierGrns
   const selectedGrns  = supplierGrns.filter((g) => selectedGrnIds.has(g.id))
   const grnTotal      = selectedGrns.reduce((s, g) => s + (parseFloat(g.total_amount) || 0), 0)
-  const totalExpenses = parseFloat(form.common_charge_amount) || 0
 
   // Every item line of the selected GRNs — the breakdown's raw input
   const grnLines = selectedGrns.flatMap((g) =>
     (g.items ?? []).map((it) => ({ ...it, grn_no: g.grn_no, grn_id: g.id }))
   )
 
-  const breakdown = calcBreakdown(grnLines, totalExpenses, {
-    defaultMarginPct: parseFloat(form.default_margin_pct) || 0,
-    applySscl:        form.apply_sscl,
-    ssclPct:          parseFloat(form.sscl_pct) || 0,
-    applyVat:         form.apply_vat,
-    vatPct:           parseFloat(form.vat_pct) || 0,
-  }, lineOverrides)
+  const breakdown = calcBreakdown(grnLines, {
+    applySscl: form.apply_sscl,
+    ssclPct:   parseFloat(form.sscl_pct) || 0,
+    applyVat:  form.apply_vat,
+    vatPct:    parseFloat(form.vat_pct) || 0,
+  }, lineCosting)
   const { items: breakdownItems, totals } = breakdown
 
   // Quantities are additive only within a unit, so totals show one chip per unit.
   const qtyGroups = qtyChips(breakdownItems)
-  // True when at least one line is received in a unit other than how it's stocked —
-  // that's when the receiving → stocking restatement is worth the extra ink.
-  const anyConverted = breakdownItems.some((i) => Math.abs((i.conversion_factor ?? 1) - 1) > 1e-9)
 
   // Past this many lines the breakdown scrolls inside itself (sticky header + totals)
   // rather than pushing the save actions off-screen.
@@ -344,18 +328,16 @@ export default function CostingFormPage() {
     setDocNoPreview(c.document_no)
     setRefNoPreview(c.reference_no)
     setForm({
-      supplier_id:          String(c.supplier_id),
-      costing_type:         c.costing_type,
-      bill_of_lading:       c.bill_of_lading ?? '',
-      expected_date:        c.expected_date ?? '',
-      transaction_date:     c.transaction_date ?? today,
-      note:                 c.note ?? '',
-      common_charge_amount: c.total_additional_expenses ? String(c.total_additional_expenses) : '',
-      default_margin_pct:   c.default_margin_pct ?? '',
-      apply_sscl:           Boolean(c.apply_sscl),
-      sscl_pct:             c.sscl_pct,
-      apply_vat:            Boolean(c.apply_vat),
-      vat_pct:              c.vat_pct,
+      supplier_id:      String(c.supplier_id),
+      costing_type:     c.costing_type,
+      bill_of_lading:   c.bill_of_lading ?? '',
+      expected_date:    c.expected_date ?? '',
+      transaction_date: c.transaction_date ?? today,
+      note:             c.note ?? '',
+      apply_sscl:       Boolean(c.apply_sscl),
+      sscl_pct:         c.sscl_pct,
+      apply_vat:        Boolean(c.apply_vat),
+      vat_pct:          c.vat_pct,
     })
 
     const linkedGrnIds = (c.costing_grns ?? []).map((cg) => cg.grn_id)
@@ -394,14 +376,20 @@ export default function CostingFormPage() {
         items:        itemsByGrn.get(cg.grn_id) ?? [],
       }))
 
-    // Restore per-line overrides (typed price wins over line margin). The typed price
-    // round-trips in the stocking UOM — the same denomination it was entered in.
-    const overrides = {}
+    // Restore the per-product panel inputs, all per base unit as they were typed.
+    const restored = {}
     for (const item of c.items ?? []) {
-      if (item.is_price_overridden) overrides[item.grn_item_id] = { selling_price_base: String(item.selling_price_base) }
-      else if (item.margin_pct != null) overrides[item.grn_item_id] = { margin_pct: String(item.margin_pct) }
+      const expenses = {}
+      for (const e of item.expenses ?? []) expenses[e.expense_type_id] = String(e.amount)
+      const entry = {
+        expenses,
+        sscl_pct: item.sscl_pct != null ? String(item.sscl_pct) : '',
+        vat_pct:  item.vat_pct != null ? String(item.vat_pct) : '',
+        margin:   item.margin_amount_base ? String(parseFloat(item.margin_amount_base)) : '',
+      }
+      if (lineHasData(entry)) restored[item.grn_item_id] = entry
     }
-    setLineOverrides(overrides)
+    setLineCosting(restored)
   }, [existingData])
 
   /* ── GRN checkbox toggle ──────────────────────────────────── */
@@ -434,18 +422,42 @@ export default function CostingFormPage() {
     setErrors((e) => ({ ...e, [name]: undefined }))
   }
 
-  // Editing a line margin clears its typed price (they're mutually exclusive)
-  function setLineMargin(grnItemId, value) {
-    setLineOverrides((prev) => ({ ...prev, [grnItemId]: { margin_pct: value } }))
+  // Switching FOB ↔ CIF swaps the expense-type list, so typed amounts of the
+  // old list would silently survive against types the new list doesn't show.
+  function setCostingType(type) {
+    if (type === form.costing_type) return
+    setLineCosting((prev) => {
+      const next = {}
+      for (const [key, lc] of Object.entries(prev)) next[key] = { ...lc, expenses: {} }
+      return next
+    })
+    setField('costing_type', type)
   }
 
-  // The typed price is per the product's stocking UOM — the unit the customer is billed in.
-  function setLineSelling(grnItemId, value) {
-    setLineOverrides((prev) => ({ ...prev, [grnItemId]: { selling_price_base: value } }))
+  function toggleRow(grnItemId) {
+    setExpandedRows((prev) => {
+      const next = new Set(prev)
+      next.has(grnItemId) ? next.delete(grnItemId) : next.add(grnItemId)
+      return next
+    })
+  }
+
+  function setLineField(grnItemId, field, value) {
+    setLineCosting((prev) => ({
+      ...prev,
+      [grnItemId]: { ...(prev[grnItemId] ?? { expenses: {} }), [field]: value },
+    }))
+  }
+
+  function setLineExpense(grnItemId, typeId, value) {
+    setLineCosting((prev) => {
+      const lc = prev[grnItemId] ?? { expenses: {} }
+      return { ...prev, [grnItemId]: { ...lc, expenses: { ...(lc.expenses ?? {}), [typeId]: value } } }
+    })
   }
 
   function resetLine(grnItemId) {
-    setLineOverrides((prev) => {
+    setLineCosting((prev) => {
       const next = { ...prev }
       delete next[grnItemId]
       return next
@@ -455,28 +467,31 @@ export default function CostingFormPage() {
   /* ── Build payload ────────────────────────────────────────── */
   function buildPayload() {
     return {
-      supplier_id:        parseInt(form.supplier_id),
-      costing_type:       form.costing_type,
-      grn_ids:            [...selectedGrnIds],
-      bill_of_lading:     form.bill_of_lading || null,
-      expected_date:      form.expected_date || null,
-      transaction_date:   form.transaction_date || null,
-      note:                 form.note || null,
-      common_charge_amount: parseFloat(form.common_charge_amount) || 0,
-      default_margin_pct:   parseFloat(form.default_margin_pct) || 0,
-      apply_sscl:           form.apply_sscl,
-      sscl_pct:             parseFloat(form.sscl_pct) || 0,
-      apply_vat:            form.apply_vat,
-      vat_pct:              parseFloat(form.vat_pct) || 0,
-      expenses:             [],
-      items: Object.entries(lineOverrides)
-        .filter(([grnItemId]) => grnLines.some((l) => String(l.id) === String(grnItemId)))
-        .map(([grnItemId, ov]) => ({
-          grn_item_id:        parseInt(grnItemId),
-          margin_pct:         ov.margin_pct !== undefined && ov.margin_pct !== '' ? parseFloat(ov.margin_pct) : null,
-          selling_price_base: ov.selling_price_base !== undefined && ov.selling_price_base !== '' ? parseFloat(ov.selling_price_base) : null,
-        }))
-        .filter((o) => o.margin_pct !== null || o.selling_price_base !== null),
+      supplier_id:      parseInt(form.supplier_id),
+      costing_type:     form.costing_type,
+      grn_ids:          [...selectedGrnIds],
+      bill_of_lading:   form.bill_of_lading || null,
+      expected_date:    form.expected_date || null,
+      transaction_date: form.transaction_date || null,
+      note:             form.note || null,
+      apply_sscl:       form.apply_sscl,
+      sscl_pct:         parseFloat(form.sscl_pct) || 0,
+      apply_vat:        form.apply_vat,
+      vat_pct:          parseFloat(form.vat_pct) || 0,
+      items: grnLines
+        .filter((l) => lineHasData(lineCosting[l.id]))
+        .map((l) => {
+          const lc = lineCosting[l.id]
+          return {
+            grn_item_id:        l.id,
+            margin_amount_base: lc.margin !== '' && lc.margin !== undefined ? parseFloat(lc.margin) || 0 : 0,
+            sscl_pct:           lc.sscl_pct !== '' && lc.sscl_pct !== undefined ? parseFloat(lc.sscl_pct) : null,
+            vat_pct:            lc.vat_pct !== '' && lc.vat_pct !== undefined ? parseFloat(lc.vat_pct) : null,
+            expenses: Object.entries(lc.expenses ?? {})
+              .filter(([, amt]) => amt !== '' && parseFloat(amt) > 0)
+              .map(([typeId, amt]) => ({ expense_type_id: parseInt(typeId), amount: parseFloat(amt) })),
+          }
+        }),
     }
   }
 
@@ -528,8 +543,8 @@ export default function CostingFormPage() {
 
   const isConfirmed = existingData?.data?.status === 'confirmed'
   const readOnly    = isConfirmed || (!isEdit && Boolean(id))
-  const anyTax      = form.apply_sscl || form.apply_vat
-  const colCount    = 12 + (anyTax ? 1 : 0) + (readOnly ? 0 : 1)
+  const typeLabel   = form.costing_type?.toUpperCase()
+  const COLS        = 13
 
   /* ════════════════════════════════════════════════════════════ */
   return (
@@ -569,7 +584,8 @@ export default function CostingFormPage() {
                   onChange={(e) => {
                     linkedGrnsRef.current = []
                     setSelectedGrnIds(new Set())
-                    setLineOverrides({})
+                    setLineCosting({})
+                    setExpandedRows(new Set())
                     setField('supplier_id', e.target.value)
                   }}
                   disabled={readOnly}
@@ -680,16 +696,16 @@ export default function CostingFormPage() {
             </div>
           </div>
 
-          {/* Section 3 — Product Breakdown (the heart of the costing) */}
+          {/* Section 3 — Product Cost Build-up (the heart of the costing) */}
           <div className="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
             <SectionHeader
               icon={Table2}
-              title="Product Price Breakdown"
+              title="Product Cost Build-up"
               colorClass="text-indigo-700 bg-indigo-50 border-indigo-100"
               extra={
                 <div className="flex items-center gap-2 text-[10px]">
                   <span className="text-slate-400">
-                    GRN Price + Charges = Landed → + Margin{form.apply_sscl ? ' → +SSCL' : ''}{form.apply_vat ? ' → +VAT' : ''} = Selling
+                    {typeLabel} + Expenses{form.apply_sscl ? ' + SSCL' : ''} + Margin = Before-Tax{form.apply_vat ? ' → +VAT = After-Tax' : ''} · per base unit
                   </span>
                   {breakdownItems.length > 0 && (
                     <span className="flex items-center gap-1 text-slate-500">
@@ -704,14 +720,6 @@ export default function CostingFormPage() {
                       )}
                     </span>
                   )}
-                  {totalExpenses > 0 && (
-                    <span
-                      className="rounded bg-emerald-100 px-1.5 py-px font-bold text-emerald-700"
-                      title="Charges are split across the lines in proportion to each line's VALUE — the only basis that holds when lines arrive in different units. Every line therefore lands at this same uplift over its GRN price."
-                    >
-                      Charges split by value · every line +{fmt(totals.upliftPct)}%
-                    </span>
-                  )}
                 </div>
               }
             />
@@ -722,120 +730,98 @@ export default function CostingFormPage() {
               <table className="w-full text-xs">
                 <thead className={itemsScroll ? 'sticky top-0 z-20 shadow-[0_1px_0_0_#e2e8f0]' : ''}>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
+                    <th className="w-7 px-1 py-2" />
                     <th className="px-2 py-2 font-semibold uppercase tracking-wider text-slate-500">Product</th>
                     <th className="px-2 py-2 font-semibold uppercase tracking-wider text-slate-500">Colour</th>
                     <th className="px-2 py-2 font-semibold uppercase tracking-wider text-slate-500">GRN</th>
-                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title={anyConverted ? 'Quantity as received, restated in the product’s stocking UOM below' : undefined}>Received</th>
-                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">GRN Price</th>
-                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title="This line’s share of the common charge, divided by its own quantity">+Charges</th>
-                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Landed</th>
-                    <th className="w-20 px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Margin %</th>
-                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Margin</th>
-                    {anyTax && <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Tax</th>}
-                    <th className="w-28 px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title="The price the customer pays — always per the product’s stocking UOM, whatever unit the goods arrived in">
-                      Selling / Stocking UOM ({CURRENCY})
-                    </th>
-                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Line Total</th>
-                    {!readOnly && <th className="w-7 px-1 py-2" />}
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Received</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title={`The GRN purchasing price — the ${typeLabel} value, per the product's stocking unit`}>{typeLabel}</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title="Sum of the expense amounts typed in the line's panel">+Expenses</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title={`SSCL % of the ${typeLabel} amount only`}>+SSCL</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title="Addon margin amount per base unit">+Margin</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title="Selling price before VAT — what non-VAT invoices bill">Before-Tax</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">+VAT</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title="Selling price including VAT — what VAT invoices bill">After-Tax</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title="After-tax price × full received quantity">Line Total</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {breakdownItems.length === 0 ? (
-                    <tr><td colSpan={colCount} className="px-4 py-8 text-center text-slate-400">Select GRNs above — every received product line appears here with its price build-up.</td></tr>
+                    <tr><td colSpan={COLS} className="px-4 py-8 text-center text-slate-400">Select GRNs above — every received product line appears here. Expand a line to type its expenses, SSCL, margin and VAT.</td></tr>
                   ) : (
                     breakdownItems.map((item) => {
-                      const ov = lineOverrides[item.id] ?? {}
-                      const hasOverride = (ov.margin_pct !== undefined && ov.margin_pct !== '') || (ov.selling_price_base !== undefined && ov.selling_price_base !== '')
-                      // Received in a different unit than it's stocked in — show the restatement.
+                      const lc       = lineCosting[item.id] ?? { expenses: {} }
+                      const hasData  = lineHasData(lc)
+                      const isOpen   = expandedRows.has(item.id)
                       const converted = Math.abs(item.conversion_factor - 1) > 1e-9
                       // With a factor of 1 the two denominations are the same number, so the
                       // receiving symbol is the honest label — even on pre-UOM lines, which
-                      // were posted raw and froze factor 1 against a base unit they never
-                      // actually converted into. Only a real factor makes base_unit_symbol
-                      // the unit the price is in.
+                      // froze factor 1 against a base unit they never converted into.
                       const baseSym = converted
                         ? (item.base_unit_symbol || item.unit_symbol)
                         : (item.unit_symbol || item.base_unit_symbol)
                       return (
-                        <tr key={item.id} className="hover:bg-slate-50">
-                          <td className="px-2 py-1 font-medium text-slate-700">
-                            {item.product_name || `Product #${item.product_id}`}
-                            {item.product_code && <span className="ml-1 font-mono text-[9px] text-slate-400">{item.product_code}</span>}
-                          </td>
-                          <td className="px-2 py-1 text-slate-500">{item.color || '—'}</td>
-                          <td className="px-2 py-1 font-mono text-[10px] text-slate-400">{item.grn_no}</td>
-                          <td className="px-2 py-1 text-right tabular-nums text-slate-600">
-                            <QtyUnit value={item.quantity} symbol={item.unit_symbol} position={item.unit_position} />
-                            {converted && (
-                              <div className="text-[9px] text-slate-400" title={`1 ${item.unit_symbol} = ${fmt(item.conversion_factor)} ${baseSym}`}>
-                                = <QtyUnit value={item.base_quantity} symbol={baseSym} position={item.base_unit_position} />
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-2 py-1 text-right"><PerUnit value={item.unit_price} symbol={item.unit_symbol} className="text-slate-600" /></td>
-                          <td
-                            className="px-2 py-1 text-right text-emerald-600"
-                            title={`Line value ${fmt(item.quantity * item.unit_price)} ${CURRENCY} → charge share ${fmt(item.charge_share)} ${CURRENCY} ÷ ${fmt(item.quantity)} ${item.unit_symbol ?? ''}`}
+                        <RowGroup key={item.id}>
+                          <tr
+                            className={`cursor-pointer transition-colors ${isOpen ? 'bg-indigo-50/60' : hasData ? 'bg-emerald-50/40 hover:bg-emerald-50/70' : 'hover:bg-slate-50'}`}
+                            onClick={() => toggleRow(item.id)}
+                            title={isOpen ? 'Collapse' : 'Expand to enter expenses, SSCL, margin & VAT'}
                           >
-                            +<PerUnit value={item.charge_portion} symbol={item.unit_symbol} />
-                          </td>
-                          <td className="px-2 py-1 text-right font-medium">
-                            <PerUnit value={item.landed_unit_cost} symbol={item.unit_symbol} className="text-slate-700" />
-                            {converted && (
-                              <div className="text-[9px] font-normal text-indigo-500">
-                                = <PerUnit value={item.landed_unit_cost_base} symbol={baseSym} />
-                              </div>
-                            )}
-                          </td>
-                          <td className="px-2 py-1">
-                            <input
-                              type="number" min="0" step="0.01"
-                              placeholder={String(form.default_margin_pct || 0)}
-                              className={`${TABLE_INP} text-right`}
-                              value={ov.margin_pct ?? ''}
-                              onChange={(e) => setLineMargin(item.id, e.target.value)}
-                              disabled={readOnly || item.is_price_overridden}
-                              title={item.is_price_overridden ? 'Selling price typed directly — margin is back-computed' : 'Line margin % (blank = costing default)'}
-                            />
-                          </td>
-                          <td className={`px-2 py-1 text-right ${item.margin_amount < 0 ? 'font-semibold text-red-600' : 'text-slate-600'}`}>
-                            <PerUnit value={item.margin_amount} symbol={item.unit_symbol} />
-                          </td>
-                          {anyTax && (
-                            <td className="px-2 py-1 text-right text-amber-600" title={`SSCL ${fmt(item.sscl_amount)} + VAT ${fmt(item.vat_amount)} ${CURRENCY} per ${item.unit_symbol ?? 'unit'}`}>
-                              <PerUnit value={item.sscl_amount + item.vat_amount} symbol={item.unit_symbol} />
+                            <td className="px-1 py-1 text-center text-slate-400">
+                              {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                             </td>
-                          )}
-                          <td className="px-2 py-1">
-                            <div className="relative">
-                              <input
-                                type="number" min="0" step="0.01"
-                                className={`${TABLE_INP} text-right font-semibold ${item.is_price_overridden ? 'border-amber-400 bg-amber-50' : ''}`}
-                                value={ov.selling_price_base ?? Number(item.selling_price_base.toFixed(2))}
-                                onChange={(e) => setLineSelling(item.id, e.target.value)}
-                                disabled={readOnly}
-                                title={item.is_price_overridden
-                                  ? `Typed final price per ${baseSym ?? 'unit'} — margin back-computed`
-                                  : `Computed selling price per ${baseSym ?? 'unit'} (type to override)`}
-                              />
-                              {item.is_price_overridden && <span className="absolute -left-1 top-1/2 -translate-y-1/2 h-1.5 w-1.5 rounded-full bg-amber-500" title="Price overridden" />}
-                            </div>
-                            <div className="mt-px text-right text-[9px] text-slate-400">
-                              per {baseSym || 'unit'}
-                              {converted && <> · = <span className="tabular-nums">{fmt(item.selling_price)}</span>/{item.unit_symbol}</>}
-                            </div>
-                          </td>
-                          <td className="px-2 py-1 text-right font-medium tabular-nums text-indigo-700"><Money value={item.quantity * item.selling_price} /></td>
-                          {!readOnly && (
-                            <td className="px-1 py-1 text-center">
-                              {hasOverride && (
-                                <button type="button" onClick={() => resetLine(item.id)} title="Reset to costing default" className="rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
-                                  <RotateCcw size={10} />
-                                </button>
+                            <td className="px-2 py-1 font-medium text-slate-700">
+                              {item.product_name || `Product #${item.product_id}`}
+                              {item.product_code && <span className="ml-1 font-mono text-[9px] text-slate-400">{item.product_code}</span>}
+                              {hasData && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 align-middle" title="Has costing inputs" />}
+                            </td>
+                            <td className="px-2 py-1 text-slate-500">{item.color || '—'}</td>
+                            <td className="px-2 py-1 font-mono text-[10px] text-slate-400">{item.grn_no}</td>
+                            <td className="px-2 py-1 text-right tabular-nums text-slate-600">
+                              <QtyUnit value={item.quantity} symbol={item.unit_symbol} position={item.unit_position} />
+                              {converted && (
+                                <div className="text-[9px] text-slate-400" title={`1 ${item.unit_symbol} = ${fmt(item.conversion_factor)} ${baseSym}`}>
+                                  = <QtyUnit value={item.base_quantity} symbol={baseSym} position={item.base_unit_position} />
+                                </div>
                               )}
                             </td>
+                            <td className="px-2 py-1 text-right"><PerUnit value={item.fob_base} symbol={baseSym} className="text-slate-700 font-medium" /></td>
+                            <td className={`px-2 py-1 text-right ${item.expense_total_base > 0 ? 'text-emerald-600' : 'text-slate-300'}`}>
+                              +<PerUnit value={item.expense_total_base} symbol={baseSym} />
+                            </td>
+                            <td className={`px-2 py-1 text-right ${item.sscl_amount_base > 0 ? 'text-amber-600' : 'text-slate-300'}`} title={`${fmt(item.eff_sscl_pct)}% of ${typeLabel} ${fmt(item.fob_base)}`}>
+                              +<PerUnit value={item.sscl_amount_base} symbol={baseSym} />
+                            </td>
+                            <td className={`px-2 py-1 text-right ${item.margin_amount_base > 0 ? 'text-slate-600' : 'text-slate-300'}`}>
+                              +<PerUnit value={item.margin_amount_base} symbol={baseSym} />
+                            </td>
+                            <td className="px-2 py-1 text-right font-semibold"><PerUnit value={item.before_tax_price_base} symbol={baseSym} className="text-slate-800" /></td>
+                            <td className={`px-2 py-1 text-right ${item.vat_amount_base > 0 ? 'text-amber-600' : 'text-slate-300'}`} title={`VAT ${fmt(item.eff_vat_pct)}% of before-tax`}>
+                              +<PerUnit value={item.vat_amount_base} symbol={baseSym} />
+                            </td>
+                            <td className="px-2 py-1 text-right font-bold"><PerUnit value={item.after_tax_price_base} symbol={baseSym} className="text-indigo-700" /></td>
+                            <td className="px-2 py-1 text-right font-medium tabular-nums text-indigo-700"><Money value={item.line_total} /></td>
+                          </tr>
+                          {isOpen && (
+                            <tr className="bg-slate-50/80">
+                              <td colSpan={COLS} className="px-3 py-2 border-l-2 border-indigo-400">
+                                <LineCostingPanel
+                                  item={item}
+                                  lc={lc}
+                                  baseSym={baseSym}
+                                  typeLabel={typeLabel}
+                                  expenseTypes={expenseTypes}
+                                  form={form}
+                                  readOnly={readOnly}
+                                  hasData={hasData}
+                                  onExpense={(typeId, v) => setLineExpense(item.id, typeId, v)}
+                                  onField={(field, v) => setLineField(item.id, field, v)}
+                                  onReset={() => resetLine(item.id)}
+                                />
+                              </td>
+                            </tr>
                           )}
-                        </tr>
+                        </RowGroup>
                       )
                     })
                   )}
@@ -843,17 +829,16 @@ export default function CostingFormPage() {
                     /* Money columns total to shipment VALUES, which are additive across units.
                        Quantity is not, so it becomes one chip per unit rather than a fake sum. */
                     <tr className="bg-slate-50 border-t-2 border-slate-200 font-bold">
-                      <td className={`px-2 py-1.5 text-slate-700 ${footCell}`} colSpan={3}>Totals</td>
+                      <td className={`px-2 py-1.5 text-slate-700 ${footCell}`} colSpan={4}>Totals</td>
                       <td className={`px-2 py-1.5 text-right ${footCell}`}><QtyChips groups={qtyGroups} /></td>
-                      <td className={`px-2 py-1.5 text-right tabular-nums text-slate-700 ${footCell}`} title="Total purchase value of the selected GRNs"><Money value={totals.purchaseValue} /></td>
-                      <td className={`px-2 py-1.5 text-right tabular-nums text-emerald-700 ${footCell}`} title="Total common charge — fully distributed across the lines above">+<Money value={totals.charges} /></td>
-                      <td className={`px-2 py-1.5 text-right tabular-nums text-slate-800 ${footCell}`} title="Total landed value (purchase + charges)"><Money value={totals.landedValue} /></td>
-                      <td className={footCell} />
-                      <td className={`px-2 py-1.5 text-right tabular-nums text-slate-700 ${footCell}`}><Money value={totals.marginValue} /></td>
-                      {anyTax && <td className={`px-2 py-1.5 text-right tabular-nums text-amber-700 ${footCell}`}><Money value={totals.ssclValue + totals.vatValue} /></td>}
-                      <td className={footCell} />
-                      <td className={`px-2 py-1.5 text-right tabular-nums text-indigo-700 ${footCell}`} title="Total selling value of the shipment"><Money value={totals.sellingValue} /></td>
-                      {!readOnly && <td className={footCell} />}
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-slate-700 ${footCell}`} title={`Total ${typeLabel} (purchase) value of the selected GRNs`}><Money value={totals.purchaseValue} /></td>
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-emerald-700 ${footCell}`}>+<Money value={totals.expensesValue} /></td>
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-amber-700 ${footCell}`}>+<Money value={totals.ssclValue} /></td>
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-slate-700 ${footCell}`}>+<Money value={totals.marginValue} /></td>
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-slate-800 ${footCell}`} title="Total Before-Tax selling value"><Money value={totals.beforeTaxValue} /></td>
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-amber-700 ${footCell}`}>+<Money value={totals.vatValue} /></td>
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-indigo-700 ${footCell}`} title="Total After-Tax selling value"><Money value={totals.afterTaxValue} /></td>
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-indigo-700 ${footCell}`}><Money value={totals.afterTaxValue} /></td>
                     </tr>
                   )}
                 </tbody>
@@ -874,71 +859,44 @@ export default function CostingFormPage() {
                 <span className="text-[10px] text-slate-500">Received</span>
                 <QtyChips groups={qtyGroups} />
               </div>
-              <SummaryRow label="Total Purchase Value" value={totals.purchaseValue} valueClass="text-slate-700" unit={CURRENCY} />
 
-              {/* FOB / CIF total charge — one figure, spread per unit */}
+              {/* FOB / CIF selector — decides which expense-type list every line uses */}
               <div className="mt-1 rounded-md border border-emerald-100 bg-emerald-50/60 p-2">
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex overflow-hidden rounded-md border-2 border-slate-200 text-[10px] font-bold">
                     <button
                       type="button"
-                      onClick={() => !readOnly && setField('costing_type', 'fob')}
+                      onClick={() => !readOnly && setCostingType('fob')}
                       className={`px-2.5 py-0.5 transition-colors ${form.costing_type === 'fob' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'} ${readOnly ? 'cursor-default' : ''}`}
                     >
                       FOB
                     </button>
                     <button
                       type="button"
-                      onClick={() => !readOnly && setField('costing_type', 'cif')}
+                      onClick={() => !readOnly && setCostingType('cif')}
                       className={`border-l-2 border-slate-200 px-2.5 py-0.5 transition-colors ${form.costing_type === 'cif' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'} ${readOnly ? 'cursor-default' : ''}`}
                     >
                       CIF
                     </button>
                   </div>
                   <span className="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">
-                    Total {form.costing_type?.toUpperCase()} Charges ({CURRENCY})
+                    {typeLabel} Costing
                   </span>
                 </div>
-                <input
-                  type="number" min="0" step="0.01"
-                  placeholder="0.00"
-                  className="mt-1.5 block w-full rounded border-2 border-emerald-200 bg-white px-2 py-1 text-right text-sm font-bold tabular-nums text-slate-800 outline-none transition-all focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/15 disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-400"
-                  value={form.common_charge_amount}
-                  onChange={(e) => setField('common_charge_amount', e.target.value)}
-                  disabled={readOnly}
-                  title={`Total ${form.costing_type?.toUpperCase()} + transport + other charges for this shipment — split across the lines in proportion to their value`}
-                />
-                {/* A single "charge per unit" cannot exist across Kg, Rolls and metres.
-                    The uplift % can: it is what every line's cost rises by. */}
-                <div className="mt-1 flex items-center justify-between text-[10px]">
-                  <span className="text-slate-500" title="Charges ÷ purchase value — the uplift every line's GRN price takes">
-                    Split by value · uplift
-                  </span>
-                  <span className="font-bold text-emerald-700 tabular-nums">+{fmt(totals.upliftPct)}%</span>
-                </div>
+                <p className="mt-1 text-[9px] leading-tight text-slate-500">
+                  Expenses are typed per product line (per base unit) — expand a line in the build-up table.
+                </p>
+              </div>
+
+              <div className="mt-1">
+                <SummaryRow label={`Total ${typeLabel} Value`} value={totals.purchaseValue} valueClass="text-slate-700" unit={CURRENCY} />
+                <SummaryRow label="Total Expenses" value={totals.expensesValue} valueClass="text-emerald-700" unit={CURRENCY} />
+                <SummaryRow label="Total Landed Cost" value={totals.landedValue} valueClass="font-bold text-slate-800" unit={CURRENCY} />
               </div>
 
               <div className="border-t border-slate-200 my-1" />
-              <SummaryRow label="Total Landed Cost" value={totals.landedValue} valueClass="font-bold text-slate-800" unit={CURRENCY} />
 
-              {/* Default margin */}
-              <div className="flex items-center justify-between py-1">
-                <div className="flex items-center gap-1">
-                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Default Margin</span>
-                  <input
-                    type="number" min="0" step="0.1"
-                    className={PCT_INP}
-                    value={form.default_margin_pct}
-                    onChange={(e) => setField('default_margin_pct', e.target.value)}
-                    disabled={readOnly}
-                    placeholder="0"
-                  />
-                  <span className="text-[10px] text-slate-400">%</span>
-                </div>
-                <span className="text-xs text-slate-600"><Money value={totals.marginValue} /></span>
-              </div>
-
-              {/* SSCL toggle */}
+              {/* SSCL toggle — % of the FOB/CIF amount only */}
               <div className="flex items-center justify-between py-1">
                 <div className="flex items-center gap-1.5">
                   <CheckToggle checked={form.apply_sscl} onChange={(v) => setField('apply_sscl', v)} label="SSCL" disabled={readOnly} />
@@ -948,10 +906,19 @@ export default function CostingFormPage() {
                     value={form.sscl_pct}
                     onChange={(e) => setField('sscl_pct', e.target.value)}
                     disabled={readOnly || !form.apply_sscl}
+                    title={`SSCL % of the ${typeLabel} amount only (lines can override)`}
                   />
                   <span className="text-[10px] text-slate-400">%</span>
                 </div>
                 <span className={`text-xs ${form.apply_sscl ? 'text-amber-600' : 'text-slate-300'}`}><Money value={totals.ssclValue} /></span>
+              </div>
+
+              <SummaryRow label="Total Margin" value={totals.marginValue} valueClass="text-slate-700" unit={CURRENCY} />
+
+              {/* Before-Tax value — what non-VAT invoices will bill */}
+              <div className="mt-1 flex items-center justify-between rounded bg-slate-100 px-2 py-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">Before-Tax Value</span>
+                <span className="text-sm font-bold tabular-nums text-slate-800">{fmt(totals.beforeTaxValue)} <span className="text-[9px] font-normal text-slate-400">{CURRENCY}</span></span>
               </div>
 
               {/* VAT toggle */}
@@ -964,23 +931,22 @@ export default function CostingFormPage() {
                     value={form.vat_pct}
                     onChange={(e) => setField('vat_pct', e.target.value)}
                     disabled={readOnly || !form.apply_vat}
+                    title="Default VAT % (lines can override)"
                   />
                   <span className="text-[10px] text-slate-400">%</span>
                 </div>
                 <span className={`text-xs ${form.apply_vat ? 'text-amber-600' : 'text-slate-300'}`}><Money value={totals.vatValue} /></span>
               </div>
 
-              {anyTax && (
-                <p className="mt-0.5 rounded bg-amber-50 px-2 py-1 text-[9px] leading-tight text-amber-700">
-                  Selling prices include {form.apply_sscl && 'SSCL'}{form.apply_sscl && form.apply_vat && ' + '}{form.apply_vat && 'VAT'} — this will be noted on invoices.
-                </p>
-              )}
-
+              {/* After-Tax value — what VAT invoices will bill */}
               <div className="border-t-2 border-indigo-200 mt-1 pt-2">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">Total Selling Value</span>
-                  <span className="text-base font-black text-indigo-700">{fmt(totals.sellingValue)} <span className="text-[10px] font-bold text-indigo-400">{CURRENCY}</span></span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-700">After-Tax Value</span>
+                  <span className="text-base font-black text-indigo-700">{fmt(totals.afterTaxValue)} <span className="text-[10px] font-bold text-indigo-400">{CURRENCY}</span></span>
                 </div>
+                <p className="mt-0.5 text-[9px] leading-tight text-slate-400">
+                  Before-Tax feeds Non-VAT invoices · After-Tax feeds VAT invoices.
+                </p>
               </div>
 
             </div>
@@ -1029,6 +995,157 @@ export default function CostingFormPage() {
         </div>
 
       </div>
+    </div>
+  )
+}
+
+/** Fragment wrapper so a data row + its expanded panel share one key. */
+function RowGroup({ children }) {
+  return <>{children}</>
+}
+
+/* ── The expanded per-product costing panel ──────────────────────────────────
+ * Everything here is typed PER BASE UNIT; the grey figure beside each field is
+ * the same money for the line's FULL quantity, so the user sees both without
+ * leaving the row. */
+function LineCostingPanel({ item, lc, baseSym, typeLabel, expenseTypes, form, readOnly, hasData, onExpense, onField, onReset }) {
+  const perUnitTag = <span className="text-[9px] font-normal text-slate-400">/{baseSym || 'unit'}</span>
+  const baseQty    = item.base_quantity
+
+  const total = (perUnit) => `${fmt((parseFloat(perUnit) || 0) * baseQty)} ${CURRENCY}`
+
+  return (
+    <div className="flex flex-wrap gap-x-5 gap-y-2 items-start" onClick={(e) => e.stopPropagation()}>
+
+      {/* Expense inputs — one per type of the costing's FOB/CIF list */}
+      <div className="flex-1 min-w-[300px]">
+        <div className="mb-1 flex items-center justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+            {typeLabel} Expenses <span className="font-normal text-slate-400">(amount per {baseSym || 'unit'})</span>
+          </span>
+          <span className="text-[10px] text-slate-500">
+            Total: <span className="font-bold text-emerald-700 tabular-nums">{fmt(item.expense_total_base)}</span>{perUnitTag}
+            <span className="mx-1 text-slate-300">·</span>
+            <span className="tabular-nums" title={`For the full ${fmt(baseQty)} ${baseSym || ''}`}>{total(item.expense_total_base)}</span>
+          </span>
+        </div>
+        {expenseTypes.length === 0 ? (
+          <p className="rounded bg-slate-100 px-2 py-1.5 text-[10px] text-slate-400">No active {typeLabel} expense types configured.</p>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-1.5">
+            {expenseTypes.map((t) => {
+              const val = lc.expenses?.[t.id] ?? ''
+              return (
+                <div key={t.id} className="min-w-0">
+                  <label className="block truncate text-[9px] font-semibold uppercase tracking-wider text-slate-500" title={t.name}>{t.name}</label>
+                  <input
+                    type="number" min="0" step="0.01"
+                    placeholder="0.00"
+                    className={`${PANEL_INP} ${val !== '' && parseFloat(val) > 0 ? 'border-emerald-300 bg-emerald-50/50' : ''}`}
+                    value={val}
+                    onChange={(e) => onExpense(t.id, e.target.value)}
+                    disabled={readOnly}
+                  />
+                  <div className="mt-px text-right text-[9px] tabular-nums text-slate-400">
+                    {val !== '' && parseFloat(val) > 0 ? `= ${total(val)}` : ' '}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Price build-up: FOB/CIF → +Expenses → +SSCL → +Margin = Before-Tax → +VAT = After-Tax */}
+      <div className="w-[300px] shrink-0 rounded-md border border-slate-200 bg-white p-2">
+        <BuildUpRow label={`${typeLabel} (GRN Price)`} value={item.fob_base} tag={perUnitTag} totalText={total(item.fob_base)} />
+        <BuildUpRow label="+ Expenses" value={item.expense_total_base} tag={perUnitTag} totalText={total(item.expense_total_base)} valueClass="text-emerald-600" />
+
+        {/* SSCL — % of the FOB/CIF amount ONLY */}
+        <div className="flex items-center justify-between gap-1 py-0.5">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-slate-500">+ SSCL</span>
+            <input
+              type="number" min="0" max="100" step="0.1"
+              className={`${PCT_INP} !w-11`}
+              placeholder={String(form.sscl_pct)}
+              value={lc.sscl_pct ?? ''}
+              onChange={(e) => onField('sscl_pct', e.target.value)}
+              disabled={readOnly || !form.apply_sscl}
+              title={form.apply_sscl ? `SSCL % of the ${typeLabel} amount only (blank = ${form.sscl_pct}%)` : 'SSCL is off for this costing'}
+            />
+            <span className="text-[9px] text-slate-400">% of {typeLabel}</span>
+          </div>
+          <span className="text-[11px] tabular-nums text-amber-600" title={total(item.sscl_amount_base)}>{fmt(item.sscl_amount_base)}{perUnitTag}</span>
+        </div>
+
+        {/* Margin — a typed addon AMOUNT per base unit */}
+        <div className="flex items-center justify-between gap-1 py-0.5">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-slate-500">+ Margin</span>
+            <input
+              type="number" min="0" step="0.01"
+              className={`${PANEL_INP} !w-20 ${(lc.margin ?? '') !== '' ? 'border-indigo-300 bg-indigo-50/50' : ''}`}
+              placeholder="0.00"
+              value={lc.margin ?? ''}
+              onChange={(e) => onField('margin', e.target.value)}
+              disabled={readOnly}
+              title={`Addon margin amount per ${baseSym || 'unit'}`}
+            />
+            <span className="text-[9px] text-slate-400">/{baseSym || 'unit'}</span>
+          </div>
+          <span className="text-[11px] tabular-nums text-slate-600" title={total(item.margin_amount_base)}>{fmt(item.margin_amount_base)}{perUnitTag}</span>
+        </div>
+
+        <div className="my-0.5 border-t border-slate-200" />
+        <BuildUpRow label="= Before-Tax" value={item.before_tax_price_base} tag={perUnitTag} totalText={total(item.before_tax_price_base)} labelClass="font-bold text-slate-700" valueClass="font-bold text-slate-800" />
+
+        {/* VAT — % of the before-tax price */}
+        <div className="flex items-center justify-between gap-1 py-0.5">
+          <div className="flex items-center gap-1">
+            <span className="text-[10px] text-slate-500">+ VAT</span>
+            <input
+              type="number" min="0" max="100" step="0.1"
+              className={`${PCT_INP} !w-11`}
+              placeholder={String(form.vat_pct)}
+              value={lc.vat_pct ?? ''}
+              onChange={(e) => onField('vat_pct', e.target.value)}
+              disabled={readOnly || !form.apply_vat}
+              title={form.apply_vat ? `VAT % of the before-tax price (blank = ${form.vat_pct}%)` : 'VAT is off for this costing'}
+            />
+            <span className="text-[9px] text-slate-400">%</span>
+          </div>
+          <span className="text-[11px] tabular-nums text-amber-600" title={total(item.vat_amount_base)}>{fmt(item.vat_amount_base)}{perUnitTag}</span>
+        </div>
+
+        <div className="my-0.5 border-t-2 border-indigo-200" />
+        <BuildUpRow label="= After-Tax" value={item.after_tax_price_base} tag={perUnitTag} totalText={total(item.after_tax_price_base)} labelClass="font-bold text-indigo-700" valueClass="font-black text-indigo-700" />
+        <div className="mt-0.5 flex items-center justify-between text-[9px] text-slate-400">
+          <span>Line total ({fmt(baseQty)} {baseSym || 'unit'})</span>
+          <span className="font-bold tabular-nums text-indigo-600">{fmt(item.after_tax_price_base * baseQty)} {CURRENCY}</span>
+        </div>
+
+        {!readOnly && hasData && (
+          <button
+            type="button"
+            onClick={onReset}
+            className="mt-1 flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-semibold text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+            title="Clear this line's expenses, SSCL, margin and VAT"
+          >
+            <RotateCcw size={9} /> Reset line
+          </button>
+        )}
+      </div>
+
+    </div>
+  )
+}
+
+function BuildUpRow({ label, value, tag, totalText, labelClass = 'text-slate-500', valueClass = 'text-slate-700' }) {
+  return (
+    <div className="flex items-center justify-between gap-1 py-0.5">
+      <span className={`text-[10px] ${labelClass}`}>{label}</span>
+      <span className={`text-[11px] tabular-nums ${valueClass}`} title={totalText}>{fmt(value)}{tag}</span>
     </div>
   )
 }

@@ -35,13 +35,28 @@ class CostingItemResource extends JsonResource
             'charge_portion'        => (float) $this->charge_portion,
             'landed_unit_cost'      => (float) $this->landed_unit_cost,
             'landed_unit_cost_base' => (float) $this->landed_unit_cost_base,
+            'expense_total_base'    => (float) $this->expense_total_base,
             'margin_pct'            => $this->margin_pct !== null ? (float) $this->margin_pct : null,
             'margin_amount'         => (float) $this->margin_amount,
+            'margin_amount_base'    => (float) $this->margin_amount_base,
+            'sscl_pct'              => $this->sscl_pct !== null ? (float) $this->sscl_pct : null,
             'sscl_amount'           => (float) $this->sscl_amount,
+            'sscl_amount_base'      => (float) $this->sscl_amount_base,
+            'vat_pct'               => $this->vat_pct !== null ? (float) $this->vat_pct : null,
             'vat_amount'            => (float) $this->vat_amount,
+            'vat_amount_base'       => (float) $this->vat_amount_base,
+            'before_tax_price'      => (float) $this->before_tax_price,
+            'before_tax_price_base' => (float) $this->before_tax_price_base,
             'selling_price'         => (float) $this->selling_price,
             'selling_price_base'    => (float) $this->selling_price_base,
             'is_price_overridden'   => (bool) $this->is_price_overridden,
+
+            // Typed per-base-unit expense amounts, one per expense type
+            'expenses' => $this->whenLoaded('expenses', fn () => $this->expenses->map(fn ($e) => [
+                'expense_type_id' => $e->expense_type_id,
+                'amount'          => (float) $e->amount,
+                'name'            => $e->relationLoaded('expenseType') ? $e->expenseType?->name : null,
+            ])),
 
             'product_name'       => $this->whenLoaded('product', fn () => $this->product?->name),
             'product_code'       => $this->whenLoaded('product', fn () => $this->product?->product_code),

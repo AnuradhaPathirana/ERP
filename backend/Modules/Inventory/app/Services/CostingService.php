@@ -14,6 +14,7 @@ use Modules\Inventory\Models\Costing;
 use Modules\Inventory\Models\CostingExpense;
 use Modules\Inventory\Models\CostingGrn;
 use Modules\Inventory\Models\CostingItem;
+use Modules\Inventory\Models\CostingItemExpense;
 use Modules\Inventory\Models\CostingExpenseType;
 use Modules\Inventory\Models\GoodsReceivedNote;
 use Modules\Inventory\Models\GoodsReceivedNoteItem;
@@ -22,15 +23,19 @@ use Modules\Inventory\Models\GoodsReceivedNoteItem;
  * GRN-based landed costing → per-product selling prices.
  *
  * The costing loads every item line of the selected GRNs (GRN unit_price =
- * PURCHASING price) and apportions the one common FOB/CIF charge BY VALUE:
+ * PURCHASING price = the line's FOB/CIF value) and builds each line's selling
+ * price from ITS OWN typed inputs — every amount quoted PER BASE (stocking) UNIT:
  *
- *   line_share         = charge × (line value ÷ Σ line value)
- *   charge_portion     = line_share ÷ line quantity      (per the line's OWN unit)
- *   landed_unit_cost   = grn unit_price + charge_portion
- *   selling_price      = landed + margin  → +SSCL% → +VAT%  (toggles cascade)
+ *   fob_cif      = grn unit_price ÷ conversion_factor          (per base unit)
+ *   expenses     = Σ typed amounts per expense type of the costing's FOB/CIF list
+ *   sscl         = sscl% × fob_cif ONLY (never the expenses); default 2.5
+ *   before_tax   = fob_cif + expenses + sscl + margin (typed addon amount)
+ *   after_tax    = before_tax + VAT%                  (= selling_price)
  *
- * The full per-unit build-up is stored on inv_costing_items so the user can
- * see exactly what happened to the price. Confirm keeps the one-GRN-per-
+ * Before- and after-tax are both persisted so VAT and non-VAT invoices can later
+ * pick the figure they need. The full per-unit build-up is stored on
+ * inv_costing_items (typed expense rows on inv_costing_item_expenses) so the user
+ * can see exactly what happened to the price. Confirm keeps the one-GRN-per-
  * confirmed-costing lock and mirrors landed/selling onto the product price
  * list via ProductPricingService; sales orders price each roll from its own
  * shipment's confirmed costing (old stock at old price, new at new).
@@ -138,12 +143,12 @@ class CostingService
         return Costing::with([
             'supplier',
             'costingGrns.grn.items',
-            'expenses.expenseType',
             'items.product:id,name,product_code',
             'items.attribute:id,attribute_name',
             'items.unit:id,symbol,unit_position',
             'items.baseUnit:id,symbol,unit_position',
             'items.grn:id,grn_no',
+            'items.expenses.expenseType:id,name',
         ])->findOrFail($id);
     }
 
@@ -164,7 +169,6 @@ class CostingService
             ));
 
             $this->syncGrns($costing, $grns);
-            $this->syncExpenses($costing, $data->expenses);
             $this->syncItems($costing, $breakdown['items']);
 
             return $this->find($costing->id);
@@ -184,7 +188,6 @@ class CostingService
             $costing->update($this->headerAttributes($data, $breakdown['summary']));
 
             $this->syncGrns($costing, $grns);
-            $this->syncExpenses($costing, $data->expenses);
             $this->syncItems($costing, $breakdown['items']);
 
             return $this->find($costing->id);
@@ -377,15 +380,11 @@ class CostingService
         $grns = $this->loadGrns(array_map('intval', (array) ($input['grn_ids'] ?? [])));
 
         return $this->computeBreakdown($grns, null, [
-            'expenses'             => (array) ($input['expenses'] ?? []),
-            'common_charge_amount' => isset($input['common_charge_amount']) && $input['common_charge_amount'] !== ''
-                ? (float) $input['common_charge_amount'] : null,
-            'default_margin_pct' => (float) ($input['default_margin_pct'] ?? 0),
-            'apply_sscl'         => (bool) ($input['apply_sscl'] ?? false),
-            'sscl_pct'           => (float) ($input['sscl_pct'] ?? 2.5),
-            'apply_vat'          => (bool) ($input['apply_vat'] ?? false),
-            'vat_pct'            => (float) ($input['vat_pct'] ?? 18),
-            'items'              => (array) ($input['items'] ?? []),
+            'apply_sscl' => (bool) ($input['apply_sscl'] ?? true),
+            'sscl_pct'   => (float) ($input['sscl_pct'] ?? 2.5),
+            'apply_vat'  => (bool) ($input['apply_vat'] ?? true),
+            'vat_pct'    => (float) ($input['vat_pct'] ?? 18),
+            'items'      => (array) ($input['items'] ?? []),
         ]);
     }
 
@@ -393,106 +392,80 @@ class CostingService
 
     /**
      * Single source of truth for the costing formula. Builds the per-product
-     * breakdown from the selected GRNs' item lines plus the header totals.
+     * breakdown from the selected GRNs' item lines plus each line's own typed
+     * costing inputs — expenses, SSCL %, margin amount and VAT %, ALL per the
+     * product's BASE (stocking) unit:
+     *
+     *   before_tax = fob/cif + Σ expenses + sscl% × fob/cif ONLY + margin
+     *   after_tax  = before_tax + vat%              (= selling_price)
+     *
+     * There is no cross-line apportionment any more: every line prices itself.
+     * The build-up runs per base unit (the denomination the user typed in);
+     * the legacy per-receiving-unit columns are the same money × factor.
      *
      * @param array<string, mixed>|null $raw preview-mode inputs when no DTO
      * @return array{items: array<int, array<string, mixed>>, summary: array<string, float>}
      */
     private function computeBreakdown(Collection $grns, ?CostingData $data, ?array $raw = null): array
     {
-        $expenses         = $data?->expenses         ?? $raw['expenses'];
-        $commonCharge     = $data !== null ? $data->commonChargeAmount : $raw['common_charge_amount'];
-        $defaultMarginPct = $data?->defaultMarginPct ?? $raw['default_margin_pct'];
-        $applySscl        = $data?->applySscl        ?? $raw['apply_sscl'];
-        $ssclPct          = $data?->ssclPct          ?? $raw['sscl_pct'];
-        $applyVat         = $data?->applyVat         ?? $raw['apply_vat'];
-        $vatPct           = $data?->vatPct           ?? $raw['vat_pct'];
-        $overrides        = collect($data?->items ?? $raw['items'])->keyBy('grn_item_id');
+        $applySscl = $data?->applySscl ?? $raw['apply_sscl'];
+        $ssclPct   = $data?->ssclPct   ?? $raw['sscl_pct'];
+        $applyVat  = $data?->applyVat  ?? $raw['apply_vat'];
+        $vatPct    = $data?->vatPct    ?? $raw['vat_pct'];
+        $inputs    = collect($data?->items ?? $raw['items'])->keyBy('grn_item_id');
 
         /** @var Collection<int, GoodsReceivedNoteItem> $grnItems */
         $grnItems = $grns->flatMap(fn (GoodsReceivedNote $grn) => $grn->items);
 
-        // One typed total FOB/CIF charge wins; itemised expense rows are the
-        // legacy fallback so older drafts keep computing.
-        $totalExpenses = $commonCharge !== null
-            ? (float) $commonCharge
-            : (float) collect($expenses)->sum('amount');
-
-        // ── Apportionment basis: VALUE, never quantity ────────────────────────────
-        //
-        // A shipment carries ONE common FOB/CIF charge, but its lines can be received
-        // in different units — 500 Kg of fabric, 10 rolls, 200 m of trim. Σ quantity
-        // over those lines adds kilograms to rolls to metres; dividing the charge by
-        // that sum hands a gram and a 50 Kg roll the identical charge, which inflates
-        // the cheap line's cost by tens of percent while the expensive line absorbs
-        // almost nothing. Converting to base_quantity first does not rescue it either:
-        // base UOM is defined per PRODUCT, so the sum is still Kg + metres.
-        //
-        // Value carries no unit, so it is the one basis that survives a mixed-unit
-        // shipment — and FOB/CIF/duty are levied on value in the first place. Each
-        // line's share is then divided by ITS OWN quantity, so charge_portion always
-        // lands denominated in that line's unit and `unit_price + charge_portion`
-        // stays a legal addition.
-        $lineValueOf = static fn (GoodsReceivedNoteItem $i): float
-            => (float) $i->quantity_received * (float) $i->unit_price;
-
-        $totalValue = (float) $grnItems->sum($lineValueOf);
-        $totalQty   = (float) $grnItems->sum('quantity_received');
-
-        if ($totalExpenses > 0.0 && $totalValue <= 0.0) {
-            abort(422, 'Cannot apportion charges: the selected GRNs have no purchase value to spread them over.');
-        }
-
-        // Tax multiplier for back-computing a typed (final) selling price
-        $multiplier = ($applySscl ? 1 + $ssclPct / 100 : 1) * ($applyVat ? 1 + $vatPct / 100 : 1);
+        $totalQty = (float) $grnItems->sum('quantity_received');
 
         $items = $grnItems->map(function (GoodsReceivedNoteItem $item) use (
-            $lineValueOf, $totalValue, $totalExpenses,
-            $defaultMarginPct, $applySscl, $ssclPct, $applyVat, $vatPct, $multiplier, $overrides,
+            $applySscl, $ssclPct, $applyVat, $vatPct, $inputs,
         ): array {
             $this->assertConversionIsSound($item);
 
             $qty       = (float) $item->quantity_received;
             $unitPrice = (float) $item->unit_price;
 
-            $share   = $totalValue > 0.0 ? $totalExpenses * ($lineValueOf($item) / $totalValue) : 0.0;
-            $portion = $qty > 0.0 ? $share / $qty : 0.0;
-            $landed  = $unitPrice + $portion;
-
             // The GRN line froze this at confirm time — reuse it rather than re-reading
             // inv_unit_conversions, whose rates are editable and may since have moved.
             $factor  = (float) $item->conversion_factor ?: 1.0;
             $baseQty = (float) $item->base_quantity ?: $qty * $factor;
 
-            $override     = $overrides->get($item->id, []);
-            $linePct      = isset($override['margin_pct']) && $override['margin_pct'] !== null && $override['margin_pct'] !== ''
-                ? (float) $override['margin_pct'] : null;
-            // A typed price is quoted per the STOCKING UOM — that is the unit the customer
-            // is invoiced in. Lift it into the receiving unit so the whole build-up below
-            // stays in one denomination.
-            $typedSellingBase = isset($override['selling_price_base']) && $override['selling_price_base'] !== null && $override['selling_price_base'] !== ''
-                ? (float) $override['selling_price_base'] : null;
+            $input = $inputs->get($item->id, []);
 
-            if ($typedSellingBase !== null) {
-                // User typed the FINAL selling price — back-compute the pieces
-                $selling      = $typedSellingBase * $factor;
-                $base         = $multiplier > 0 ? $selling / $multiplier : $selling;
-                $marginAmount = $base - $landed;
-                $ssclAmount   = $applySscl ? $base * ($ssclPct / 100) : 0.0;
-                $vatAmount    = $applyVat ? ($base + $ssclAmount) * ($vatPct / 100) : 0.0;
-                $overridden   = true;
-            } else {
-                $pct          = $linePct ?? $defaultMarginPct;
-                $marginAmount = $landed * ($pct / 100);
-                $base         = $landed + $marginAmount;
-                $ssclAmount   = $applySscl ? $base * ($ssclPct / 100) : 0.0;
-                $afterSscl    = $base + $ssclAmount;
-                $vatAmount    = $applyVat ? $afterSscl * ($vatPct / 100) : 0.0;
-                $selling      = $afterSscl + $vatAmount;
-                $overridden   = false;
-            }
+            // FOB/CIF value per base unit = the GRN purchasing price restated
+            $fobBase = $factor > 0.0 ? $unitPrice / $factor : $unitPrice;
 
-            $toBase = static fn (float $price): float => $factor > 0.0 ? $price / $factor : $price;
+            // Typed expense amounts (per base unit) against this line
+            $expenseRows = collect($input['expenses'] ?? [])
+                ->filter(fn (array $e): bool => !empty($e['expense_type_id']) && (float) ($e['amount'] ?? 0) > 0)
+                ->map(fn (array $e): array => [
+                    'expense_type_id' => (int) $e['expense_type_id'],
+                    'amount'          => round((float) $e['amount'], 8),
+                ])
+                ->values();
+            $expBase = (float) $expenseRows->sum('amount');
+
+            $num = static fn (string $key): ?float =>
+                isset($input[$key]) && $input[$key] !== null && $input[$key] !== ''
+                    ? (float) $input[$key] : null;
+
+            $lineSsclPct = $num('sscl_pct');
+            $lineVatPct  = $num('vat_pct');
+            $marginBase  = $num('margin_amount_base') ?? 0.0;
+
+            $effSsclPct = $applySscl ? ($lineSsclPct ?? $ssclPct) : 0.0;
+            $effVatPct  = $applyVat ? ($lineVatPct ?? $vatPct) : 0.0;
+
+            // SSCL is levied on the FOB/CIF amount ONLY — never on the expenses
+            $ssclBase      = $fobBase * ($effSsclPct / 100);
+            $beforeTaxBase = $fobBase + $expBase + $ssclBase + $marginBase;
+            $vatBase       = $beforeTaxBase * ($effVatPct / 100);
+            $afterTaxBase  = $beforeTaxBase + $vatBase;
+
+            // Legacy columns stay denominated per the RECEIVING unit — same money × factor
+            $toRecv = static fn (float $price): float => $price * $factor;
 
             return [
                 // Persisted columns — per the RECEIVING unit unless suffixed _base
@@ -506,16 +479,26 @@ class CostingService
                 'conversion_factor'     => $factor,
                 'base_quantity'         => round($baseQty, 6),
                 'unit_price'            => round($unitPrice, 8),
-                'charge_portion'        => round($portion, 8),
-                'landed_unit_cost'      => round($landed, 8),
-                'landed_unit_cost_base' => round($toBase($landed), 8),
-                'margin_pct'            => $linePct,
-                'margin_amount'         => round($marginAmount, 8),
-                'sscl_amount'           => round($ssclAmount, 8),
-                'vat_amount'            => round($vatAmount, 8),
-                'selling_price'         => round($selling, 8),
-                'selling_price_base'    => round($toBase($selling), 8),
-                'is_price_overridden'   => $overridden,
+                'charge_portion'        => round($toRecv($expBase), 8),
+                'landed_unit_cost'      => round($unitPrice + $toRecv($expBase), 8),
+                'landed_unit_cost_base' => round($fobBase + $expBase, 8),
+                'expense_total_base'    => round($expBase, 8),
+                'margin_pct'            => null,
+                'margin_amount'         => round($toRecv($marginBase), 8),
+                'margin_amount_base'    => round($marginBase, 8),
+                'sscl_pct'              => $lineSsclPct,
+                'sscl_amount'           => round($toRecv($ssclBase), 8),
+                'sscl_amount_base'      => round($ssclBase, 8),
+                'vat_pct'               => $lineVatPct,
+                'vat_amount'            => round($toRecv($vatBase), 8),
+                'vat_amount_base'       => round($vatBase, 8),
+                'before_tax_price'      => round($toRecv($beforeTaxBase), 8),
+                'before_tax_price_base' => round($beforeTaxBase, 8),
+                'selling_price'         => round($toRecv($afterTaxBase), 8),
+                'selling_price_base'    => round($afterTaxBase, 8),
+                'is_price_overridden'   => false,
+                // Typed expense rows — persisted to inv_costing_item_expenses by syncItems
+                'expense_rows'          => $expenseRows->all(),
                 // Display-only extras (preview payload; stripped before insert)
                 'product_name'          => $item->product?->name,
                 'product_code'          => $item->product?->product_code,
@@ -528,23 +511,30 @@ class CostingService
             ];
         })->values();
 
-        $sum = fn (string $key): float => (float) $items->sum(fn (array $i) => $i['quantity'] * $i[$key]);
+        // Full-quantity totals: Σ base_quantity × per-base-unit amount. (Equal to
+        // Σ quantity × per-receiving-unit amount — same money, either denomination.)
+        $sum = fn (string $key): float => (float) $items->sum(fn (array $i) => $i['base_quantity'] * $i[$key]);
+
+        // Purchase value straight off the GRN lines — exact, no restatement round-trip
+        $purchaseValue = (float) $items->sum(fn (array $i) => $i['quantity'] * $i['unit_price']);
 
         $summary = [
             'total_items'               => $totalQty,
-            // Legacy columns, now derived: material cost = Σ GRN line values
-            'material_cost'             => $sum('unit_price'),
-            'raw_material_cost'         => $sum('unit_price'),
-            'total_additional_expenses' => $totalExpenses,
-            'total_landed_cost'         => $sum('landed_unit_cost'),
+            // Legacy columns, now derived: material cost = Σ GRN line values (FOB/CIF value)
+            'material_cost'             => $purchaseValue,
+            'raw_material_cost'         => $purchaseValue,
+            'total_additional_expenses' => $sum('expense_total_base'),
+            'total_landed_cost'         => $purchaseValue + $sum('expense_total_base'),
             'value_addition_pct'        => 0.0,
             'value_addition_amount'     => 0.0,
-            // Pre-tax selling value (landed + margin)
-            'fob_cif_cost'              => $sum('landed_unit_cost') + $sum('margin_amount'),
-            'sscl_amount'               => $sum('sscl_amount'),
-            'gross_fob_cif_value'       => $sum('landed_unit_cost') + $sum('margin_amount') + $sum('sscl_amount'),
-            'vat_amount'                => $sum('vat_amount'),
-            'total_price_with_vat'      => $sum('selling_price'),
+            // Landed + margin (pre-SSCL, pre-VAT)
+            'fob_cif_cost'              => $purchaseValue + $sum('expense_total_base') + $sum('margin_amount_base'),
+            'sscl_amount'               => $sum('sscl_amount_base'),
+            // "Before Tax Value" — what non-VAT invoices will bill
+            'gross_fob_cif_value'       => $sum('before_tax_price_base'),
+            'vat_amount'                => $sum('vat_amount_base'),
+            // "After Tax Value" — what VAT invoices will bill
+            'total_price_with_vat'      => $sum('selling_price_base'),
         ];
 
         return ['items' => $items->all(), 'summary' => $summary];
@@ -559,17 +549,16 @@ class CostingService
     private function headerAttributes(CostingData $data, array $summary): array
     {
         return array_merge($summary, [
-            'supplier_id'        => $data->supplierId,
-            'costing_type'       => $data->costingType,
-            'bill_of_lading'     => $data->billOfLading,
-            'expected_date'      => $data->expectedDate,
-            'transaction_date'   => $data->transactionDate,
-            'note'               => $data->note,
-            'default_margin_pct' => $data->defaultMarginPct,
-            'apply_sscl'         => $data->applySscl,
-            'sscl_pct'           => $data->ssclPct,
-            'apply_vat'          => $data->applyVat,
-            'vat_pct'            => $data->vatPct,
+            'supplier_id'      => $data->supplierId,
+            'costing_type'     => $data->costingType,
+            'bill_of_lading'   => $data->billOfLading,
+            'expected_date'    => $data->expectedDate,
+            'transaction_date' => $data->transactionDate,
+            'note'             => $data->note,
+            'apply_sscl'       => $data->applySscl,
+            'sscl_pct'         => $data->ssclPct,
+            'apply_vat'        => $data->applyVat,
+            'vat_pct'          => $data->vatPct,
         ]);
     }
 
@@ -637,42 +626,28 @@ class CostingService
     }
 
     /**
-     * @param array<array{expense_type_id:int, amount:float, note:?string}> $expenses
-     */
-    private function syncExpenses(Costing $costing, array $expenses): void
-    {
-        CostingExpense::where('costing_id', $costing->id)->delete();
-
-        $rows = collect($expenses)
-            ->filter(fn (array $e) => !empty($e['expense_type_id']))
-            ->map(fn (array $e) => [
-                'costing_id'      => $costing->id,
-                'expense_type_id' => (int) $e['expense_type_id'],
-                'amount'          => (float) ($e['amount'] ?? 0),
-                'note'            => $e['note'] ?? null,
-                'created_at'      => now(),
-                'updated_at'      => now(),
-            ])->values()->all();
-
-        if (!empty($rows)) {
-            CostingExpense::insert($rows);
-        }
-    }
-
-    /**
-     * Delete-and-reinsert the per-product breakdown rows (draft edits rebuild).
+     * Delete-and-reinsert the per-product breakdown rows and their typed
+     * expense rows (draft edits rebuild). Legacy costing-level expense rows
+     * (inv_costing_expenses) are cleared too — the redesign types expenses
+     * per product line instead.
      *
      * @param array<int, array<string, mixed>> $items computeBreakdown() output
      */
     private function syncItems(Costing $costing, array $items): void
     {
+        CostingItemExpense::where('costing_id', $costing->id)->delete();
         CostingItem::where('costing_id', $costing->id)->delete();
+        CostingExpense::where('costing_id', $costing->id)->delete();
 
         $columns = [
             'grn_id', 'grn_item_id', 'product_id', 'attribute_id', 'unit_id', 'base_unit_id',
             'quantity', 'conversion_factor', 'base_quantity',
             'unit_price', 'charge_portion', 'landed_unit_cost', 'landed_unit_cost_base',
-            'margin_pct', 'margin_amount', 'sscl_amount', 'vat_amount',
+            'expense_total_base',
+            'margin_pct', 'margin_amount', 'margin_amount_base',
+            'sscl_pct', 'sscl_amount', 'sscl_amount_base',
+            'vat_pct', 'vat_amount', 'vat_amount_base',
+            'before_tax_price', 'before_tax_price_base',
             'selling_price', 'selling_price_base', 'is_price_overridden',
         ];
 
@@ -683,6 +658,32 @@ class CostingService
 
         if (!empty($rows)) {
             CostingItem::insert($rows);
+        }
+
+        // The typed expense rows link to the freshly inserted item rows
+        $idByGrnItem = CostingItem::where('costing_id', $costing->id)->pluck('id', 'grn_item_id');
+
+        $expenseRows = [];
+        foreach ($items as $item) {
+            $itemId = $idByGrnItem[(int) $item['grn_item_id']] ?? null;
+            if ($itemId === null) {
+                continue;
+            }
+            foreach ($item['expense_rows'] ?? [] as $expense) {
+                $expenseRows[] = [
+                    'costing_id'      => $costing->id,
+                    'costing_item_id' => (int) $itemId,
+                    'grn_item_id'     => (int) $item['grn_item_id'],
+                    'expense_type_id' => $expense['expense_type_id'],
+                    'amount'          => $expense['amount'],
+                    'created_at'      => now(),
+                    'updated_at'      => now(),
+                ];
+            }
+        }
+
+        if (!empty($expenseRows)) {
+            CostingItemExpense::insert($expenseRows);
         }
     }
 }

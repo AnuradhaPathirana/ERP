@@ -173,16 +173,20 @@ class ProductPricingTest extends TestCase
         ]);
 
         DB::table('inv_costing_items')->insert([
-            'costing_id'       => $costingId,
-            'grn_id'           => $grnId,
-            'grn_item_id'      => $grnItemId,
-            'product_id'       => $productId,
-            'quantity'         => 10,
-            'unit_price'       => 0,
-            'landed_unit_cost' => 0,
-            'selling_price'    => $sellingPrice,
-            'created_at'       => now(),
-            'updated_at'       => now(),
+            'costing_id'         => $costingId,
+            'grn_id'             => $grnId,
+            'grn_item_id'        => $grnItemId,
+            'product_id'         => $productId,
+            'quantity'           => 10,
+            'conversion_factor'  => 1,
+            'base_quantity'      => 10,
+            'unit_price'         => 0,
+            'landed_unit_cost'   => 0,
+            'selling_price'      => $sellingPrice,
+            // Pricing reads the stocking-UOM figure — factor 1, same number
+            'selling_price_base' => $sellingPrice,
+            'created_at'         => now(),
+            'updated_at'         => now(),
         ]);
     }
 

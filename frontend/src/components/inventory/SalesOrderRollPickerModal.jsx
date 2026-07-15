@@ -237,6 +237,12 @@ export default function SalesOrderRollPickerModal({
                   >
                     Selling{uom && <span className="ml-0.5 font-semibold normal-case text-indigo-500">(/{uom})</span>}
                   </th>
+                  <th
+                    className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500"
+                    title={`The roll's costing Before-Tax price (VAT excluded)${uom ? ` — per ${uom}` : ''}. Tax invoices bill this price and add the VAT per line; rolls without a confirmed costing have none.`}
+                  >
+                    Non-Tax{uom && <span className="ml-0.5 font-semibold normal-case text-indigo-500">(/{uom})</span>}
+                  </th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN</th>
                   <th className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-500">Store / Location</th>
                 </tr>
@@ -276,6 +282,14 @@ export default function SalesOrderRollPickerModal({
                             {p.price_source === 'costing' ? 'costing' : 'list price'}
                           </div>
                         )}
+                      </td>
+                      <td
+                        className="px-2 py-1 text-right tabular-nums text-sky-700"
+                        title={p.before_tax_price != null
+                          ? 'Costing Before-Tax price (VAT excluded) — Tax invoices bill this and add VAT per line'
+                          : 'No confirmed costing for this roll — no before-tax price'}
+                      >
+                        {p.before_tax_price != null ? <Money value={p.before_tax_price} /> : <span className="text-slate-300">—</span>}
                       </td>
                       <td className="px-2 py-1 font-mono text-[10px] text-slate-400">{p.grn_no || '—'}</td>
                       <td className="px-2 py-1 text-slate-500">

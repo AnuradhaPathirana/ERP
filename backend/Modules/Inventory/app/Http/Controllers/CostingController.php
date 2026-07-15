@@ -108,8 +108,7 @@ class CostingController extends Controller
     public function calculatePreview(Request $request): JsonResponse
     {
         $input = $request->only([
-            'grn_ids', 'expenses', 'common_charge_amount', 'default_margin_pct',
-            'apply_sscl', 'sscl_pct', 'apply_vat', 'vat_pct', 'items',
+            'grn_ids', 'apply_sscl', 'sscl_pct', 'apply_vat', 'vat_pct', 'items',
         ]);
 
         return response()->json(['data' => $this->service->preview($input)]);

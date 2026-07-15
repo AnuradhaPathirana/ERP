@@ -23,6 +23,8 @@ class InvoiceResource extends JsonResource
             'due_date'         => $this->due_date?->toDateString(),
             'status'           => $this->status->value,
             'status_label'     => $this->status->label(),
+            'invoice_type'     => $this->invoice_type ?? 'non_tax',
+            'invoice_type_label' => ($this->invoice_type ?? 'non_tax') === 'tax' ? 'Tax Invoice' : 'Non Tax Invoice',
             'subtotal'         => (float) $this->subtotal,
             'transport_charge' => (float) $this->transport_charge,
             'grand_total'      => (float) $this->grand_total,

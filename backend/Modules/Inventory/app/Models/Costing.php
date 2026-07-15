@@ -94,4 +94,10 @@ class Costing extends Model
     {
         return $this->hasMany(CostingItem::class, 'costing_id');
     }
+
+    /** Per-line expense amounts across all items (flat, for bulk operations). */
+    public function itemExpenses(): HasMany
+    {
+        return $this->hasMany(CostingItemExpense::class, 'costing_id');
+    }
 }

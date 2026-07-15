@@ -70,8 +70,10 @@ export default function InvoiceFormPage() {
     mode_of_payment:  '',
     company_id:       '',
   })
-  const [lines, setLines]   = useState([]) // {so_item_id, do_item_id, product, unit, attribute, quantity, unit_price, discount, tax}
+  const [lines, setLines]   = useState([]) // {so_item_id, do_item_id, product, unit, attribute, quantity, unit_price, discount, tax, so_unit_price, so_tax, tax_unit_price, tax_vat_pct}
   const [errors, setErrors] = useState({})
+  // tax: costing Before-Tax prices + VAT added per line · non_tax: SO (after-tax) prices, no VAT
+  const [invoiceType, setInvoiceType] = useState('tax')
 
   const { data: nextInvoiceNo, isLoading: loadingNo } = useQuery({
     queryKey: ['next-invoice-no'],
@@ -94,13 +96,29 @@ export default function InvoiceFormPage() {
     setForm((f) => ({ ...f, company_id: String(companies[0].id) }))
   }, [companies, isEdit, form.company_id])
 
-  /* ── Billing source (create mode) ─────────────────────────── */
+  /* ── Edit-mode hydration ──────────────────────────────────── */
+  const { data: existing, isLoading: loadingInvoice } = useQuery({
+    queryKey: ['invoice', id],
+    queryFn:  () => getInvoice(id),
+    enabled:  isEdit,
+  })
+
+  /* ── Billing source — also fetched in edit mode (via the invoice's own
+     SO/DO) so the Tax ↔ Non-Tax toggle can re-price the lines. ─ */
+  const sourceDoId = doFromUrl ?? (isEdit ? existing?.data?.do_id : null)
+  const sourceSoId = soFromUrl ?? (isEdit ? existing?.data?.so_id : null)
+
   const { data: source, isLoading: loadingSource, isError: sourceError, error: sourceErrorObj } = useQuery({
-    queryKey: ['invoice-billing-source', doFromUrl, soFromUrl],
-    queryFn:  () => doFromUrl ? getBillingSourceForDo(doFromUrl) : getBillingSourceForSo(soFromUrl),
-    enabled:  !isEdit && Boolean(doFromUrl || soFromUrl),
+    queryKey: ['invoice-billing-source', sourceDoId, sourceSoId],
+    queryFn:  () => sourceDoId ? getBillingSourceForDo(sourceDoId) : getBillingSourceForSo(sourceSoId),
+    enabled:  Boolean(sourceDoId || sourceSoId),
     retry:    false,
   })
+
+  /* The two price sets a line can bill, straight from the billing source. */
+  const priceFor = (it, type) => type === 'tax'
+    ? { unit_price: String(it.tax_unit_price ?? it.unit_price), tax: it.tax_vat_pct ? String(it.tax_vat_pct) : '' }
+    : { unit_price: String(it.unit_price), tax: '' }
 
   useEffect(() => {
     if (!source || isEdit) return
@@ -111,9 +129,13 @@ export default function InvoiceFormPage() {
       unit:       it.unit,
       attribute:  it.attribute,
       quantity:   it.quantity,
-      unit_price: String(it.unit_price),
+      // New invoices start as Tax — Before-Tax price + the costing's VAT per line
+      ...priceFor(it, 'tax'),
       discount:   it.discount ? String(it.discount) : '',
-      tax:        it.tax ? String(it.tax) : '',
+      so_unit_price:  it.unit_price,
+      so_tax:         it.tax,
+      tax_unit_price: it.tax_unit_price,
+      tax_vat_pct:    it.tax_vat_pct,
     })))
     setForm((f) => ({
       ...f,
@@ -122,16 +144,10 @@ export default function InvoiceFormPage() {
     }))
   }, [source, isEdit])
 
-  /* ── Edit-mode hydration ──────────────────────────────────── */
-  const { data: existing, isLoading: loadingInvoice } = useQuery({
-    queryKey: ['invoice', id],
-    queryFn:  () => getInvoice(id),
-    enabled:  isEdit,
-  })
-
   useEffect(() => {
     if (!existing?.data) return
     const inv = existing.data
+    setInvoiceType(inv.invoice_type ?? 'non_tax')
     setForm({
       invoice_date:     inv.invoice_date ?? '',
       due_date:         inv.due_date ?? '',
@@ -154,8 +170,36 @@ export default function InvoiceFormPage() {
     })))
   }, [existing])
 
+  /* Edit mode: graft the billing source's price sets onto the hydrated lines
+     so the toggle can re-price them. */
+  useEffect(() => {
+    if (!isEdit || !source) return
+    const byId = new Map((source.items ?? []).map((it) => [it.so_item_id, it]))
+    setLines((prev) => prev.map((row) => {
+      const src = byId.get(row.so_item_id)
+      return src
+        ? { ...row, so_unit_price: src.unit_price, so_tax: src.tax, tax_unit_price: src.tax_unit_price, tax_vat_pct: src.tax_vat_pct }
+        : row
+    }))
+  }, [isEdit, source, existing])
+
   const setLineField = (idx, field, value) =>
     setLines((prev) => prev.map((row, i) => i === idx ? { ...row, [field]: value } : row))
+
+  /* Tax ↔ Non-Tax: swap every line onto that type's price set. Lines whose
+     source pricing isn't known (source failed to load) keep their price. */
+  const applyInvoiceType = (type) => {
+    if (type === invoiceType) return
+    setInvoiceType(type)
+    setLines((prev) => prev.map((row) => {
+      if (type === 'non_tax') {
+        return { ...row, unit_price: row.so_unit_price != null ? String(row.so_unit_price) : row.unit_price, tax: '' }
+      }
+      return row.tax_unit_price != null
+        ? { ...row, unit_price: String(row.tax_unit_price), tax: row.tax_vat_pct ? String(row.tax_vat_pct) : '' }
+        : row
+    }))
+  }
 
   const totals = useMemo(() => {
     const lineTotal = lines.reduce((s, row) => s + calcLine(row), 0)
@@ -193,6 +237,7 @@ export default function InvoiceFormPage() {
       ...(isEdit ? {} : (doFromUrl ? { do_id: parseInt(doFromUrl) } : { so_id: parseInt(soFromUrl) })),
       invoice_date:     form.invoice_date,
       due_date:         form.due_date || null,
+      invoice_type:     invoiceType,
       transport_charge: parseFloat(form.transport_charge) || 0,
       delivery_address: form.delivery_address.trim() || null,
       remarks:          form.remarks.trim() || null,
@@ -202,7 +247,8 @@ export default function InvoiceFormPage() {
         so_item_id: row.so_item_id,
         unit_price: parseFloat(row.unit_price) || 0,
         discount:   parseFloat(row.discount)   || 0,
-        tax:        parseFloat(row.tax)        || 0,
+        // A Non-Tax invoice never adds VAT — the backend enforces this too
+        tax:        invoiceType === 'non_tax' ? 0 : (parseFloat(row.tax) || 0),
       })),
     })
   }
@@ -265,19 +311,45 @@ export default function InvoiceFormPage() {
 
         {/* ── Invoice Details ── */}
         <div className="rounded-lg border border-slate-200 bg-white shadow-sm">
-          <div className="flex items-center gap-1.5 rounded-t-lg border-b border-indigo-100 bg-indigo-50 px-3 py-1.5 text-indigo-700">
-            <FileText size={12} />
-            <h2 className="text-xs font-bold">
-              Invoice Details
-              {!isEdit && source && (
-                <span className="ml-2 font-normal text-indigo-400">
-                  {source.source === 'do'
-                    ? `for ${source.delivery_order?.do_no} (${source.sales_order?.so_no})`
-                    : `direct for ${source.sales_order?.so_no}`}
-                  {' — '}{source.sales_order?.customer?.name}
-                </span>
-              )}
-            </h2>
+          <div className="flex items-center justify-between gap-1.5 rounded-t-lg border-b border-indigo-100 bg-indigo-50 px-3 py-1.5 text-indigo-700">
+            <div className="flex items-center gap-1.5">
+              <FileText size={12} />
+              <h2 className="text-xs font-bold">
+                Invoice Details
+                {!isEdit && source && (
+                  <span className="ml-2 font-normal text-indigo-400">
+                    {source.source === 'do'
+                      ? `for ${source.delivery_order?.do_no} (${source.sales_order?.so_no})`
+                      : `direct for ${source.sales_order?.so_no}`}
+                    {' — '}{source.sales_order?.customer?.name}
+                  </span>
+                )}
+              </h2>
+            </div>
+            {/* Tax: Before-Tax prices + VAT per line · Non Tax: After-Tax prices, no VAT */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] font-semibold uppercase tracking-wider text-indigo-400" title="Tax invoice bills the costing Before-Tax price and adds VAT per line. Non Tax bills the After-Tax price (VAT already inside) with 0 tax.">
+                Invoice Type
+              </span>
+              <div className="flex overflow-hidden rounded-md border-2 border-indigo-200 text-[10px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => applyInvoiceType('tax')}
+                  title="Unit Price = costing Before-Tax price · VAT % added per line"
+                  className={`px-2.5 py-0.5 transition-colors ${invoiceType === 'tax' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                >
+                  Tax
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyInvoiceType('non_tax')}
+                  title="Unit Price = After-Tax price (VAT already included) · no VAT added"
+                  className={`border-l-2 border-indigo-200 px-2.5 py-0.5 transition-colors ${invoiceType === 'non_tax' ? 'bg-indigo-600 text-white' : 'bg-white text-slate-500 hover:bg-slate-50'}`}
+                >
+                  Non Tax
+                </button>
+              </div>
+            </div>
           </div>
           <div className="p-3">
             <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-5">
@@ -374,7 +446,17 @@ export default function InvoiceFormPage() {
                       <input type="number" min="0" max="100" step="0.01" placeholder="0" value={row.discount} onChange={(e) => setLineField(idx, 'discount', e.target.value)} className="block w-full rounded border border-amber-200 bg-amber-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-amber-400 focus:bg-white" />
                     </td>
                     <td className="px-2 py-1">
-                      <input type="number" min="0" max="100" step="0.01" placeholder="0" value={row.tax} onChange={(e) => setLineField(idx, 'tax', e.target.value)} className="block w-full rounded border border-sky-200 bg-sky-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-sky-400 focus:bg-white" />
+                      <input
+                        type="number" min="0" max="100" step="0.01"
+                        placeholder="0"
+                        value={invoiceType === 'non_tax' ? '0' : row.tax}
+                        onChange={(e) => setLineField(idx, 'tax', e.target.value)}
+                        disabled={invoiceType === 'non_tax'}
+                        title={invoiceType === 'non_tax' ? 'Non Tax invoice — VAT is already inside the unit price, no tax is added' : 'VAT % added on this line (from the costing)'}
+                        className={invoiceType === 'non_tax'
+                          ? 'block w-full rounded border border-slate-200 bg-slate-100 px-1.5 py-0.5 text-xs text-slate-400 outline-none cursor-not-allowed'
+                          : 'block w-full rounded border border-sky-200 bg-sky-50/50 px-1.5 py-0.5 text-xs text-slate-800 outline-none transition-all focus:border-sky-400 focus:bg-white'}
+                      />
                     </td>
                     <td className="px-2 py-1 text-right font-bold text-slate-800"><Money value={calcLine(row)} /></td>
                   </tr>

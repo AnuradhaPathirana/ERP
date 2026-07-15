@@ -126,15 +126,47 @@ class ProductPricingService
      */
     public function sellingPriceForGrnItem(int $grnItemId): ?float
     {
-        $price = DB::table('inv_costing_items')
+        return $this->costingPricingForGrnItem($grnItemId)['selling_price'] ?? null;
+    }
+
+    /**
+     * The full price pair a GRN item's confirmed costing filed, per the stocking UOM:
+     * selling_price (AFTER tax — VAT inside) and before_tax_price, plus the VAT %
+     * the costing actually applied between them (line override, else the costing
+     * header, 0 when the costing had VAT off).
+     *
+     * Tax invoices bill before_tax_price + vat_pct per line; non-tax invoices bill
+     * selling_price with no VAT added. Null = this GRN item was never costed.
+     *
+     * @return array{selling_price: float, before_tax_price: float, vat_pct: float}|null
+     */
+    public function costingPricingForGrnItem(int $grnItemId): ?array
+    {
+        $row = DB::table('inv_costing_items')
             ->join('inv_costings', 'inv_costings.id', '=', 'inv_costing_items.costing_id')
             ->where('inv_costing_items.grn_item_id', $grnItemId)
             ->where('inv_costings.status', CostingStatus::Confirmed->value)
             ->whereNull('inv_costings.deleted_at')
             ->orderByDesc('inv_costing_items.id')
-            ->value('inv_costing_items.selling_price_base');
+            ->first([
+                'inv_costing_items.selling_price_base',
+                'inv_costing_items.before_tax_price_base',
+                'inv_costing_items.vat_pct as line_vat_pct',
+                'inv_costings.vat_pct as header_vat_pct',
+                'inv_costings.apply_vat',
+            ]);
 
-        return $price !== null ? (float) $price : null;
+        if ($row === null || $row->selling_price_base === null) {
+            return null;
+        }
+
+        return [
+            'selling_price'    => (float) $row->selling_price_base,
+            'before_tax_price' => (float) $row->before_tax_price_base,
+            'vat_pct'          => $row->apply_vat
+                ? (float) ($row->line_vat_pct ?? $row->header_vat_pct)
+                : 0.0,
+        ];
     }
 
     /**
@@ -142,20 +174,33 @@ class ProductPricingService
      * price first ("old stock at old price, new stock at new price"), the
      * product price list as fallback.
      *
-     * @return array{price: ?float, source: 'costing'|'price_list'|null}
+     * before_tax_price / vat_pct ride along when the price came from a costing —
+     * the price list holds only the one (after-tax) figure, so they stay null there.
+     *
+     * @return array{price: ?float, source: 'costing'|'price_list'|null, before_tax_price: ?float, vat_pct: ?float}
      */
     public function resolvePieceSellingPrice(GrnItemPiece $piece): array
     {
         if ($piece->grn_item_id !== null) {
-            $costingPrice = $this->sellingPriceForGrnItem((int) $piece->grn_item_id);
-            if ($costingPrice !== null) {
-                return ['price' => $costingPrice, 'source' => 'costing'];
+            $costing = $this->costingPricingForGrnItem((int) $piece->grn_item_id);
+            if ($costing !== null) {
+                return [
+                    'price'            => $costing['selling_price'],
+                    'source'           => 'costing',
+                    'before_tax_price' => $costing['before_tax_price'],
+                    'vat_pct'          => $costing['vat_pct'],
+                ];
             }
         }
 
         $listPrice = $this->sellingPriceFor((int) $piece->product_id);
 
-        return ['price' => $listPrice, 'source' => $listPrice !== null ? 'price_list' : null];
+        return [
+            'price'            => $listPrice,
+            'source'           => $listPrice !== null ? 'price_list' : null,
+            'before_tax_price' => null,
+            'vat_pct'          => null,
+        ];
     }
 
     /**

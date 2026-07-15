@@ -15,16 +15,33 @@ use Modules\Inventory\Models\Company;
 use Modules\Inventory\Models\DeliveryOrder;
 use Modules\Inventory\Models\Invoice;
 use Modules\Inventory\Models\InvoiceItem;
+use Modules\Inventory\Models\Product;
 use Modules\Inventory\Models\SalesOrder;
 use Modules\Inventory\Models\SalesOrderItem;
+use Modules\Inventory\Support\Quantity;
 
 /**
  * Invoices bill either one confirmed delivery order (do_id set, 1:1) or a
  * whole sales order directly (do_id null, advance billing). An SO's billing
  * mode is fixed by its first non-cancelled invoice — the two modes never mix.
+ *
+ * Every invoice is either a TAX or a NON-TAX invoice:
+ *   tax     — lines bill the costing's BEFORE-tax price and the VAT the costing
+ *             used is added per line (Tax %); uncosted lines back-compute
+ *             SO price ÷ (1 + 18%) so the customer total stays the SO's.
+ *   non_tax — lines bill the SO price as-is (the costing's AFTER-tax price,
+ *             VAT already inside) and no VAT is added (Tax % forced to 0).
  */
 class InvoiceService
 {
+    /** VAT % assumed when a line's rolls carry no confirmed costing. */
+    private const FALLBACK_VAT_PCT = 18.0;
+
+    public function __construct(
+        private readonly ProductPricingService $pricing,
+        private readonly UnitConversionService $units,
+    ) {
+    }
     /** @param array<string, mixed> $filters */
     public function paginate(int $perPage = 50, array $filters = []): LengthAwarePaginator
     {
@@ -155,6 +172,7 @@ class InvoiceService
             $invoice->update([
                 'invoice_date'     => $data->invoiceDate,
                 'due_date'         => $data->dueDate,
+                'invoice_type'     => $data->invoiceType ?? $invoice->invoice_type,
                 'transport_charge' => $data->transportCharge ?? $invoice->transport_charge,
                 'company_id'       => $data->companyId ?? $invoice->company_id,
                 'delivery_address' => $data->deliveryAddress,
@@ -164,23 +182,8 @@ class InvoiceService
 
             // Draft re-pricing: quantities are fixed by the source document;
             // only price/discount/tax/remarks may change per line.
-            if ($data->items !== []) {
-                $overrides = collect($data->items)->keyBy('so_item_id');
-
-                foreach ($invoice->items as $item) {
-                    $override = $overrides->get($item->so_item_id);
-                    if (!$override) {
-                        continue;
-                    }
-
-                    $item->unit_price = isset($override['unit_price']) ? (float) $override['unit_price'] : $item->unit_price;
-                    $item->discount   = isset($override['discount'])   ? (float) $override['discount']   : $item->discount;
-                    $item->tax        = isset($override['tax'])        ? (float) $override['tax']        : $item->tax;
-                    $item->remarks    = $override['remarks'] ?? $item->remarks;
-                    $this->recalculateLineTotal($item);
-                }
-            }
-
+            $this->applyItemOverrides($invoice, $data->items);
+            $this->enforceInvoiceType($invoice);
             $this->recalculateTotals($invoice);
 
             return $this->find($invoice->id);
@@ -253,6 +256,7 @@ class InvoiceService
                 'invoice_date'     => $data->invoiceDate,
                 'due_date'         => $data->dueDate,
                 'status'           => InvoiceStatus::Draft,
+                'invoice_type'     => $data->invoiceType ?? 'tax',
                 'transport_charge' => $data->transportCharge ?? $this->defaultTransportCharge($so),
                 'delivery_address' => $data->deliveryAddress ?? $do->delivery_address,
                 'remarks'          => $data->remarks,
@@ -263,8 +267,9 @@ class InvoiceService
             ]);
 
             foreach ($do->items as $doItem) {
-                $soItem = $doItem->soItem;
-                $item   = new InvoiceItem([
+                $soItem  = $doItem->soItem;
+                $pricing = $this->linePricing($soItem, $invoice->invoice_type);
+                $item    = new InvoiceItem([
                     'invoice_id'   => $invoice->id,
                     'so_item_id'   => $doItem->so_item_id,
                     'do_item_id'   => $doItem->id,
@@ -272,13 +277,15 @@ class InvoiceService
                     'unit_id'      => $doItem->unit_id,
                     'attribute_id' => $doItem->attribute_id,
                     'quantity'     => (float) $doItem->quantity,
-                    'unit_price'   => (float) ($soItem?->unit_price ?? 0),
+                    'unit_price'   => $pricing['unit_price'],
                     'discount'     => (float) ($soItem?->discount ?? 0),
-                    'tax'          => (float) ($soItem?->tax ?? 0),
+                    'tax'          => $pricing['tax'],
                 ]);
                 $this->recalculateLineTotal($item);
             }
 
+            $this->applyItemOverrides($invoice, $data->items);
+            $this->enforceInvoiceType($invoice);
             $this->recalculateTotals($invoice);
 
             return $this->find($invoice->id);
@@ -314,6 +321,7 @@ class InvoiceService
                 'invoice_date'     => $data->invoiceDate,
                 'due_date'         => $data->dueDate,
                 'status'           => InvoiceStatus::Draft,
+                'invoice_type'     => $data->invoiceType ?? 'tax',
                 'transport_charge' => $data->transportCharge ?? (float) $so->transport_charge,
                 'delivery_address' => $data->deliveryAddress ?? $so->delivery_address,
                 'remarks'          => $data->remarks,
@@ -324,6 +332,7 @@ class InvoiceService
             ]);
 
             foreach ($so->items as $soItem) {
+                $pricing = $this->linePricing($soItem, $invoice->invoice_type);
                 $item = new InvoiceItem([
                     'invoice_id'   => $invoice->id,
                     'so_item_id'   => $soItem->id,
@@ -332,13 +341,15 @@ class InvoiceService
                     'unit_id'      => $soItem->unit_id,
                     'attribute_id' => $soItem->attribute_id,
                     'quantity'     => (float) $soItem->quantity,
-                    'unit_price'   => (float) $soItem->unit_price,
+                    'unit_price'   => $pricing['unit_price'],
                     'discount'     => (float) $soItem->discount,
-                    'tax'          => (float) $soItem->tax,
+                    'tax'          => $pricing['tax'],
                 ]);
                 $this->recalculateLineTotal($item);
             }
 
+            $this->applyItemOverrides($invoice, $data->items);
+            $this->enforceInvoiceType($invoice);
             $this->recalculateTotals($invoice);
 
             return $this->find($invoice->id);
@@ -466,6 +477,8 @@ class InvoiceService
     /** @return array<string, mixed> */
     private function itemPreview(?SalesOrderItem $soItem, float $quantity, ?int $doItemId): array
     {
+        $taxPricing = $this->taxPricingForSoItem($soItem);
+
         return [
             'so_item_id' => $soItem?->id,
             'do_item_id' => $doItemId,
@@ -477,9 +490,133 @@ class InvoiceService
             'unit'       => $soItem?->unit ? ['id' => $soItem->unit->id, 'name' => $soItem->unit->name] : null,
             'attribute'  => $soItem?->attribute ? ['id' => $soItem->attribute->id, 'name' => $soItem->attribute->attribute_name] : null,
             'quantity'   => $quantity,
+            // Non-Tax invoice price: the SO price as-is (costing AFTER-tax, VAT inside)
             'unit_price' => (float) ($soItem?->unit_price ?? 0),
             'discount'   => (float) ($soItem?->discount ?? 0),
             'tax'        => (float) ($soItem?->tax ?? 0),
+            // Tax invoice price: costing BEFORE-tax + the VAT % to add per line
+            'tax_unit_price' => $taxPricing['unit_price'],
+            'tax_vat_pct'    => $taxPricing['tax'],
         ];
+    }
+
+    /**
+     * What a line bills, by invoice type.
+     *
+     *   tax     — the costing's BEFORE-tax price plus the VAT % that costing used.
+     *   non_tax — the SO price as-is (costing AFTER-tax, VAT already inside), 0 tax.
+     *
+     * @return array{unit_price: float, tax: float}
+     */
+    private function linePricing(?SalesOrderItem $soItem, string $invoiceType): array
+    {
+        if ($invoiceType === 'non_tax') {
+            return ['unit_price' => (float) ($soItem?->unit_price ?? 0), 'tax' => 0.0];
+        }
+
+        return $this->taxPricingForSoItem($soItem);
+    }
+
+    /**
+     * The Tax-invoice price pair of an SO line: its rolls' confirmed-costing
+     * before-tax price (restated per the LINE's unit) and the VAT % the costing
+     * applied. When the rolls carry no costing — or disagree — the SO price has
+     * the default VAT stripped out instead, so before-tax + VAT still lands on
+     * the price the SO quoted.
+     *
+     * @return array{unit_price: float, tax: float}
+     */
+    private function taxPricingForSoItem(?SalesOrderItem $soItem): array
+    {
+        $soPrice  = (float) ($soItem?->unit_price ?? 0);
+        $fallback = [
+            'unit_price' => Quantity::roundPrice($soPrice / (1 + self::FALLBACK_VAT_PCT / 100)),
+            'tax'        => self::FALLBACK_VAT_PCT,
+        ];
+
+        if ($soItem === null) {
+            return $fallback;
+        }
+
+        // The GRN lines behind this SO line's allocated rolls
+        $grnItemIds = DB::table('inv_sales_order_pieces as sp')
+            ->join('inv_grn_item_pieces as p', 'p.id', '=', 'sp.piece_id')
+            ->where('sp.so_item_id', $soItem->id)
+            ->whereNotNull('p.grn_item_id')
+            ->distinct()
+            ->pluck('p.grn_item_id');
+
+        $pairs = $grnItemIds
+            ->map(fn ($id) => $this->pricing->costingPricingForGrnItem((int) $id))
+            ->filter()
+            ->unique(fn (array $p) => $p['before_tax_price'] . '|' . $p['vat_pct'])
+            ->values();
+
+        // Lines are split by selling price at allocation, so one price pair is the
+        // normal case; none (uncosted) or several (shouldn't happen) → fallback.
+        if ($pairs->count() !== 1) {
+            return $fallback;
+        }
+
+        $pair = $pairs->first();
+
+        // before_tax_price is per the stocking UOM; the line may bill another unit
+        $factor     = 1.0;
+        $unitId     = $soItem->unit_id !== null ? (int) $soItem->unit_id : null;
+        $baseUnitId = Product::where('id', $soItem->product_id)->value('base_unit_type_id');
+
+        if ($unitId !== null && $baseUnitId !== null && $unitId !== (int) $baseUnitId) {
+            $rate = $this->units->tryFactor($unitId, (int) $baseUnitId);
+            if ($rate === null || $rate <= 0.0) {
+                return $fallback; // no rate — better the derived price than a wrong-unit one
+            }
+            $factor = $rate;
+        }
+
+        return [
+            'unit_price' => Quantity::roundPrice($pair['before_tax_price'] * $factor),
+            'tax'        => $pair['vat_pct'],
+        ];
+    }
+
+    /**
+     * Draft-stage per-line edits from the form (price/discount/tax/remarks) —
+     * quantities always come from the source document.
+     *
+     * @param array<array{so_item_id:int, unit_price:?float, discount:?float, tax:?float, remarks:?string}> $items
+     */
+    private function applyItemOverrides(Invoice $invoice, array $items): void
+    {
+        if ($items === []) {
+            return;
+        }
+
+        $overrides = collect($items)->keyBy('so_item_id');
+
+        foreach ($invoice->items()->get() as $item) {
+            $override = $overrides->get($item->so_item_id);
+            if (!$override) {
+                continue;
+            }
+
+            $item->unit_price = isset($override['unit_price']) ? (float) $override['unit_price'] : $item->unit_price;
+            $item->discount   = isset($override['discount'])   ? (float) $override['discount']   : $item->discount;
+            $item->tax        = isset($override['tax'])        ? (float) $override['tax']        : $item->tax;
+            $item->remarks    = $override['remarks'] ?? $item->remarks;
+            $this->recalculateLineTotal($item);
+        }
+    }
+
+    /** A non-tax invoice never adds VAT — force Tax % to 0 whatever the form sent. */
+    private function enforceInvoiceType(Invoice $invoice): void
+    {
+        if ($invoice->invoice_type !== 'non_tax') {
+            return;
+        }
+
+        foreach ($invoice->items()->where('tax', '!=', 0)->get() as $item) {
+            $item->tax = 0.0;
+            $this->recalculateLineTotal($item);
+        }
     }
 }

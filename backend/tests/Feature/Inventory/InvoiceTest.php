@@ -7,6 +7,7 @@ namespace Tests\Feature\Inventory;
 use App\Models\User;
 use App\Services\SettingsService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Modules\Inventory\Models\CustomerMaster;
 use Modules\Inventory\Models\GoodsReceivedNote;
 use Modules\Inventory\Models\GoodsReceivedNoteItem;
@@ -131,6 +132,42 @@ class InvoiceTest extends TestCase
         return $doId;
     }
 
+    /** Attach a confirmed costing pricing the given GRN item (all figures per base unit). */
+    private function giveConfirmedCosting(int $grnItemId, float $beforeTax, float $afterTax, float $vatPct): void
+    {
+        $grnLine = DB::table('inv_goods_received_note_items')->where('id', $grnItemId)->first(['grn_id', 'product_id']);
+
+        $costingId = DB::table('inv_costings')->insertGetId([
+            'document_no'  => 'CST-INV-' . $grnItemId,
+            'reference_no' => 'CRef-INV-' . $grnItemId,
+            'supplier_id'  => 1,
+            'costing_type' => 'fob',
+            'status'       => 'confirmed',
+            'apply_vat'    => 1,
+            'vat_pct'      => $vatPct,
+            'confirmed_at' => now(),
+            'created_at'   => now(),
+            'updated_at'   => now(),
+        ]);
+
+        DB::table('inv_costing_items')->insert([
+            'costing_id'            => $costingId,
+            'grn_id'                => $grnLine->grn_id,
+            'grn_item_id'           => $grnItemId,
+            'product_id'            => $grnLine->product_id,
+            'quantity'              => 30,
+            'conversion_factor'     => 1,
+            'base_quantity'         => 30,
+            'unit_price'            => 400,
+            'before_tax_price'      => $beforeTax,
+            'before_tax_price_base' => $beforeTax,
+            'selling_price'         => $afterTax,
+            'selling_price_base'    => $afterTax,
+            'created_at'            => now(),
+            'updated_at'            => now(),
+        ]);
+    }
+
     // ── Auth & permissions ──────────────────────────────────────────────────
 
     public function test_unauthenticated_request_is_rejected(): void
@@ -149,23 +186,86 @@ class InvoiceTest extends TestCase
 
     // ── Create from DO ──────────────────────────────────────────────────────
 
-    public function test_invoice_from_confirmed_do_copies_qty_and_so_prices(): void
+    public function test_non_tax_invoice_from_confirmed_do_copies_qty_and_so_prices(): void
     {
         ['so' => $so, 'pieces' => $pieces] = $this->makeConfirmedSoWithRolls([10.0, 20.0], unitPrice: 1000, discount: 10, transport: 500);
         $doId = $this->makeConfirmedDo($so, $pieces);
 
+        // Non-Tax: the SO (after-tax) price as-is, no VAT added
         $this->actingAs($this->user)
-            ->postJson('/api/v1/invoices', ['do_id' => $doId, 'invoice_date' => '2026-07-11'])
+            ->postJson('/api/v1/invoices', ['do_id' => $doId, 'invoice_date' => '2026-07-11', 'invoice_type' => 'non_tax'])
             ->assertCreated()
             ->assertJsonPath('data.invoice_no', 'INV-' . now()->year . '-0001')
             ->assertJsonPath('data.status', 'draft')
+            ->assertJsonPath('data.invoice_type', 'non_tax')
             ->assertJsonPath('data.items.0.quantity', 30)
             ->assertJsonPath('data.items.0.unit_price', 1000)
             ->assertJsonPath('data.items.0.discount', 10)
+            ->assertJsonPath('data.items.0.tax', 0)
             // 30 * 1000 = 30000 gross, -10% = 27000, + transport 500 (first invoice of the SO)
             ->assertJsonPath('data.subtotal', 30000)
             ->assertJsonPath('data.transport_charge', 500)
             ->assertJsonPath('data.grand_total', 27500);
+    }
+
+    public function test_tax_invoice_bills_costing_before_tax_price_plus_vat(): void
+    {
+        // SO priced at the costing's AFTER-tax price (1180 = 1000 + 18% VAT)
+        ['so' => $so, 'pieces' => $pieces] = $this->makeConfirmedSoWithRolls([10.0, 20.0], unitPrice: 1180);
+        $this->giveConfirmedCosting($pieces[0]->grn_item_id, beforeTax: 1000, afterTax: 1180, vatPct: 18);
+        $doId = $this->makeConfirmedDo($so, $pieces);
+
+        // Tax (the default): Before-Tax price per line + the costing's VAT %
+        $this->actingAs($this->user)
+            ->postJson('/api/v1/invoices', ['do_id' => $doId, 'invoice_date' => '2026-07-11'])
+            ->assertCreated()
+            ->assertJsonPath('data.invoice_type', 'tax')
+            ->assertJsonPath('data.items.0.unit_price', 1000)
+            ->assertJsonPath('data.items.0.tax', 18)
+            // 30 × 1000 = 30000, +18% VAT = 35400 — same money as 30 × 1180
+            ->assertJsonPath('data.subtotal', 30000)
+            ->assertJsonPath('data.grand_total', 35400);
+    }
+
+    public function test_tax_invoice_backcomputes_price_when_rolls_are_uncosted(): void
+    {
+        ['so' => $so, 'pieces' => $pieces] = $this->makeConfirmedSoWithRolls([10.0, 20.0], unitPrice: 1180);
+        $doId = $this->makeConfirmedDo($so, $pieces);
+
+        // No costing: strip the default 18% out of the SO price (1180 ÷ 1.18 = 1000),
+        // then the 18% Tax puts it back — the customer total stays the SO's.
+        $response = $this->actingAs($this->user)
+            ->postJson('/api/v1/invoices', ['do_id' => $doId, 'invoice_date' => '2026-07-11'])
+            ->assertCreated()
+            ->assertJsonPath('data.invoice_type', 'tax')
+            ->assertJsonPath('data.items.0.tax', 18);
+
+        $this->assertEqualsWithDelta(1000.0, (float) $response->json('data.items.0.unit_price'), 0.0001);
+        $this->assertEqualsWithDelta(35400.0, (float) $response->json('data.grand_total'), 0.01);
+    }
+
+    public function test_non_tax_invoice_forces_line_tax_to_zero(): void
+    {
+        ['so' => $so, 'pieces' => $pieces] = $this->makeConfirmedSoWithRolls([10.0, 20.0], unitPrice: 1000);
+        $doId = $this->makeConfirmedDo($so, $pieces);
+
+        $created = $this->actingAs($this->user)
+            ->postJson('/api/v1/invoices', ['do_id' => $doId, 'invoice_date' => '2026-07-11', 'invoice_type' => 'non_tax'])
+            ->assertCreated();
+
+        // Even a typed Tax % is discarded on a Non-Tax invoice
+        $this->actingAs($this->user)
+            ->putJson('/api/v1/invoices/' . $created->json('data.id'), [
+                'invoice_date' => '2026-07-11',
+                'items'        => [[
+                    'so_item_id' => $created->json('data.items.0.so_item_id'),
+                    'unit_price' => 1000,
+                    'tax'        => 15,
+                ]],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.items.0.tax', 0)
+            ->assertJsonPath('data.grand_total', 30000);
     }
 
     public function test_invoice_from_draft_do_is_rejected(): void
@@ -373,7 +473,7 @@ class InvoiceTest extends TestCase
         $doId = $this->makeConfirmedDo($so, $pieces);
 
         $created = $this->actingAs($this->user)
-            ->postJson('/api/v1/invoices', ['do_id' => $doId, 'invoice_date' => '2026-07-11'])
+            ->postJson('/api/v1/invoices', ['do_id' => $doId, 'invoice_date' => '2026-07-11', 'invoice_type' => 'non_tax'])
             ->assertCreated();
         $invoiceId = $created->json('data.id');
         $soItemId  = $created->json('data.items.0.so_item_id');

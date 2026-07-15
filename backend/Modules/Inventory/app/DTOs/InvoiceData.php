@@ -16,6 +16,7 @@ final class InvoiceData
         public readonly ?int    $companyId,
         public readonly string  $invoiceDate,
         public readonly ?string $dueDate,
+        public readonly ?string $invoiceType, // 'tax' | 'non_tax'; null = default (create: tax, update: keep)
         public readonly ?float  $transportCharge,
         public readonly ?string $deliveryAddress,
         public readonly ?string $remarks,
@@ -38,6 +39,7 @@ final class InvoiceData
                                  : null,
             invoiceDate:     $request->validated('invoice_date'),
             dueDate:         $request->validated('due_date'),
+            invoiceType:     $request->validated('invoice_type'),
             transportCharge: $request->validated('transport_charge') !== null
                                  ? (float) $request->validated('transport_charge')
                                  : null,

@@ -25,6 +25,8 @@ class StoreInvoiceRequest extends FormRequest
             'company_id'       => ['nullable', 'integer', 'exists:inv_companies,id'],
             'invoice_date'     => ['required', 'date'],
             'due_date'         => ['nullable', 'date', 'after_or_equal:invoice_date'],
+            // tax: before-tax prices + VAT per line · non_tax: after-tax prices, no VAT
+            'invoice_type'     => ['nullable', 'string', 'in:tax,non_tax'],
             'transport_charge' => ['nullable', 'numeric', 'min:0'],
             'delivery_address' => ['nullable', 'string', 'max:2000'],
             'remarks'          => ['nullable', 'string', 'max:2000'],

@@ -71,16 +71,25 @@ return new class extends Migration
      */
     private function backfillGrnRows(): void
     {
-        DB::table('inv_stock_transactions as st')
-            ->join('inv_grn_item_pieces as p', 'p.stock_transaction_id', '=', 'st.id')
-            ->join('inv_goods_received_note_items as gi', 'gi.id', '=', 'p.grn_item_id')
-            ->where('st.reference_type', 'grn')
-            ->whereNull('st.attribute_id')
-            ->update([
-                'st.attribute_id'    => DB::raw('gi.attribute_id'),
-                'st.entered_unit_id' => DB::raw('gi.unit_id'),
-                'st.entered_qty'     => DB::raw('CASE WHEN gi.conversion_factor > 0 THEN st.qty_in / gi.conversion_factor ELSE st.qty_in END'),
-            ]);
+        // Nothing to backfill on a fresh database — and SQLite (the test DB)
+        // cannot compile this join-UPDATE at all, so skip it when it's a no-op.
+        $hasRows = DB::table('inv_stock_transactions')
+            ->where('reference_type', 'grn')
+            ->whereNull('attribute_id')
+            ->exists();
+
+        if ($hasRows) {
+            DB::table('inv_stock_transactions as st')
+                ->join('inv_grn_item_pieces as p', 'p.stock_transaction_id', '=', 'st.id')
+                ->join('inv_goods_received_note_items as gi', 'gi.id', '=', 'p.grn_item_id')
+                ->where('st.reference_type', 'grn')
+                ->whereNull('st.attribute_id')
+                ->update([
+                    'st.attribute_id'    => DB::raw('gi.attribute_id'),
+                    'st.entered_unit_id' => DB::raw('gi.unit_id'),
+                    'st.entered_qty'     => DB::raw('CASE WHEN gi.conversion_factor > 0 THEN st.qty_in / gi.conversion_factor ELSE st.qty_in END'),
+                ]);
+        }
 
         $this->backfillFromDocumentLines(
             referenceType: 'grn',

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-<title>Tax Invoice — {{ $invoice->invoice_no }}</title>
+<title>{{ $invoice->invoice_type === 'non_tax' ? 'Invoice' : 'Tax Invoice' }} — {{ $invoice->invoice_no }}</title>
 <style>
   /*
    * DomPDF-safe layout: every block is a plain collapsed table with explicit
@@ -88,7 +88,8 @@
   .foot { width: 100%; border-collapse: collapse; margin-top: 5px; }
   .foot td { border: 0.8pt solid #1f2937; padding: 5px 7px; }
 
-  .sig { width: 100%; border-collapse: collapse; margin-top: 30px; }
+  /* Generous top margin — the space above each ruled line is where people sign. */
+  .sig { width: 100%; border-collapse: collapse; margin-top: 110px; }
   .sig td { width: 50%; padding: 0 14px; text-align: center; vertical-align: bottom; }
   .sig-line { border-top: 0.8pt solid #1f2937; padding-top: 3px; font-size: 7pt; color: #6b7280; }
 
@@ -151,11 +152,16 @@
     // Pad short invoices out to the printed form's ruled rows, without ever adding
     // enough height to push the document onto a second page.
     $minRows = max(0, 4 - $invoice->items->count());
+
+    // A non-tax invoice is titled plainly "Invoice" — its prices already carry
+    // the VAT inside, so it must not present itself as a tax invoice.
+    $isTaxInvoice = $invoice->invoice_type !== 'non_tax';
+    $docTitle     = $isTaxInvoice ? 'Tax Invoice' : 'Invoice';
   @endphp
 
   {{-- ══ TITLE ══ --}}
   <div class="title-wrap">
-    <div class="title-box">Tax Invoice</div>
+    <div class="title-box">{{ $docTitle }}</div>
   </div>
 
   {{-- ══ DATE / INVOICE NO ══ --}}
@@ -167,7 +173,7 @@
       </td>
       <td class="gap"></td>
       <td class="box" style="width:50%;">
-        <span class="lbl">Tax Invoice No.:</span>
+        <span class="lbl">{{ $docTitle }} No.:</span>
         <span class="val">{{ $invoice->invoice_no }}</span>
       </td>
     </tr>
@@ -315,7 +321,7 @@
   </table>
 
   <div class="note">
-    This is a computer-generated tax invoice — {{ $invoice->invoice_no }} — printed {{ now()->format('d/m/Y H:i') }}
+    This is a computer-generated {{ strtolower($docTitle) }} — {{ $invoice->invoice_no }} — printed {{ now()->format('d/m/Y H:i') }}
   </div>
 
 </body>
