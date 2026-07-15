@@ -25,6 +25,7 @@ import {
 } from '../../api/costings'
 import { getAllSuppliers } from '../../api/suppliers'
 import Breadcrumb from '../../components/Breadcrumb'
+import { usePermissions } from '../../hooks/usePermissions'
 import { confirmAction, showError, showSuccess } from '../../utils/alerts'
 import { CURRENCY } from '../../utils/currency'
 import Money from '../../components/ui/Money'
@@ -234,6 +235,10 @@ export default function CostingFormPage() {
   const [docNoPreview, setDocNoPreview] = useState('')
   const [refNoPreview, setRefNoPreview] = useState('')
   const [errors,       setErrors]       = useState({})
+
+  /* ── Save status ──────────────────────────────────────────── */
+  const { can } = usePermissions()
+  const [saveStatus, setSaveStatus] = useState('draft')  // 'draft' | 'confirmed'
 
   /* ── GRN selection ────────────────────────────────────────── */
   const [supplierGrns,    setSupplierGrns]    = useState([])
@@ -508,9 +513,28 @@ export default function CostingFormPage() {
   /* ── Mutations ────────────────────────────────────────────── */
   const saveMutation = useMutation({
     mutationFn: (payload) => isEdit ? updateCosting(id, payload) : createCosting(payload),
-    onSuccess: (res) => {
-      showSuccess(isEdit ? 'Costing updated.' : 'Costing created.')
-      navigate(`/inventory/costings/${res.data.id}`)
+    onSuccess: async (res) => {
+      const costingId = res?.data?.id ?? (isEdit ? parseInt(id) : null)
+
+      // Auto-confirm if user chose "Confirmed" status
+      if (saveStatus === 'confirmed' && costingId) {
+        try {
+          await confirmCosting(costingId)
+        } catch (confirmErr) {
+          const msg = confirmErr?.response?.data?.message ?? 'Costing saved but could not be confirmed.'
+          showError(msg)
+          navigate(`/inventory/costings/${costingId}`)
+          return
+        }
+        showSuccess(isEdit
+          ? 'Costing updated and confirmed — product selling prices updated.'
+          : 'Costing created and confirmed — product selling prices updated.')
+        navigate('/inventory/costings')
+        return
+      }
+
+      showSuccess(isEdit ? 'Costing updated.' : 'Costing created as draft.')
+      navigate(`/inventory/costings/${costingId}`)
     },
     onError: (err) => {
       const msg = err.response?.data?.message ?? 'Save failed.'
@@ -520,25 +544,21 @@ export default function CostingFormPage() {
     },
   })
 
-  const confirmMutation = useMutation({
-    mutationFn: () => confirmCosting(id),
-    onSuccess: () => { showSuccess('Costing confirmed — product selling prices updated.'); navigate('/inventory/costings') },
-    onError: (err) => showError(err.response?.data?.message ?? 'Confirmation failed.'),
-  })
-
-  function handleSave(e) {
+  async function handleSave(e) {
     e.preventDefault()
     if (!validate()) return
-    saveMutation.mutate(buildPayload())
-  }
 
-  async function handleConfirm() {
-    const ok = await confirmAction({
-      title: 'Confirm Costing?',
-      message: 'This will <strong>lock the costing</strong> and <strong>update the selling prices</strong> of these products. Sales orders will price this shipment\'s rolls at the costing prices. This action cannot be undone.',
-      confirmText: 'Yes, Confirm',
-    })
-    if (ok) confirmMutation.mutate()
+    // Confirming locks the costing and pushes selling prices live — warn first
+    if (saveStatus === 'confirmed') {
+      const ok = await confirmAction({
+        title: 'Confirm Costing?',
+        message: 'This will <strong>lock the costing</strong> and <strong>update the selling prices</strong> of these products. Sales orders will price this shipment\'s rolls at the costing prices. This action cannot be undone.',
+        confirmText: 'Yes, Save & Confirm',
+      })
+      if (!ok) return
+    }
+
+    saveMutation.mutate(buildPayload())
   }
 
   const isConfirmed = existingData?.data?.status === 'confirmed'
@@ -955,26 +975,32 @@ export default function CostingFormPage() {
           {/* Action buttons */}
           <div className="flex flex-col gap-1.5">
             {!readOnly && (
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={saveMutation.isPending}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-indigo-700 disabled:opacity-60"
-              >
-                <Save size={13} strokeWidth={2.5} />
-                {saveMutation.isPending ? 'Saving…' : 'Save Costing'}
-              </button>
-            )}
-            {isEdit && !isConfirmed && (
-              <button
-                type="button"
-                onClick={handleConfirm}
-                disabled={confirmMutation.isPending}
-                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-xs font-semibold text-white transition-colors hover:bg-green-700 disabled:opacity-60"
-              >
-                <CheckCircle size={13} strokeWidth={2.5} />
-                Confirm Costing
-              </button>
+              <div className="flex items-center gap-1.5">
+                {can('confirm_costings') && (
+                  <select
+                    value={saveStatus}
+                    onChange={(e) => setSaveStatus(e.target.value)}
+                    title="Change Status"
+                    className="rounded border-2 border-slate-200 bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-800 outline-none transition-all focus:border-indigo-500 focus:bg-white cursor-pointer"
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="confirmed">Confirmed</option>
+                  </select>
+                )}
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  disabled={saveMutation.isPending}
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition-colors disabled:opacity-60 ${saveStatus === 'confirmed' ? 'bg-green-600 hover:bg-green-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                >
+                  {saveStatus === 'confirmed' ? <CheckCircle size={13} strokeWidth={2.5} /> : <Save size={13} strokeWidth={2.5} />}
+                  {saveMutation.isPending
+                    ? 'Saving…'
+                    : isEdit
+                      ? (saveStatus === 'confirmed' ? 'Update & Confirm' : 'Update Costing')
+                      : (saveStatus === 'confirmed' ? 'Create & Confirm' : 'Save as Draft')}
+                </button>
+              </div>
             )}
             {isConfirmed && (
               <div className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-green-100 px-3 py-2 text-xs font-semibold text-green-700">
