@@ -46,12 +46,19 @@ final class Quantity
      * half a tick of the input precision, carried into the base unit by the same factor.
      *
      * Anything below this is not a shortfall, it is arithmetic dust.
+     *
+     * Floored at minSellable(): RollService::takeFrom() may absorb up to that much
+     * dust into the last roll (a leftover too small to type is not stock), so any
+     * comparison must forgive at least what the distribution itself is licensed to
+     * snap. With a factor below 1 (Yard -> m is 0.9144) the scaled half-tick alone
+     * is SMALLER than that snap, and a roll's full length auto-filled in yards
+     * lands in the gap and is rejected as a mismatch it never was.
      */
     public static function toleranceFor(float $factor): float
     {
         $tick = 0.5 * (10 ** -self::INPUT_SCALE);
 
-        return max(self::EPSILON, $tick * abs($factor));
+        return max(self::EPSILON, self::minSellable(), $tick * abs($factor));
     }
 
     /** The smallest quantity that is worth existing: half a tick of the input precision. */

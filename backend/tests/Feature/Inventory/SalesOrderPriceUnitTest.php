@@ -196,6 +196,26 @@ class SalesOrderPriceUnitTest extends TestCase
         $this->assertDatabaseCount('inv_sales_orders', 0);
     }
 
+    public function test_selling_a_rolls_full_length_in_yards_survives_rounding(): void
+    {
+        // The form auto-fills a scanned line with the roll's capacity converted to
+        // yards and rounded to the 4 decimals the input holds — 25 m becomes
+        // 27.3402 or 27.3403 yd depending on which side the rounding falls. Both
+        // convert back to a hair off 25 m (±0.000046), which is dust the roll
+        // distribution snaps away — the mismatch guard must forgive it too.
+        foreach ([27.3402, 27.3403] as $qtyYards) {
+            ['product' => $product, 'roll' => $roll] = $this->productWithRoll(25.0);
+
+            $response = $this->postSo($product, $roll, ['quantity' => $qtyYards]);
+            $response->assertCreated();
+
+            $item = SalesOrder::with('items')->findOrFail($response->json('data.id'))->items->first();
+
+            // The rolls are the physical truth: exactly 25 m leaves stock.
+            $this->assertSame(25.0, (float) $item->base_quantity);
+        }
+    }
+
     // ── Flow-through to the invoice ──────────────────────────────────────────
 
     public function test_non_tax_invoice_bills_yard_quantity_at_the_per_metre_price(): void

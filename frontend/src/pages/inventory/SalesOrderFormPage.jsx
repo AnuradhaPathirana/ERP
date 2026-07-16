@@ -529,6 +529,26 @@ export default function SalesOrderFormPage() {
   const symbolOf = (u) => u?.symbol ?? u?.name ?? ''
 
   /**
+   * Fabric is sold by the yard, so a new line's selling UOM defaults to the
+   * "Yard" unit of the product's own category when one exists — matched by
+   * name/symbol, not a hard-coded id, so it follows the user's unit master.
+   * Products in other categories (Kg, Pcs, …) keep their stocking UOM.
+   * The PRICE unit is unaffected: it stays the stocking UOM (per-metre).
+   */
+  const defaultSellingUnitId = (baseUnitTypeId, categoryId) => {
+    const isYard = (u) => {
+      const n = (u.name || '').trim().toLowerCase()
+      const s = (u.symbol || '').trim().toLowerCase()
+      return n === 'yard' || n === 'yards' || s === 'yd'
+    }
+    const yard = categoryId != null
+      ? unitTypes.find((u) => String(u.unit_category_id) === String(categoryId) && isYard(u))
+      : null
+
+    return yard ? String(yard.id) : (baseUnitTypeId != null ? String(baseUnitTypeId) : '')
+  }
+
+  /**
    * How the line's selling UOM (Yard) relates to the product's stocking UOM (m).
    * base_rate is each unit's rate from its category's reference unit, so within a
    * category:  factor(line -> base) = base_rate[base] / base_rate[line].
@@ -763,15 +783,18 @@ export default function SalesOrderFormPage() {
           ? fillQuantityFromRolls({ ...r, pieces: [...r.pieces, piece] })
           : r)
       }
-      // A scanned line defaults to the product's stocking UOM and the roll's full length.
-      // The user can then switch to a selling UOM (Yard) and lower the quantity — the
-      // roll is cut at dispatch.
+      // A scanned line defaults to the Yard selling UOM (stocking UOM when the
+      // category has no yard) with the roll's full length auto-converted into it.
+      // The user can lower the quantity — the roll is cut at dispatch.
       const line = fillQuantityFromRolls({
         ...emptyItem(),
         product_id:   scan.product.id,
         product_code: scan.product.product_code ?? '',
         product_name: scan.product.name ?? '',
-        unit_id:      scan.product.unit?.id != null ? String(scan.product.unit.id) : '',
+        unit_id:      defaultSellingUnitId(
+          scan.product.base_unit_type_id ?? scan.product.unit?.id,
+          scan.product.base_unit_category_id,
+        ),
         // Price is quoted per the stocking UOM and STAYS there when the user
         // switches the selling UOM to Yard — qty(yd) x price(/m) is the intent.
         price_unit_id: scan.product.base_unit_type_id != null ? String(scan.product.base_unit_type_id) : '',
@@ -857,8 +880,6 @@ export default function SalesOrderFormPage() {
   }
 
   const selectProduct = (rowKey, product) => {
-    // Default to the stocking UOM — the price list's unit is per sales channel and
-    // an arbitrary first row is not a sound default for what stock is measured in.
     const defaultUnitTypeId = product.base_unit_type_id ?? product.cost_details?.[0]?.unit_type_id
     setItems((prev) => prev.map((row) =>
       row._key === rowKey
@@ -867,7 +888,9 @@ export default function SalesOrderFormPage() {
             product_id:   product.id,
             product_code: product.product_code ?? '',
             product_name: product.name ?? '',
-            unit_id:      defaultUnitTypeId != null ? String(defaultUnitTypeId) : '',
+            // Selling UOM defaults to Yard (when the category has one) — what the
+            // customer asks for; falls back to the stocking UOM otherwise.
+            unit_id:      defaultSellingUnitId(defaultUnitTypeId, product.base_unit_category_id),
             // Prices default to per the stocking UOM regardless of the selling UOM
             price_unit_id: product.base_unit_type_id != null
               ? String(product.base_unit_type_id)
