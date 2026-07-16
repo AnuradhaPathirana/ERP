@@ -141,6 +141,12 @@ function QtyChips({ groups }) {
  *   after_tax  = before_tax + VAT%
  *
  * before_tax feeds non-VAT invoices later, after_tax feeds VAT invoices. */
+/* Colour lines of one product in one GRN share one set of costing inputs —
+ * the price never changes with the colour, so the user types it once. */
+function groupKeyOf(line) {
+  return `${line.product_id}|${line.grn_id}`
+}
+
 function calcBreakdown(lines, cfg, lineCosting) {
   const items = lines.map((line) => {
     const qty       = parseFloat(line.quantity) || 0
@@ -148,7 +154,7 @@ function calcBreakdown(lines, cfg, lineCosting) {
     const factor    = parseFloat(line.conversion_factor) || 1
     const baseQty   = parseFloat(line.base_quantity) || qty * factor
 
-    const lc      = lineCosting[line.id] ?? {}
+    const lc      = lineCosting[groupKeyOf(line)] ?? {}
     const numOr   = (v, fallback) => (v !== undefined && v !== null && v !== '' && !Number.isNaN(parseFloat(v)) ? parseFloat(v) : fallback)
 
     const fobBase = factor > 0 ? unitPrice / factor : unitPrice
@@ -206,6 +212,61 @@ function lineHasData(lc) {
   return anyExpense || (lc.margin ?? '') !== '' || (lc.sscl_pct ?? '') !== '' || (lc.vat_pct ?? '') !== ''
 }
 
+/**
+ * One group per product per GRN. All the group's colour lines take the same
+ * typed inputs; each line still computes its own prices from its own GRN
+ * price, so a group whose lines were received at different prices shows a
+ * price RANGE on the group row and the exact figures per colour inside.
+ */
+function buildGroups(items) {
+  const map = new Map()
+  for (const it of items) {
+    const key = groupKeyOf(it)
+    if (!map.has(key)) map.set(key, [])
+    map.get(key).push(it)
+  }
+
+  return [...map.entries()].map(([key, lines]) => {
+    const first   = lines[0]
+    const range   = (k) => ({ min: Math.min(...lines.map((l) => l[k])), max: Math.max(...lines.map((l) => l[k])) })
+    const colours = [...new Set(lines.map((l) => l.color).filter(Boolean))]
+
+    return {
+      key,
+      lines,
+      product_id:         first.product_id,
+      product_name:       first.product_name,
+      product_code:       first.product_code,
+      grn_no:             first.grn_no,
+      colours,
+      qtyGroups:          qtyChips(lines),
+      totalBaseQty:       lines.reduce((s, l) => s + l.base_quantity, 0),
+      anyConverted:       lines.some((l) => Math.abs(l.conversion_factor - 1) > 1e-9),
+      fob:                range('fob_base'),
+      expense_total_base: first.expense_total_base, // per base unit — identical across the group
+      margin_amount_base: first.margin_amount_base, // per base unit — identical across the group
+      sscl:               range('sscl_amount_base'),
+      vat:                range('vat_amount_base'),
+      before:             range('before_tax_price_base'),
+      after:              range('after_tax_price_base'),
+      lineTotal:          lines.reduce((s, l) => s + l.line_total, 0),
+      mixedFob:           Math.abs(Math.max(...lines.map((l) => l.fob_base)) - Math.min(...lines.map((l) => l.fob_base))) > 1e-9,
+      rep:                first, // representative line for per-unit build-up display
+    }
+  })
+}
+
+/** A per-unit figure that may span a range when the group's GRN prices differ. */
+function RangeUnit({ range, symbol, className = '' }) {
+  if (Math.abs(range.max - range.min) < 1e-9) return <PerUnit value={range.min} symbol={symbol} className={className} />
+  return (
+    <span className={`tabular-nums ${className}`} title="Varies by line — the GRN prices differ; exact figures are inside the panel">
+      {fmt(range.min)}<span className="font-normal text-slate-400">–</span>{fmt(range.max)}
+      {symbol && <span className="ml-0.5 text-[9px] font-normal text-slate-400">/{symbol}</span>}
+    </span>
+  )
+}
+
 /* ════════════════════════════════════════════════════════════ */
 export default function CostingFormPage() {
   const { id }   = useParams()
@@ -249,8 +310,10 @@ export default function CostingFormPage() {
   // the "available" API excludes GRNs that belong to confirmed costings.
   const linkedGrnsRef = useRef([])
 
-  /* ── Per-product costing inputs (all amounts per BASE unit) ─ */
-  // { [grn_item_id]: { expenses: { [expense_type_id]: 'amt' }, sscl_pct: '', margin: '', vat_pct: '' } }
+  /* ── Per-product costing inputs (all amounts per BASE unit) ─
+     Keyed by "product_id|grn_id": one set of inputs covers EVERY colour line
+     of that product in that GRN — the price never changes with the colour. */
+  // { [group_key]: { expenses: { [expense_type_id]: 'amt' }, sscl_pct: '', margin: '', vat_pct: '' } }
   const [lineCosting,  setLineCosting]  = useState({})
   const [expandedRows, setExpandedRows] = useState(new Set())
 
@@ -281,12 +344,15 @@ export default function CostingFormPage() {
   }, lineCosting)
   const { items: breakdownItems, totals } = breakdown
 
+  // One row per product per GRN — its colour lines share one costing panel.
+  const productGroups = buildGroups(breakdownItems)
+
   // Quantities are additive only within a unit, so totals show one chip per unit.
   const qtyGroups = qtyChips(breakdownItems)
 
-  // Past this many lines the breakdown scrolls inside itself (sticky header + totals)
+  // Past this many rows the breakdown scrolls inside itself (sticky header + totals)
   // rather than pushing the save actions off-screen.
-  const itemsScroll = breakdownItems.length > ITEMS_SCROLL_AFTER
+  const itemsScroll = productGroups.length > ITEMS_SCROLL_AFTER
   const footCell    = itemsScroll ? 'sticky bottom-0 z-10 bg-slate-50' : ''
 
   /* ── Fetch suppliers list ─────────────────────────────────── */
@@ -382,8 +448,12 @@ export default function CostingFormPage() {
       }))
 
     // Restore the per-product panel inputs, all per base unit as they were typed.
+    // Keyed per product per GRN — every colour line of a group was saved with the
+    // same inputs, so the first line of each group speaks for all of them.
     const restored = {}
     for (const item of c.items ?? []) {
+      const key = `${item.product_id}|${item.grn_id}`
+      if (restored[key]) continue
       const expenses = {}
       for (const e of item.expenses ?? []) expenses[e.expense_type_id] = String(e.amount)
       const entry = {
@@ -392,7 +462,7 @@ export default function CostingFormPage() {
         vat_pct:  item.vat_pct != null ? String(item.vat_pct) : '',
         margin:   item.margin_amount_base ? String(parseFloat(item.margin_amount_base)) : '',
       }
-      if (lineHasData(entry)) restored[item.grn_item_id] = entry
+      if (lineHasData(entry)) restored[key] = entry
     }
     setLineCosting(restored)
   }, [existingData])
@@ -439,32 +509,32 @@ export default function CostingFormPage() {
     setField('costing_type', type)
   }
 
-  function toggleRow(grnItemId) {
+  function toggleRow(groupKey) {
     setExpandedRows((prev) => {
       const next = new Set(prev)
-      next.has(grnItemId) ? next.delete(grnItemId) : next.add(grnItemId)
+      next.has(groupKey) ? next.delete(groupKey) : next.add(groupKey)
       return next
     })
   }
 
-  function setLineField(grnItemId, field, value) {
+  function setLineField(groupKey, field, value) {
     setLineCosting((prev) => ({
       ...prev,
-      [grnItemId]: { ...(prev[grnItemId] ?? { expenses: {} }), [field]: value },
+      [groupKey]: { ...(prev[groupKey] ?? { expenses: {} }), [field]: value },
     }))
   }
 
-  function setLineExpense(grnItemId, typeId, value) {
+  function setLineExpense(groupKey, typeId, value) {
     setLineCosting((prev) => {
-      const lc = prev[grnItemId] ?? { expenses: {} }
-      return { ...prev, [grnItemId]: { ...lc, expenses: { ...(lc.expenses ?? {}), [typeId]: value } } }
+      const lc = prev[groupKey] ?? { expenses: {} }
+      return { ...prev, [groupKey]: { ...lc, expenses: { ...(lc.expenses ?? {}), [typeId]: value } } }
     })
   }
 
-  function resetLine(grnItemId) {
+  function resetLine(groupKey) {
     setLineCosting((prev) => {
       const next = { ...prev }
-      delete next[grnItemId]
+      delete next[groupKey]
       return next
     })
   }
@@ -483,10 +553,13 @@ export default function CostingFormPage() {
       sscl_pct:         parseFloat(form.sscl_pct) || 0,
       apply_vat:        form.apply_vat,
       vat_pct:          parseFloat(form.vat_pct) || 0,
+      // The group's inputs are replicated onto EVERY colour line of that
+      // product+GRN — the backend keeps pricing per GRN line, so confirming
+      // applies the shared price build-up to all colour rolls.
       items: grnLines
-        .filter((l) => lineHasData(lineCosting[l.id]))
+        .filter((l) => lineHasData(lineCosting[groupKeyOf(l)]))
         .map((l) => {
-          const lc = lineCosting[l.id]
+          const lc = lineCosting[groupKeyOf(l)]
           return {
             grn_item_id:        l.id,
             margin_amount_base: lc.margin !== '' && lc.margin !== undefined ? parseFloat(lc.margin) || 0 : 0,
@@ -729,7 +802,7 @@ export default function CostingFormPage() {
                   </span>
                   {breakdownItems.length > 0 && (
                     <span className="flex items-center gap-1 text-slate-500">
-                      {breakdownItems.length} line{breakdownItems.length !== 1 ? 's' : ''}
+                      {productGroups.length} product{productGroups.length !== 1 ? 's' : ''} · {breakdownItems.length} colour line{breakdownItems.length !== 1 ? 's' : ''}
                       {itemsScroll && (
                         <span
                           className="rounded bg-indigo-50 px-1 py-px text-[9px] font-semibold text-indigo-600"
@@ -752,7 +825,7 @@ export default function CostingFormPage() {
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
                     <th className="w-7 px-1 py-2" />
                     <th className="px-2 py-2 font-semibold uppercase tracking-wider text-slate-500">Product</th>
-                    <th className="px-2 py-2 font-semibold uppercase tracking-wider text-slate-500">Colour</th>
+                    <th className="px-2 py-2 font-semibold uppercase tracking-wider text-slate-500" title="All colours of a product share ONE set of costing inputs — expand the row to see them">Colours</th>
                     <th className="px-2 py-2 font-semibold uppercase tracking-wider text-slate-500">GRN</th>
                     <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Received</th>
                     <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title={`The GRN purchasing price — the ${typeLabel} value, per the product's stocking unit`}>{typeLabel}</th>
@@ -766,67 +839,78 @@ export default function CostingFormPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {breakdownItems.length === 0 ? (
-                    <tr><td colSpan={COLS} className="px-4 py-8 text-center text-slate-400">Select GRNs above — every received product line appears here. Expand a line to type its expenses, SSCL, margin and VAT.</td></tr>
+                  {productGroups.length === 0 ? (
+                    <tr><td colSpan={COLS} className="px-4 py-8 text-center text-slate-400">Select GRNs above — every received product appears here as one row. Expand it to type its expenses, SSCL, margin and VAT once, for all of its colours.</td></tr>
                   ) : (
-                    breakdownItems.map((item) => {
-                      const lc       = lineCosting[item.id] ?? { expenses: {} }
-                      const hasData  = lineHasData(lc)
-                      const isOpen   = expandedRows.has(item.id)
-                      const converted = Math.abs(item.conversion_factor - 1) > 1e-9
+                    productGroups.map((group) => {
+                      const lc      = lineCosting[group.key] ?? { expenses: {} }
+                      const hasData = lineHasData(lc)
+                      const isOpen  = expandedRows.has(group.key)
+                      const rep     = group.rep
                       // With a factor of 1 the two denominations are the same number, so the
                       // receiving symbol is the honest label — even on pre-UOM lines, which
                       // froze factor 1 against a base unit they never converted into.
-                      const baseSym = converted
-                        ? (item.base_unit_symbol || item.unit_symbol)
-                        : (item.unit_symbol || item.base_unit_symbol)
+                      const baseSym = group.anyConverted
+                        ? (rep.base_unit_symbol || rep.unit_symbol)
+                        : (rep.unit_symbol || rep.base_unit_symbol)
                       return (
-                        <RowGroup key={item.id}>
+                        <RowGroup key={group.key}>
                           <tr
                             className={`cursor-pointer transition-colors ${isOpen ? 'bg-indigo-50/60' : hasData ? 'bg-emerald-50/40 hover:bg-emerald-50/70' : 'hover:bg-slate-50'}`}
-                            onClick={() => toggleRow(item.id)}
-                            title={isOpen ? 'Collapse' : 'Expand to enter expenses, SSCL, margin & VAT'}
+                            onClick={() => toggleRow(group.key)}
+                            title={isOpen ? 'Collapse' : 'Expand — one set of inputs prices every colour of this product'}
                           >
                             <td className="px-1 py-1 text-center text-slate-400">
                               {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                             </td>
                             <td className="px-2 py-1 font-medium text-slate-700">
-                              {item.product_name || `Product #${item.product_id}`}
-                              {item.product_code && <span className="ml-1 font-mono text-[9px] text-slate-400">{item.product_code}</span>}
+                              {group.product_name || `Product #${group.product_id}`}
+                              {group.product_code && <span className="ml-1 font-mono text-[9px] text-slate-400">{group.product_code}</span>}
                               {hasData && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-emerald-500 align-middle" title="Has costing inputs" />}
                             </td>
-                            <td className="px-2 py-1 text-slate-500">{item.color || '—'}</td>
-                            <td className="px-2 py-1 font-mono text-[10px] text-slate-400">{item.grn_no}</td>
+                            <td className="px-2 py-1 text-slate-500">
+                              {group.colours.length === 0 ? '—'
+                                : group.colours.length === 1 ? group.colours[0]
+                                : (
+                                  <span
+                                    className="rounded bg-indigo-100 px-1.5 py-px text-[10px] font-bold text-indigo-700"
+                                    title={group.colours.join(', ')}
+                                  >
+                                    {group.colours.length} colours
+                                  </span>
+                                )}
+                            </td>
+                            <td className="px-2 py-1 font-mono text-[10px] text-slate-400">{group.grn_no}</td>
                             <td className="px-2 py-1 text-right tabular-nums text-slate-600">
-                              <QtyUnit value={item.quantity} symbol={item.unit_symbol} position={item.unit_position} />
-                              {converted && (
-                                <div className="text-[9px] text-slate-400" title={`1 ${item.unit_symbol} = ${fmt(item.conversion_factor)} ${baseSym}`}>
-                                  = <QtyUnit value={item.base_quantity} symbol={baseSym} position={item.base_unit_position} />
+                              <QtyChips groups={group.qtyGroups} />
+                              {group.anyConverted && (
+                                <div className="text-[9px] text-slate-400">
+                                  = <QtyUnit value={group.totalBaseQty} symbol={baseSym} position={rep.base_unit_position} />
                                 </div>
                               )}
                             </td>
-                            <td className="px-2 py-1 text-right"><PerUnit value={item.fob_base} symbol={baseSym} className="text-slate-700 font-medium" /></td>
-                            <td className={`px-2 py-1 text-right ${item.expense_total_base > 0 ? 'text-emerald-600' : 'text-slate-300'}`}>
-                              +<PerUnit value={item.expense_total_base} symbol={baseSym} />
+                            <td className="px-2 py-1 text-right"><RangeUnit range={group.fob} symbol={baseSym} className="text-slate-700 font-medium" /></td>
+                            <td className={`px-2 py-1 text-right ${group.expense_total_base > 0 ? 'text-emerald-600' : 'text-slate-300'}`}>
+                              +<PerUnit value={group.expense_total_base} symbol={baseSym} />
                             </td>
-                            <td className={`px-2 py-1 text-right ${item.sscl_amount_base > 0 ? 'text-amber-600' : 'text-slate-300'}`} title={`${fmt(item.eff_sscl_pct)}% of ${typeLabel} ${fmt(item.fob_base)}`}>
-                              +<PerUnit value={item.sscl_amount_base} symbol={baseSym} />
+                            <td className={`px-2 py-1 text-right ${group.sscl.max > 0 ? 'text-amber-600' : 'text-slate-300'}`} title={`${fmt(rep.eff_sscl_pct)}% of the ${typeLabel} amount only`}>
+                              +<RangeUnit range={group.sscl} symbol={baseSym} />
                             </td>
-                            <td className={`px-2 py-1 text-right ${item.margin_amount_base > 0 ? 'text-slate-600' : 'text-slate-300'}`}>
-                              +<PerUnit value={item.margin_amount_base} symbol={baseSym} />
+                            <td className={`px-2 py-1 text-right ${group.margin_amount_base > 0 ? 'text-slate-600' : 'text-slate-300'}`}>
+                              +<PerUnit value={group.margin_amount_base} symbol={baseSym} />
                             </td>
-                            <td className="px-2 py-1 text-right font-semibold"><PerUnit value={item.before_tax_price_base} symbol={baseSym} className="text-slate-800" /></td>
-                            <td className={`px-2 py-1 text-right ${item.vat_amount_base > 0 ? 'text-amber-600' : 'text-slate-300'}`} title={`VAT ${fmt(item.eff_vat_pct)}% of before-tax`}>
-                              +<PerUnit value={item.vat_amount_base} symbol={baseSym} />
+                            <td className="px-2 py-1 text-right font-semibold"><RangeUnit range={group.before} symbol={baseSym} className="text-slate-800" /></td>
+                            <td className={`px-2 py-1 text-right ${group.vat.max > 0 ? 'text-amber-600' : 'text-slate-300'}`} title={`VAT ${fmt(rep.eff_vat_pct)}% of before-tax`}>
+                              +<RangeUnit range={group.vat} symbol={baseSym} />
                             </td>
-                            <td className="px-2 py-1 text-right font-bold"><PerUnit value={item.after_tax_price_base} symbol={baseSym} className="text-indigo-700" /></td>
-                            <td className="px-2 py-1 text-right font-medium tabular-nums text-indigo-700"><Money value={item.line_total} /></td>
+                            <td className="px-2 py-1 text-right font-bold"><RangeUnit range={group.after} symbol={baseSym} className="text-indigo-700" /></td>
+                            <td className="px-2 py-1 text-right font-medium tabular-nums text-indigo-700"><Money value={group.lineTotal} /></td>
                           </tr>
                           {isOpen && (
                             <tr className="bg-slate-50/80">
                               <td colSpan={COLS} className="px-3 py-2 border-l-2 border-indigo-400">
-                                <LineCostingPanel
-                                  item={item}
+                                <GroupCostingPanel
+                                  group={group}
                                   lc={lc}
                                   baseSym={baseSym}
                                   typeLabel={typeLabel}
@@ -834,9 +918,9 @@ export default function CostingFormPage() {
                                   form={form}
                                   readOnly={readOnly}
                                   hasData={hasData}
-                                  onExpense={(typeId, v) => setLineExpense(item.id, typeId, v)}
-                                  onField={(field, v) => setLineField(item.id, field, v)}
-                                  onReset={() => resetLine(item.id)}
+                                  onExpense={(typeId, v) => setLineExpense(group.key, typeId, v)}
+                                  onField={(field, v) => setLineField(group.key, field, v)}
+                                  onReset={() => resetLine(group.key)}
                                 />
                               </td>
                             </tr>
@@ -904,7 +988,7 @@ export default function CostingFormPage() {
                   </span>
                 </div>
                 <p className="mt-1 text-[9px] leading-tight text-slate-500">
-                  Expenses are typed per product line (per base unit) — expand a line in the build-up table.
+                  Expenses are typed once per product (per base unit) and apply to all of its colours — expand a row in the build-up table.
                 </p>
               </div>
 
@@ -1031,138 +1115,178 @@ function RowGroup({ children }) {
 }
 
 /* ── The expanded per-product costing panel ──────────────────────────────────
- * Everything here is typed PER BASE UNIT; the grey figure beside each field is
- * the same money for the line's FULL quantity, so the user sees both without
- * leaving the row. */
-function LineCostingPanel({ item, lc, baseSym, typeLabel, expenseTypes, form, readOnly, hasData, onExpense, onField, onReset }) {
+ * ONE set of inputs per product per GRN — typed once, applied to every colour
+ * line of the group. Everything is typed PER BASE UNIT; the grey figure beside
+ * each field is the same money for the group's FULL quantity. The colour lines
+ * are listed read-only underneath with their exact per-line prices. */
+function GroupCostingPanel({ group, lc, baseSym, typeLabel, expenseTypes, form, readOnly, hasData, onExpense, onField, onReset }) {
   const perUnitTag = <span className="text-[9px] font-normal text-slate-400">/{baseSym || 'unit'}</span>
-  const baseQty    = item.base_quantity
+  const baseQty    = group.totalBaseQty
+  const rep        = group.rep
 
   const total = (perUnit) => `${fmt((parseFloat(perUnit) || 0) * baseQty)} ${CURRENCY}`
 
   return (
-    <div className="flex flex-wrap gap-x-5 gap-y-2 items-start" onClick={(e) => e.stopPropagation()}>
+    <div onClick={(e) => e.stopPropagation()}>
+      <div className="flex flex-wrap gap-x-5 gap-y-2 items-start">
 
-      {/* Expense inputs — one per type of the costing's FOB/CIF list */}
-      <div className="flex-1 min-w-[300px]">
-        <div className="mb-1 flex items-center justify-between">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
-            {typeLabel} Expenses <span className="font-normal text-slate-400">(amount per {baseSym || 'unit'})</span>
-          </span>
-          <span className="text-[10px] text-slate-500">
-            Total: <span className="font-bold text-emerald-700 tabular-nums">{fmt(item.expense_total_base)}</span>{perUnitTag}
-            <span className="mx-1 text-slate-300">·</span>
-            <span className="tabular-nums" title={`For the full ${fmt(baseQty)} ${baseSym || ''}`}>{total(item.expense_total_base)}</span>
-          </span>
-        </div>
-        {expenseTypes.length === 0 ? (
-          <p className="rounded bg-slate-100 px-2 py-1.5 text-[10px] text-slate-400">No active {typeLabel} expense types configured.</p>
-        ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-1.5">
-            {expenseTypes.map((t) => {
-              const val = lc.expenses?.[t.id] ?? ''
-              return (
-                <div key={t.id} className="min-w-0">
-                  <label className="block truncate text-[9px] font-semibold uppercase tracking-wider text-slate-500" title={t.name}>{t.name}</label>
-                  <input
-                    type="number" min="0" step="0.01"
-                    placeholder="0.00"
-                    className={`${PANEL_INP} ${val !== '' && parseFloat(val) > 0 ? 'border-emerald-300 bg-emerald-50/50' : ''}`}
-                    value={val}
-                    onChange={(e) => onExpense(t.id, e.target.value)}
-                    disabled={readOnly}
-                  />
-                  <div className="mt-px text-right text-[9px] tabular-nums text-slate-400">
-                    {val !== '' && parseFloat(val) > 0 ? `= ${total(val)}` : ' '}
+        {/* Expense inputs — one per type, shared by every colour of this product */}
+        <div className="flex-1 min-w-[300px]">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+              {typeLabel} Expenses <span className="font-normal text-slate-400">(per {baseSym || 'unit'} — applies to all {group.lines.length} colour line{group.lines.length !== 1 ? 's' : ''})</span>
+            </span>
+            <span className="text-[10px] text-slate-500">
+              Total: <span className="font-bold text-emerald-700 tabular-nums">{fmt(group.expense_total_base)}</span>{perUnitTag}
+              <span className="mx-1 text-slate-300">·</span>
+              <span className="tabular-nums" title={`For the full ${fmt(baseQty)} ${baseSym || ''}`}>{total(group.expense_total_base)}</span>
+            </span>
+          </div>
+          {expenseTypes.length === 0 ? (
+            <p className="rounded bg-slate-100 px-2 py-1.5 text-[10px] text-slate-400">No active {typeLabel} expense types configured.</p>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-1.5">
+              {expenseTypes.map((t) => {
+                const val = lc.expenses?.[t.id] ?? ''
+                return (
+                  <div key={t.id} className="min-w-0">
+                    <label className="block truncate text-[9px] font-semibold uppercase tracking-wider text-slate-500" title={t.name}>{t.name}</label>
+                    <input
+                      type="number" min="0" step="0.01"
+                      placeholder="0.00"
+                      className={`${PANEL_INP} ${val !== '' && parseFloat(val) > 0 ? 'border-emerald-300 bg-emerald-50/50' : ''}`}
+                      value={val}
+                      onChange={(e) => onExpense(t.id, e.target.value)}
+                      disabled={readOnly}
+                    />
+                    <div className="mt-px text-right text-[9px] tabular-nums text-slate-400">
+                      {val !== '' && parseFloat(val) > 0 ? `= ${total(val)}` : ' '}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Price build-up: FOB/CIF → +Expenses → +SSCL → +Margin = Before-Tax → +VAT = After-Tax */}
+        <div className="w-[300px] shrink-0 rounded-md border border-slate-200 bg-white p-2">
+          {group.mixedFob && (
+            <p className="mb-1 rounded bg-amber-50 px-1.5 py-1 text-[9px] leading-tight text-amber-700">
+              GRN prices differ between this product's lines — the build-up shows the first line; exact figures per colour are listed below.
+            </p>
+          )}
+          <BuildUpRow label={`${typeLabel} (GRN Price)`} value={rep.fob_base} tag={perUnitTag} totalText={total(rep.fob_base)} />
+          <BuildUpRow label="+ Expenses" value={group.expense_total_base} tag={perUnitTag} totalText={total(group.expense_total_base)} valueClass="text-emerald-600" />
+
+          {/* SSCL — % of the FOB/CIF amount ONLY */}
+          <div className="flex items-center justify-between gap-1 py-0.5">
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-slate-500">+ SSCL</span>
+              <input
+                type="number" min="0" max="100" step="0.1"
+                className={`${PCT_INP} !w-11`}
+                placeholder={String(form.sscl_pct)}
+                value={lc.sscl_pct ?? ''}
+                onChange={(e) => onField('sscl_pct', e.target.value)}
+                disabled={readOnly || !form.apply_sscl}
+                title={form.apply_sscl ? `SSCL % of the ${typeLabel} amount only (blank = ${form.sscl_pct}%)` : 'SSCL is off for this costing'}
+              />
+              <span className="text-[9px] text-slate-400">% of {typeLabel}</span>
+            </div>
+            <span className="text-[11px] tabular-nums text-amber-600" title={total(rep.sscl_amount_base)}>{fmt(rep.sscl_amount_base)}{perUnitTag}</span>
           </div>
-        )}
+
+          {/* Margin — a typed addon AMOUNT per base unit */}
+          <div className="flex items-center justify-between gap-1 py-0.5">
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-slate-500">+ Margin</span>
+              <input
+                type="number" min="0" step="0.01"
+                className={`${PANEL_INP} !w-20 ${(lc.margin ?? '') !== '' ? 'border-indigo-300 bg-indigo-50/50' : ''}`}
+                placeholder="0.00"
+                value={lc.margin ?? ''}
+                onChange={(e) => onField('margin', e.target.value)}
+                disabled={readOnly}
+                title={`Addon margin amount per ${baseSym || 'unit'}`}
+              />
+              <span className="text-[9px] text-slate-400">/{baseSym || 'unit'}</span>
+            </div>
+            <span className="text-[11px] tabular-nums text-slate-600" title={total(group.margin_amount_base)}>{fmt(group.margin_amount_base)}{perUnitTag}</span>
+          </div>
+
+          <div className="my-0.5 border-t border-slate-200" />
+          <BuildUpRow label="= Before-Tax" value={rep.before_tax_price_base} tag={perUnitTag} totalText={total(rep.before_tax_price_base)} labelClass="font-bold text-slate-700" valueClass="font-bold text-slate-800" />
+
+          {/* VAT — % of the before-tax price */}
+          <div className="flex items-center justify-between gap-1 py-0.5">
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-slate-500">+ VAT</span>
+              <input
+                type="number" min="0" max="100" step="0.1"
+                className={`${PCT_INP} !w-11`}
+                placeholder={String(form.vat_pct)}
+                value={lc.vat_pct ?? ''}
+                onChange={(e) => onField('vat_pct', e.target.value)}
+                disabled={readOnly || !form.apply_vat}
+                title={form.apply_vat ? `VAT % of the before-tax price (blank = ${form.vat_pct}%)` : 'VAT is off for this costing'}
+              />
+              <span className="text-[9px] text-slate-400">%</span>
+            </div>
+            <span className="text-[11px] tabular-nums text-amber-600" title={total(rep.vat_amount_base)}>{fmt(rep.vat_amount_base)}{perUnitTag}</span>
+          </div>
+
+          <div className="my-0.5 border-t-2 border-indigo-200" />
+          <BuildUpRow label="= After-Tax" value={rep.after_tax_price_base} tag={perUnitTag} totalText={`${fmt(group.lineTotal)} ${CURRENCY}`} labelClass="font-bold text-indigo-700" valueClass="font-black text-indigo-700" />
+          <div className="mt-0.5 flex items-center justify-between text-[9px] text-slate-400">
+            <span>Group total ({fmt(baseQty)} {baseSym || 'unit'}, {group.lines.length} line{group.lines.length !== 1 ? 's' : ''})</span>
+            <span className="font-bold tabular-nums text-indigo-600">{fmt(group.lineTotal)} {CURRENCY}</span>
+          </div>
+
+          {!readOnly && hasData && (
+            <button
+              type="button"
+              onClick={onReset}
+              className="mt-1 flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-semibold text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+              title="Clear this product's expenses, SSCL, margin and VAT (all colours)"
+            >
+              <RotateCcw size={9} /> Reset product
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Price build-up: FOB/CIF → +Expenses → +SSCL → +Margin = Before-Tax → +VAT = After-Tax */}
-      <div className="w-[300px] shrink-0 rounded-md border border-slate-200 bg-white p-2">
-        <BuildUpRow label={`${typeLabel} (GRN Price)`} value={item.fob_base} tag={perUnitTag} totalText={total(item.fob_base)} />
-        <BuildUpRow label="+ Expenses" value={item.expense_total_base} tag={perUnitTag} totalText={total(item.expense_total_base)} valueClass="text-emerald-600" />
-
-        {/* SSCL — % of the FOB/CIF amount ONLY */}
-        <div className="flex items-center justify-between gap-1 py-0.5">
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-slate-500">+ SSCL</span>
-            <input
-              type="number" min="0" max="100" step="0.1"
-              className={`${PCT_INP} !w-11`}
-              placeholder={String(form.sscl_pct)}
-              value={lc.sscl_pct ?? ''}
-              onChange={(e) => onField('sscl_pct', e.target.value)}
-              disabled={readOnly || !form.apply_sscl}
-              title={form.apply_sscl ? `SSCL % of the ${typeLabel} amount only (blank = ${form.sscl_pct}%)` : 'SSCL is off for this costing'}
-            />
-            <span className="text-[9px] text-slate-400">% of {typeLabel}</span>
-          </div>
-          <span className="text-[11px] tabular-nums text-amber-600" title={total(item.sscl_amount_base)}>{fmt(item.sscl_amount_base)}{perUnitTag}</span>
+      {/* The colour lines this one set of inputs prices — read-only, exact per line */}
+      <div className="mt-2 rounded-md border border-slate-200 bg-white overflow-hidden">
+        <div className="thin-scroll max-h-48 overflow-y-auto">
+          <table className="w-full text-[10px]">
+            <thead className="sticky top-0">
+              <tr className="border-b border-slate-200 bg-slate-50 text-left">
+                <th className="px-2 py-1 font-semibold uppercase tracking-wider text-slate-400">Colour</th>
+                <th className="px-2 py-1 text-right font-semibold uppercase tracking-wider text-slate-400">Received</th>
+                <th className="px-2 py-1 text-right font-semibold uppercase tracking-wider text-slate-400">{typeLabel}</th>
+                <th className="px-2 py-1 text-right font-semibold uppercase tracking-wider text-slate-400">Before-Tax</th>
+                <th className="px-2 py-1 text-right font-semibold uppercase tracking-wider text-slate-400">After-Tax</th>
+                <th className="px-2 py-1 text-right font-semibold uppercase tracking-wider text-slate-400">Line Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {group.lines.map((line) => (
+                <tr key={line.id} className="hover:bg-slate-50/60">
+                  <td className="px-2 py-0.5 text-slate-600">{line.color || <span className="italic text-slate-300">—</span>}</td>
+                  <td className="px-2 py-0.5 text-right tabular-nums text-slate-500">
+                    <QtyUnit value={line.quantity} symbol={line.unit_symbol} position={line.unit_position} />
+                  </td>
+                  <td className="px-2 py-0.5 text-right"><PerUnit value={line.fob_base} symbol={baseSym} className="text-slate-600" /></td>
+                  <td className="px-2 py-0.5 text-right"><PerUnit value={line.before_tax_price_base} symbol={baseSym} className="font-semibold text-slate-700" /></td>
+                  <td className="px-2 py-0.5 text-right"><PerUnit value={line.after_tax_price_base} symbol={baseSym} className="font-bold text-indigo-700" /></td>
+                  <td className="px-2 py-0.5 text-right tabular-nums font-medium text-indigo-700"><Money value={line.line_total} /></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-
-        {/* Margin — a typed addon AMOUNT per base unit */}
-        <div className="flex items-center justify-between gap-1 py-0.5">
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-slate-500">+ Margin</span>
-            <input
-              type="number" min="0" step="0.01"
-              className={`${PANEL_INP} !w-20 ${(lc.margin ?? '') !== '' ? 'border-indigo-300 bg-indigo-50/50' : ''}`}
-              placeholder="0.00"
-              value={lc.margin ?? ''}
-              onChange={(e) => onField('margin', e.target.value)}
-              disabled={readOnly}
-              title={`Addon margin amount per ${baseSym || 'unit'}`}
-            />
-            <span className="text-[9px] text-slate-400">/{baseSym || 'unit'}</span>
-          </div>
-          <span className="text-[11px] tabular-nums text-slate-600" title={total(item.margin_amount_base)}>{fmt(item.margin_amount_base)}{perUnitTag}</span>
-        </div>
-
-        <div className="my-0.5 border-t border-slate-200" />
-        <BuildUpRow label="= Before-Tax" value={item.before_tax_price_base} tag={perUnitTag} totalText={total(item.before_tax_price_base)} labelClass="font-bold text-slate-700" valueClass="font-bold text-slate-800" />
-
-        {/* VAT — % of the before-tax price */}
-        <div className="flex items-center justify-between gap-1 py-0.5">
-          <div className="flex items-center gap-1">
-            <span className="text-[10px] text-slate-500">+ VAT</span>
-            <input
-              type="number" min="0" max="100" step="0.1"
-              className={`${PCT_INP} !w-11`}
-              placeholder={String(form.vat_pct)}
-              value={lc.vat_pct ?? ''}
-              onChange={(e) => onField('vat_pct', e.target.value)}
-              disabled={readOnly || !form.apply_vat}
-              title={form.apply_vat ? `VAT % of the before-tax price (blank = ${form.vat_pct}%)` : 'VAT is off for this costing'}
-            />
-            <span className="text-[9px] text-slate-400">%</span>
-          </div>
-          <span className="text-[11px] tabular-nums text-amber-600" title={total(item.vat_amount_base)}>{fmt(item.vat_amount_base)}{perUnitTag}</span>
-        </div>
-
-        <div className="my-0.5 border-t-2 border-indigo-200" />
-        <BuildUpRow label="= After-Tax" value={item.after_tax_price_base} tag={perUnitTag} totalText={total(item.after_tax_price_base)} labelClass="font-bold text-indigo-700" valueClass="font-black text-indigo-700" />
-        <div className="mt-0.5 flex items-center justify-between text-[9px] text-slate-400">
-          <span>Line total ({fmt(baseQty)} {baseSym || 'unit'})</span>
-          <span className="font-bold tabular-nums text-indigo-600">{fmt(item.after_tax_price_base * baseQty)} {CURRENCY}</span>
-        </div>
-
-        {!readOnly && hasData && (
-          <button
-            type="button"
-            onClick={onReset}
-            className="mt-1 flex items-center gap-1 rounded px-1 py-0.5 text-[9px] font-semibold text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
-            title="Clear this line's expenses, SSCL, margin and VAT"
-          >
-            <RotateCcw size={9} /> Reset line
-          </button>
-        )}
       </div>
-
     </div>
   )
 }
