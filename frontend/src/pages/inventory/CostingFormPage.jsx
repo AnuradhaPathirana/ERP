@@ -1256,11 +1256,26 @@ function GroupCostingPanel({ group, lc, baseSym, typeLabel, expenseTypes, form, 
         </div>
       </div>
 
-      {/* The colour lines this one set of inputs prices — read-only, exact per line */}
+      {/* The colour lines this one set of inputs prices — read-only, exact per line.
+          Past 4 colours the list scrolls inside itself (sticky header), so a
+          100-colour product never stretches the panel down the page. */}
       <div className="mt-2 rounded-md border border-slate-200 bg-white overflow-hidden">
-        <div className="thin-scroll max-h-48 overflow-y-auto">
+        <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-2 py-1">
+          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+            Colour Lines ({group.lines.length})
+          </span>
+          {group.lines.length > 4 && (
+            <span className="rounded bg-indigo-50 px-1 py-px text-[9px] font-semibold text-indigo-600" title="Scroll inside the list — the header stays visible">
+              scroll
+            </span>
+          )}
+        </div>
+        <div
+          className={group.lines.length > 4 ? 'thin-scroll overflow-y-auto' : ''}
+          style={group.lines.length > 4 ? { maxHeight: '118px' } : undefined}
+        >
           <table className="w-full text-[10px]">
-            <thead className="sticky top-0">
+            <thead className="sticky top-0 z-10">
               <tr className="border-b border-slate-200 bg-slate-50 text-left">
                 <th className="px-2 py-1 font-semibold uppercase tracking-wider text-slate-400">Colour</th>
                 <th className="px-2 py-1 text-right font-semibold uppercase tracking-wider text-slate-400">Received</th>
