@@ -1170,7 +1170,7 @@ export default function SalesOrderFormPage() {
   }
 
   const err = (f) => errors[f]?.[0]
-  // #, Code, Product, Colour, UOM, Price, Qty, Gross, Amount, delete = 10 base columns
+  // #, Code, Product, Colour, UOM, Qty, Price, Gross, Amount, delete = 10 base columns
   const itemColSpan = 10 + (discountEnabled ? 1 : 0) + (taxEnabled ? 1 : 0)
 
   // In edit mode a confirmed SO stays confirmed on save; a draft can be saved
@@ -1297,10 +1297,11 @@ export default function SalesOrderFormPage() {
             <th className="px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Product</th>
             <th className="w-20 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Colour</th>
             <th className="w-16 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">UOM</th>
-            {/* Price is wider than Quantity by one step: its cell also carries the inline
-                "/kg" unit suffix, so the input itself ends up the same size. */}
-            <th className="w-36 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price ({CURRENCY})</th>
+            {/* Quantity sits right after UOM so a line reads naturally — "100 Yd at 500/m". */}
             <th className="w-32 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Quantity</th>
+            {/* Price is wider than Quantity by one step: its cell also carries the inline
+                Price-UOM dropdown, so the input itself ends up the same size. */}
+            <th className="w-36 px-1.5 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Unit Price ({CURRENCY})</th>
             <th className="w-24 px-1.5 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Gross ({CURRENCY})</th>
             {discountEnabled && <th className="w-16 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-amber-500">Disc%</th>}
             {taxEnabled && <th className="w-16 px-1.5 py-1.5 text-center text-[10px] font-bold uppercase tracking-wider text-sky-500">Tax%</th>}
@@ -1379,68 +1380,12 @@ export default function SalesOrderFormPage() {
                       value={row.unit_id}
                       groups={uomGroupsFor(row.base_unit_category_id)}
                       onChange={(val) => setRowField(idx, 'unit_id', val)}
-                      onNext={() => focusCell(row._key, 'price')}
+                      // Quantity is the next column; lines showing "Select Rolls" instead
+                      // of a quantity input fall through to the price field.
+                      onNext={() => focusCell(row._key, cellRefs.current[row._key]?.qty ? 'qty' : 'price')}
                     />
                   </td>
-                  {/* Unit Price — quoted per its OWN unit (the Price UOM dropdown), which may
-                      differ from the selling UOM: qty in Yard at the per-Metre price bills
-                      qty x price, unconverted. The hint shows the effective per-base figure. */}
-                  <td className="px-1.5 py-1">
-                    {(() => {
-                      const conv      = conversionFor(row)
-                      const factor    = conv?.factor ?? 1
-                      const belowCost = isBelowCost(row, factor)
-                      const price     = parseFloat(row.unit_price) || 0
-
-                      return (
-                        <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-0.5">
-                            <input
-                              ref={setCellRef(row._key, 'price')}
-                              type="number" min="0" step="0.01" placeholder="0.00" value={row.unit_price}
-                              onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  if (!isScanned) focusCell(row._key, 'qty')
-                                  else if (discountEnabled) focusCell(row._key, 'disc')
-                                  else scanInputRef.current?.focus()
-                                }
-                              }}
-                              className={belowCost ? TABLE_INPUT_WARN : TABLE_INPUT} />
-                            <div className="w-14 shrink-0" title="Unit the price is quoted per — independent of the selling UOM">
-                              <DropdownSelectCell
-                                value={row.price_unit_id}
-                                groups={uomGroupsFor(row.base_unit_category_id)}
-                                onChange={(val) => setRowField(idx, 'price_unit_id', val)}
-                                placeholder="/—"
-                                disabled={!row.product_id}
-                              />
-                            </div>
-                          </div>
-
-                          {/* The effective per-stocking-UOM revenue (amount / stock deducted),
-                              so a yard quantity billed per metre shows what it really earns. */}
-                          {conv && !conv.same && conv.factor && price > 0 && (
-                            <span className="text-[9px] font-medium leading-none text-indigo-500">
-                              = {fmtQty(price / conv.factor, 4)} /{conv.baseSymbol} effective
-                            </span>
-                          )}
-                          {belowCost && (
-                            <p className="text-[9px] font-semibold leading-tight text-amber-600">
-                              Below cost ({fmtMoneyWithSymbol(rowCostBasis(row) * factor)}/{conv?.lineSymbol ?? ''})
-                            </p>
-                          )}
-                        </div>
-                      )
-                    })()}
-                    {row.no_selling_price && !row.unit_price && (
-                      <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">No selling price on product</p>
-                    )}
-                    {row.pieces.length > 0 && row.pieces[0]?.price_source === 'price_list' && (
-                      <p className="mt-0.5 text-[9px] leading-tight text-slate-400" title="This shipment has no confirmed costing — the product price-list price was used">Price-list price (no costing)</p>
-                    )}
-                  </td>
+                  {/* Quantity — right after UOM, so a line reads "100 Yd at 500/m". */}
                   <td className="px-1.5 py-1">
                     {isScanned ? (() => {
                       // Editable: the customer may take less than the rolls hold, and the
@@ -1456,7 +1401,7 @@ export default function SalesOrderFormPage() {
                             type="number" min="0" step="0.0001" value={row.quantity}
                             onChange={(e) => setRowField(idx, 'quantity', e.target.value)}
                             onKeyDown={(e) => {
-                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, discountEnabled ? 'disc' : 'product') }
+                              if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
                             }}
                             className={`${over ? TABLE_INPUT_WARN : TABLE_INPUT} text-right tabular-nums`}
                             title={`Rolls hold ${fmtQty(capacity)} ${conv?.lineSymbol ?? ''} — sell all or part`}
@@ -1493,9 +1438,68 @@ export default function SalesOrderFormPage() {
                         type="number" min="0" step="0.0001" placeholder="0" value={row.quantity}
                         onChange={(e) => setRowField(idx, 'quantity', e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, discountEnabled ? 'disc' : 'product') }
+                          if (e.key === 'Enter') { e.preventDefault(); focusCell(row._key, 'price') }
                         }}
                         className={TABLE_INPUT} />
+                    )}
+                  </td>
+                  {/* Unit Price — quoted per its OWN unit (the Price UOM dropdown), which may
+                      differ from the selling UOM: qty in Yard at the per-Metre price bills
+                      qty x price, unconverted. The hint shows the effective per-base figure. */}
+                  <td className="px-1.5 py-1">
+                    {(() => {
+                      const conv      = conversionFor(row)
+                      const factor    = conv?.factor ?? 1
+                      const belowCost = isBelowCost(row, factor)
+                      const price     = parseFloat(row.unit_price) || 0
+
+                      return (
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-0.5">
+                            <input
+                              ref={setCellRef(row._key, 'price')}
+                              type="number" min="0" step="0.01" placeholder="0.00" value={row.unit_price}
+                              onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  if (discountEnabled) focusCell(row._key, 'disc')
+                                  else if (isScanned) scanInputRef.current?.focus()
+                                  else focusCell(row._key, 'product')
+                                }
+                              }}
+                              className={belowCost ? TABLE_INPUT_WARN : TABLE_INPUT} />
+                            <div className="w-14 shrink-0" title="Unit the price is quoted per — independent of the selling UOM">
+                              <DropdownSelectCell
+                                value={row.price_unit_id}
+                                groups={uomGroupsFor(row.base_unit_category_id)}
+                                onChange={(val) => setRowField(idx, 'price_unit_id', val)}
+                                placeholder="/—"
+                                disabled={!row.product_id}
+                              />
+                            </div>
+                          </div>
+
+                          {/* The effective per-stocking-UOM revenue (amount / stock deducted),
+                              so a yard quantity billed per metre shows what it really earns. */}
+                          {conv && !conv.same && conv.factor && price > 0 && (
+                            <span className="text-[9px] font-medium leading-none text-indigo-500">
+                              = {fmtQty(price / conv.factor, 4)} /{conv.baseSymbol} effective
+                            </span>
+                          )}
+                          {belowCost && (
+                            <p className="text-[9px] font-semibold leading-tight text-amber-600">
+                              Below cost ({fmtMoneyWithSymbol(rowCostBasis(row) * factor)}/{conv?.lineSymbol ?? ''})
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })()}
+                    {row.no_selling_price && !row.unit_price && (
+                      <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">No selling price on product</p>
+                    )}
+                    {row.pieces.length > 0 && row.pieces[0]?.price_source === 'price_list' && (
+                      <p className="mt-0.5 text-[9px] leading-tight text-slate-400" title="This shipment has no confirmed costing — the product price-list price was used">Price-list price (no costing)</p>
                     )}
                   </td>
                   <td className="px-1.5 py-1 text-right font-medium text-slate-600 tabular-nums">
@@ -1637,6 +1641,32 @@ export default function SalesOrderFormPage() {
                   onChange={(val) => setRowField(idx, 'unit_id', val)}
                 />
               </div>
+              {/* Quantity right after UOM, so the card reads "100 Yd at 500/m" */}
+              <div>
+                <label className={LABEL_CLS}>Quantity</label>
+                {isScanned ? (
+                  <>
+                    <input
+                      type="number" min="0" step="0.0001" value={row.quantity}
+                      onChange={(e) => setRowField(idx, 'quantity', e.target.value)}
+                      className={`${TABLE_INPUT} text-right tabular-nums`}
+                    />
+                    <p className="mt-0.5 text-[9px] leading-tight text-slate-400">
+                      of {fmtQty(capacityInLineUom(row))} {conversionFor(row)?.lineSymbol} on the rolls
+                    </p>
+                  </>
+                ) : row.product_id && row.available_count > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setRollPickerKey(row._key)}
+                    className="flex w-full items-center justify-center gap-1 rounded border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 hover:bg-violet-100 transition-colors"
+                  >
+                    <Boxes size={10} /> Select Rolls ({row.available_count})
+                  </button>
+                ) : (
+                  <input type="number" min="0" step="0.0001" value={row.quantity} onChange={(e) => setRowField(idx, 'quantity', e.target.value)} className={TABLE_INPUT} />
+                )}
+              </div>
               <div>
                 <label className={LABEL_CLS}>
                   Unit Price ({CURRENCY}{priceConversionFor(row)?.priceSymbol ? `/${priceConversionFor(row).priceSymbol}` : ''})
@@ -1664,31 +1694,6 @@ export default function SalesOrderFormPage() {
                 )}
                 {row.no_selling_price && !row.unit_price && (
                   <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">No selling price on product</p>
-                )}
-              </div>
-              <div>
-                <label className={LABEL_CLS}>Quantity</label>
-                {isScanned ? (
-                  <>
-                    <input
-                      type="number" min="0" step="0.0001" value={row.quantity}
-                      onChange={(e) => setRowField(idx, 'quantity', e.target.value)}
-                      className={`${TABLE_INPUT} text-right tabular-nums`}
-                    />
-                    <p className="mt-0.5 text-[9px] leading-tight text-slate-400">
-                      of {fmtQty(capacityInLineUom(row))} {conversionFor(row)?.lineSymbol} on the rolls
-                    </p>
-                  </>
-                ) : row.product_id && row.available_count > 0 ? (
-                  <button
-                    type="button"
-                    onClick={() => setRollPickerKey(row._key)}
-                    className="flex w-full items-center justify-center gap-1 rounded border border-violet-300 bg-violet-50 px-1.5 py-0.5 text-[10px] font-bold text-violet-700 hover:bg-violet-100 transition-colors"
-                  >
-                    <Boxes size={10} /> Select Rolls ({row.available_count})
-                  </button>
-                ) : (
-                  <input type="number" min="0" step="0.0001" value={row.quantity} onChange={(e) => setRowField(idx, 'quantity', e.target.value)} className={TABLE_INPUT} />
                 )}
               </div>
               <div>
