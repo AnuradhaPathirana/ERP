@@ -86,6 +86,7 @@ class InvoiceService
         return Invoice::with([
             'items.product',
             'items.unit',
+            'items.priceUnit',
             'items.attribute',
             'salesOrder',
             'deliveryOrder',
@@ -275,6 +276,7 @@ class InvoiceService
                     'do_item_id'   => $doItem->id,
                     'product_id'   => $doItem->product_id,
                     'unit_id'      => $doItem->unit_id,
+                    'price_unit_id' => $soItem?->price_unit_id,
                     'attribute_id' => $doItem->attribute_id,
                     'quantity'     => (float) $doItem->quantity,
                     'unit_price'   => $pricing['unit_price'],
@@ -339,6 +341,7 @@ class InvoiceService
                     'do_item_id'   => null,
                     'product_id'   => $soItem->product_id,
                     'unit_id'      => $soItem->unit_id,
+                    'price_unit_id' => $soItem->price_unit_id,
                     'attribute_id' => $soItem->attribute_id,
                     'quantity'     => (float) $soItem->quantity,
                     'unit_price'   => $pricing['unit_price'],
@@ -560,9 +563,13 @@ class InvoiceService
 
         $pair = $pairs->first();
 
-        // before_tax_price is per the stocking UOM; the line may bill another unit
+        // before_tax_price is per the stocking UOM; it must be restated per the unit the
+        // line QUOTES its price in — price_unit_id when set (a yard line billing the
+        // per-metre price keeps factor 1), else the quantity's unit (legacy lines).
         $factor     = 1.0;
-        $unitId     = $soItem->unit_id !== null ? (int) $soItem->unit_id : null;
+        $unitId     = $soItem->price_unit_id !== null
+            ? (int) $soItem->price_unit_id
+            : ($soItem->unit_id !== null ? (int) $soItem->unit_id : null);
         $baseUnitId = Product::where('id', $soItem->product_id)->value('base_unit_type_id');
 
         if ($unitId !== null && $baseUnitId !== null && $unitId !== (int) $baseUnitId) {

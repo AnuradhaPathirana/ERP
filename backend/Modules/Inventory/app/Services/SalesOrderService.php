@@ -77,6 +77,7 @@ class SalesOrderService
         return SalesOrder::with([
             'items.product.baseUnit',
             'items.unit',
+            'items.priceUnit',
             'items.attribute',
             'items.pieces.piece',
             'customer',
@@ -370,7 +371,7 @@ class SalesOrderService
      * before rebuilding items, so edits that keep the same pieces re-allocate
      * them cleanly and removed lines release theirs.
      *
-     * @param array<array{product_id:int, unit_id:?int, attribute_id:?int, quantity:?float, unit_price:float, discount:float, tax:float, remarks:?string, piece_codes:?array<string>}> $items
+     * @param array<array{product_id:int, unit_id:?int, price_unit_id:?int, attribute_id:?int, quantity:?float, unit_price:float, discount:float, tax:float, remarks:?string, piece_codes:?array<string>}> $items
      */
     private function syncItems(SalesOrder $so, array $items): void
     {
@@ -400,15 +401,25 @@ class SalesOrderService
             $product = $products[(int) $row['product_id']];
             $unitId  = !empty($row['unit_id']) ? (int) $row['unit_id'] : null;
 
-            // Every line — roll-backed or not — is priced and quantified in the UOM the
-            // customer buys in (Yard), and converted to the stocking UOM (m) for stock.
+            // The quantity is in the UOM the customer buys in (Yard) and converts to the
+            // stocking UOM (m) for stock. The PRICE may be quoted per a different unit
+            // (price_unit_id — sell yards at the per-metre price): line_total stays
+            // quantity x unit_price with NO conversion, which is exactly the point.
             // A roll line may sell LESS than its rolls hold: the rolls get cut at dispatch.
             $converted = $this->units->toBase($product, $unitId, $qty);
+
+            $priceUnitId = !empty($row['price_unit_id']) ? (int) $row['price_unit_id'] : null;
+            if ($priceUnitId !== null) {
+                // Aborts when no rate exists to the stocking UOM — a price filed against
+                // an unconvertible unit could never be rebased for cost comparisons.
+                $this->units->factor($priceUnitId, $converted['base_unit_id']);
+            }
 
             $item = SalesOrderItem::create([
                 'so_id'      => $so->id,
                 'product_id' => (int) $row['product_id'],
                 'unit_id'    => $unitId,
+                'price_unit_id' => $priceUnitId,
                 'attribute_id' => !empty($row['attribute_id']) ? (int) $row['attribute_id'] : null,
                 'is_scanned' => $isScanned,
                 'quantity'   => $qty,

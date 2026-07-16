@@ -17,6 +17,7 @@ class SalesOrderItemResource extends JsonResource
             'so_id'        => $this->so_id,
             'product_id'   => $this->product_id,
             'unit_id'      => $this->unit_id,
+            'price_unit_id' => $this->price_unit_id,
             'attribute_id' => $this->attribute_id,
             'is_scanned'   => $this->is_scanned,
             'quantity'     => (float) $this->quantity,
@@ -40,6 +41,12 @@ class SalesOrderItemResource extends JsonResource
             'unit' => $this->whenLoaded('unit', fn () => $this->unit ? [
                 'id'   => $this->unit->id,
                 'name' => $this->unit->name,
+            ] : null),
+            // The unit the price is quoted per (may differ from the quantity's unit)
+            'price_unit' => $this->whenLoaded('priceUnit', fn () => $this->priceUnit ? [
+                'id'     => $this->priceUnit->id,
+                'name'   => $this->priceUnit->name,
+                'symbol' => $this->priceUnit->symbol,
             ] : null),
             'attribute' => $this->whenLoaded('attribute', fn () => $this->attribute ? [
                 'id'   => $this->attribute->id,

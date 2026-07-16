@@ -17,6 +17,7 @@ class InvoiceItem extends Model
         'do_item_id',
         'product_id',
         'unit_id',
+        'price_unit_id',
         'attribute_id',
         'quantity',
         'unit_price',
@@ -32,6 +33,7 @@ class InvoiceItem extends Model
         'do_item_id'   => 'integer',
         'product_id'   => 'integer',
         'unit_id'      => 'integer',
+        'price_unit_id' => 'integer',
         'attribute_id' => 'integer',
         'quantity'     => 'decimal:4',
         'unit_price'   => 'decimal:4',
@@ -63,6 +65,12 @@ class InvoiceItem extends Model
     public function unit(): BelongsTo
     {
         return $this->belongsTo(UnitType::class, 'unit_id');
+    }
+
+    /** The unit the price is quoted per — may differ from unit_id (the quantity's unit). */
+    public function priceUnit(): BelongsTo
+    {
+        return $this->belongsTo(UnitType::class, 'price_unit_id');
     }
 
     public function attribute(): BelongsTo

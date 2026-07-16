@@ -38,6 +38,10 @@ class StoreSalesOrderRequest extends FormRequest
             'items'                 => ['required', 'array', 'min:1'],
             'items.*.product_id'    => ['required', 'integer', 'exists:inv_products,id'],
             'items.*.unit_id'       => ['nullable', 'integer', 'exists:inv_unit_types,id'],
+            // The unit the price is quoted PER (may differ from unit_id): a fabric
+            // bought by the metre sells its yards at the per-metre price. Null =
+            // the price is per the quantity's unit (legacy behaviour).
+            'items.*.price_unit_id' => ['nullable', 'integer', 'exists:inv_unit_types,id'],
             'items.*.attribute_id'  => ['nullable', 'integer', 'exists:inv_attributes,id'],
             'items.*.quantity'      => ['required_without:items.*.piece_codes', 'nullable', 'numeric', 'gt:0'],
             'items.*.unit_price'    => ['required', 'numeric', 'min:0'],

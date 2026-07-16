@@ -314,6 +314,9 @@ function emptyItem() {
     product_code:    '',
     product_name:    '',
     unit_id:         '',
+    // The unit the PRICE is quoted per — defaults to the stocking UOM and may differ
+    // from unit_id: qty in Yard at the per-Metre price bills qty x price, unconverted.
+    price_unit_id:   '',
     base_unit_type_id:     null, // the product's stocking UOM — roll weights and stock are in it
     base_unit_category_id: null, // limits the UOM dropdown to units convertible to the stocking UOM
     quantity:        '',
@@ -377,7 +380,13 @@ function rowCostBasis(row) {
   return row.cost_hint != null ? Number(row.cost_hint) : null
 }
 
-/** The line's price, re-expressed per the stocking UOM. `factor` converts line -> base. */
+/**
+ * The line's EFFECTIVE revenue per stocking UOM: amount / stock deducted =
+ * (qty x price) / (qty x factor) = price / factor, where `factor` converts the
+ * QUANTITY's unit -> base. This holds whatever unit the price is labelled per
+ * (price_unit_id), because the amount is always qty x price, unconverted —
+ * a yard line billed at the per-metre price simply earns more per metre.
+ */
 function priceInBase(row, factor) {
   const price = parseFloat(row.unit_price)
   return price > 0 && factor > 0 ? price / factor : 0
@@ -547,22 +556,44 @@ export default function SalesOrderFormPage() {
   }
 
   /**
-   * A price stored per the stocking UOM (43.74 /m), shown per the line's UOM (40 /yd).
-   *
-   * A price per unit U is worth `factor(U -> base)` base units, so it scales by the same
-   * factor as the quantity — never the inverse. 43.74/m x 0.9144 m/yd = 40/yd.
+   * How the line's PRICE unit relates to the stocking UOM — the mirror of
+   * conversionFor for the price side. The price may be quoted per a different unit
+   * than the quantity (qty in Yard, price per Metre): the amount is still
+   * qty x price with NO conversion — that gap is deliberate margin, not a bug.
+   * Legacy lines without a price unit quote per the quantity's unit.
    */
-  const priceInLineUom = (basePrice, row) => {
-    const factor = conversionFor(row)?.factor
+  const priceConversionFor = (row) => {
+    const pu   = unitById.get(String(row.price_unit_id || row.unit_id || ''))
+    const base = unitById.get(String(row.base_unit_type_id ?? ''))
+    if (!pu || !base) return null
+
+    const same   = String(pu.id) === String(base.id)
+    const factor = same
+      ? 1
+      : (pu.base_rate && base.base_rate ? base.base_rate / pu.base_rate : null)
+
+    return { same, factor, priceSymbol: symbolOf(pu), baseSymbol: symbolOf(base) }
+  }
+
+  /**
+   * A price stored per the stocking UOM (500 /m), shown per the line's PRICE unit.
+   * The price unit defaults to the stocking UOM itself, so the per-metre figure fills
+   * in unchanged even when the quantity is in yards.
+   *
+   * A price per unit U is worth `factor(U -> base)` base units, so it scales by the
+   * same factor as a quantity — never the inverse. 43.74/m x 0.9144 m/yd = 40/yd.
+   */
+  const priceInPriceUom = (basePrice, row) => {
+    const factor = priceConversionFor(row)?.factor
     if (basePrice == null) return null
 
     return factor ? Number(basePrice) * factor : Number(basePrice)
   }
 
-  /** Re-price a line when its UOM changes: 400/m becomes 365.76/yd, not 400/yd. */
-  const repriceForUnit = (row, previousUnitId) => {
+  /** Re-price a line when its PRICE unit changes: 400/m becomes 365.76/yd, not 400/yd. */
+  const repriceForPriceUnit = (row, previousUnitId) => {
     const from = unitById.get(String(previousUnitId ?? ''))
-    const to   = unitById.get(String(row.unit_id ?? ''))
+    const to   = unitById.get(String(row.price_unit_id ?? ''))
     const price = parseFloat(row.unit_price)
 
     if (!from || !to || !from.base_rate || !to.base_rate || !(price > 0)) return row
@@ -647,6 +678,10 @@ export default function SalesOrderFormPage() {
         product_code: it.product?.product_code ?? '',
         product_name: it.product?.name         ?? '',
         unit_id:      it.unit_id != null ? String(it.unit_id) : '',
+        // Legacy lines (saved before the price-unit column) quoted per the qty's unit
+        price_unit_id: it.price_unit_id != null
+          ? String(it.price_unit_id)
+          : (it.unit_id != null ? String(it.unit_id) : ''),
         base_unit_type_id:     it.product?.base_unit_type_id ?? null,
         base_unit_category_id: it.product?.base_unit_category_id ?? null,
         quantity:     it.quantity,
@@ -737,6 +772,9 @@ export default function SalesOrderFormPage() {
         product_code: scan.product.product_code ?? '',
         product_name: scan.product.name ?? '',
         unit_id:      scan.product.unit?.id != null ? String(scan.product.unit.id) : '',
+        // Price is quoted per the stocking UOM and STAYS there when the user
+        // switches the selling UOM to Yard — qty(yd) x price(/m) is the intent.
+        price_unit_id: scan.product.base_unit_type_id != null ? String(scan.product.base_unit_type_id) : '',
         base_unit_type_id:     scan.product.base_unit_type_id ?? null,
         base_unit_category_id: scan.product.base_unit_category_id ?? null,
         unit_price:   scan.selling_price != null ? String(scan.selling_price) : '',
@@ -830,6 +868,10 @@ export default function SalesOrderFormPage() {
             product_code: product.product_code ?? '',
             product_name: product.name ?? '',
             unit_id:      defaultUnitTypeId != null ? String(defaultUnitTypeId) : '',
+            // Prices default to per the stocking UOM regardless of the selling UOM
+            price_unit_id: product.base_unit_type_id != null
+              ? String(product.base_unit_type_id)
+              : (defaultUnitTypeId != null ? String(defaultUnitTypeId) : ''),
             base_unit_type_id:     product.base_unit_type_id ?? null,
             base_unit_category_id: product.base_unit_category_id ?? null,
             attribute_id: '',
@@ -857,9 +899,10 @@ export default function SalesOrderFormPage() {
         setItems((prev) => prev.map((row) => {
           if (row._key !== rowKey) return row
 
-          // Both prices arrive per the stocking UOM. The selling price is shown in the
-          // line's own unit; the cost stays in base, which is what isBelowCost compares in.
-          const listPrice = priceInLineUom(unit_price, row)
+          // Both prices arrive per the stocking UOM. The selling price is shown per the
+          // line's PRICE unit (the stocking UOM by default, so the per-metre figure fills
+          // unchanged); the cost stays in base, which is what isBelowCost compares in.
+          const listPrice = priceInPriceUom(unit_price, row)
 
           return {
             ...row,
@@ -925,8 +968,9 @@ export default function SalesOrderFormPage() {
       // capacity — the user then lowers it if the customer wants only part.
       const lines = [...groups.values()].map((groupPieces, i) => {
         const line = i === 0 ? base : { ...emptyItem(), ...base, _key: Date.now() + Math.random() + i }
-        // The roll's shipment price is per the stocking UOM — show it in the line's unit.
-        const rollPrice = priceInLineUom(groupPieces[0].selling_price, line)
+        // The roll's shipment price is per the stocking UOM — shown per the line's
+        // PRICE unit (the stocking UOM by default, so it fills unchanged).
+        const rollPrice = priceInPriceUom(groupPieces[0].selling_price, line)
 
         return fillQuantityFromRolls({
           ...line,
@@ -970,11 +1014,16 @@ export default function SalesOrderFormPage() {
     let next = { ...row, [field]: value }
 
     if (field === 'unit_id') {
-      // Switching from metres to yards must re-express BOTH the quantity and the price,
-      // or the same numbers would silently come to mean something else — 400 would go
-      // from "per metre" to "per yard", a 9% overcharge nobody typed.
-      next = repriceForUnit(next, row.unit_id)
+      // The price is pinned to its own unit (price_unit_id), so switching the selling
+      // UOM re-expresses only the quantity — 500/m stays 500/m whether the customer
+      // buys metres or yards, and a yard line billed at 500/m is the intended margin.
       if (next.pieces.length > 0) next = fillQuantityFromRolls(next)
+    }
+
+    if (field === 'price_unit_id') {
+      // Changing the PRICE unit re-expresses the price so its value keeps meaning
+      // the same thing: 400/m becomes 365.76/yd, not 400/yd.
+      next = repriceForPriceUnit(next, row.price_unit_id)
     }
 
     return next
@@ -1100,6 +1149,7 @@ export default function SalesOrderFormPage() {
       items: validItems.map((r) => ({
         product_id:   parseInt(r.product_id),
         unit_id:      r.unit_id ? parseInt(r.unit_id) : null,
+        price_unit_id: r.price_unit_id ? parseInt(r.price_unit_id) : null,
         attribute_id: r.attribute_id ? parseInt(r.attribute_id) : null,
         quantity:     rowQty(r),
         unit_price:   parseFloat(r.unit_price) || 0,
@@ -1332,8 +1382,9 @@ export default function SalesOrderFormPage() {
                       onNext={() => focusCell(row._key, 'price')}
                     />
                   </td>
-                  {/* Unit Price — quoted per the line's UOM (what the customer is told).
-                      The stock ledger stores it per the stocking UOM; the hint shows that. */}
+                  {/* Unit Price — quoted per its OWN unit (the Price UOM dropdown), which may
+                      differ from the selling UOM: qty in Yard at the per-Metre price bills
+                      qty x price, unconverted. The hint shows the effective per-base figure. */}
                   <td className="px-1.5 py-1">
                     {(() => {
                       const conv      = conversionFor(row)
@@ -1357,18 +1408,22 @@ export default function SalesOrderFormPage() {
                                 }
                               }}
                               className={belowCost ? TABLE_INPUT_WARN : TABLE_INPUT} />
-                            {conv && (
-                              <span className="shrink-0 text-[9px] font-semibold leading-none text-slate-400">
-                                /{conv.lineSymbol}
-                              </span>
-                            )}
+                            <div className="w-14 shrink-0" title="Unit the price is quoted per — independent of the selling UOM">
+                              <DropdownSelectCell
+                                value={row.price_unit_id}
+                                groups={uomGroupsFor(row.base_unit_category_id)}
+                                onChange={(val) => setRowField(idx, 'price_unit_id', val)}
+                                placeholder="/—"
+                                disabled={!row.product_id}
+                              />
+                            </div>
                           </div>
 
-                          {/* What the stock ledger will record, so a per-yard quote can be
-                              checked against a per-metre cost without mental arithmetic. */}
+                          {/* The effective per-stocking-UOM revenue (amount / stock deducted),
+                              so a yard quantity billed per metre shows what it really earns. */}
                           {conv && !conv.same && conv.factor && price > 0 && (
                             <span className="text-[9px] font-medium leading-none text-indigo-500">
-                              = {fmtQty(price / conv.factor, 4)} /{conv.baseSymbol}
+                              = {fmtQty(price / conv.factor, 4)} /{conv.baseSymbol} effective
                             </span>
                           )}
                           {belowCost && (
@@ -1584,13 +1639,24 @@ export default function SalesOrderFormPage() {
               </div>
               <div>
                 <label className={LABEL_CLS}>
-                  Unit Price ({CURRENCY}{conversionFor(row)?.lineSymbol ? `/${conversionFor(row).lineSymbol}` : ''})
+                  Unit Price ({CURRENCY}{priceConversionFor(row)?.priceSymbol ? `/${priceConversionFor(row).priceSymbol}` : ''})
                 </label>
-                <input
-                  type="number" min="0" step="0.01" value={row.unit_price}
-                  onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
-                  className={isBelowCost(row, conversionFor(row)?.factor ?? 1) ? TABLE_INPUT_WARN : TABLE_INPUT}
-                />
+                <div className="flex items-center gap-0.5">
+                  <input
+                    type="number" min="0" step="0.01" value={row.unit_price}
+                    onChange={(e) => setRowField(idx, 'unit_price', e.target.value)}
+                    className={isBelowCost(row, conversionFor(row)?.factor ?? 1) ? TABLE_INPUT_WARN : TABLE_INPUT}
+                  />
+                  <div className="w-14 shrink-0" title="Unit the price is quoted per — independent of the selling UOM">
+                    <DropdownSelectCell
+                      value={row.price_unit_id}
+                      groups={uomGroupsFor(row.base_unit_category_id)}
+                      onChange={(val) => setRowField(idx, 'price_unit_id', val)}
+                      placeholder="/—"
+                      disabled={!row.product_id}
+                    />
+                  </div>
+                </div>
                 {isBelowCost(row, conversionFor(row)?.factor ?? 1) && (
                   <p className="mt-0.5 text-[9px] font-semibold leading-tight text-amber-600">
                     Below cost ({fmtMoneyWithSymbol(rowCostBasis(row) * (conversionFor(row)?.factor ?? 1))})

@@ -16,6 +16,7 @@ class SalesOrderItem extends Model
         'so_id',
         'product_id',
         'unit_id',
+        'price_unit_id',
         'attribute_id',
         'is_scanned',
         'quantity',
@@ -33,6 +34,7 @@ class SalesOrderItem extends Model
         'so_id'        => 'integer',
         'product_id'   => 'integer',
         'unit_id'      => 'integer',
+        'price_unit_id' => 'integer',
         'attribute_id' => 'integer',
         'is_scanned'   => 'boolean',
         'quantity'     => 'decimal:4',
@@ -58,6 +60,12 @@ class SalesOrderItem extends Model
     public function unit(): BelongsTo
     {
         return $this->belongsTo(UnitType::class, 'unit_id');
+    }
+
+    /** The unit the price is quoted per — may differ from unit_id (the quantity's unit). */
+    public function priceUnit(): BelongsTo
+    {
+        return $this->belongsTo(UnitType::class, 'price_unit_id');
     }
 
     public function attribute(): BelongsTo
