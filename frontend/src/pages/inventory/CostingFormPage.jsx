@@ -136,7 +136,7 @@ function QtyChips({ groups }) {
  *
  *   fob/cif    = grn unit_price ÷ conversion_factor
  *   expenses   = Σ typed amounts per expense type
- *   sscl       = sscl% × (fob/cif + expenses + margin); default 1.25
+ *   sscl       = sscl% × (fob/cif + expenses + margin); default 1.25 — rounded UP to the whole rupee
  *   before_tax = fob/cif + expenses + margin + sscl
  *   after_tax  = before_tax + VAT%
  *
@@ -164,8 +164,11 @@ function calcBreakdown(lines, cfg, lineCosting) {
     const effVatPct  = cfg.applyVat ? numOr(lc.vat_pct, cfg.vatPct) : 0
     const marginBase = numOr(lc.margin, 0)
 
-    // SSCL is levied on the whole cost-plus-margin sum (FOB/CIF + expenses + margin)
-    const ssclBase      = (fobBase + expBase + marginBase) * (effSsclPct / 100)
+    // SSCL is levied on the whole cost-plus-margin sum (FOB/CIF + expenses + margin),
+    // then rounded UP to the whole rupee per base unit (mirrors CostingService —
+    // the levy is billed in whole rupees, never cents). toFixed(6) first so float
+    // dust cannot bump an exact 6.00 into 7.
+    const ssclBase      = Math.ceil(Number(((fobBase + expBase + marginBase) * (effSsclPct / 100)).toFixed(6)))
     const beforeTaxBase = fobBase + expBase + marginBase + ssclBase
     const vatBase       = beforeTaxBase * (effVatPct / 100)
     const afterTaxBase  = beforeTaxBase + vatBase

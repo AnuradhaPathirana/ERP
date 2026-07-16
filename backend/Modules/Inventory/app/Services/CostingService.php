@@ -28,7 +28,7 @@ use Modules\Inventory\Models\GoodsReceivedNoteItem;
  *
  *   fob_cif      = grn unit_price ÷ conversion_factor          (per base unit)
  *   expenses     = Σ typed amounts per expense type of the costing's FOB/CIF list
- *   sscl         = sscl% × (fob_cif + expenses + margin); default 1.25
+ *   sscl         = sscl% × (fob_cif + expenses + margin); default 1.25 — rounded UP to the whole rupee
  *   before_tax   = fob_cif + expenses + margin + sscl
  *   after_tax    = before_tax + VAT%                  (= selling_price)
  *
@@ -396,7 +396,7 @@ class CostingService
      * costing inputs — expenses, SSCL %, margin amount and VAT %, ALL per the
      * product's BASE (stocking) unit:
      *
-     *   before_tax = fob/cif + Σ expenses + margin + sscl% × (fob/cif + expenses + margin)
+     *   before_tax = fob/cif + Σ expenses + margin + ceil(sscl% × (fob/cif + expenses + margin))
      *   after_tax  = before_tax + vat%              (= selling_price)
      *
      * There is no cross-line apportionment any more: every line prices itself.
@@ -458,8 +458,11 @@ class CostingService
             $effSsclPct = $applySscl ? ($lineSsclPct ?? $ssclPct) : 0.0;
             $effVatPct  = $applyVat ? ($lineVatPct ?? $vatPct) : 0.0;
 
-            // SSCL is levied on the whole cost-plus-margin sum (FOB/CIF + expenses + margin)
-            $ssclBase      = ($fobBase + $expBase + $marginBase) * ($effSsclPct / 100);
+            // SSCL is levied on the whole cost-plus-margin sum (FOB/CIF + expenses + margin),
+            // then rounded UP to the whole rupee per base unit — the levy is billed in
+            // whole rupees, never cents. round() first so float dust cannot bump an
+            // exact 6.00 into 7.
+            $ssclBase      = (float) ceil(round(($fobBase + $expBase + $marginBase) * ($effSsclPct / 100), 6));
             $beforeTaxBase = $fobBase + $expBase + $marginBase + $ssclBase;
             $vatBase       = $beforeTaxBase * ($effVatPct / 100);
             $afterTaxBase  = $beforeTaxBase + $vatBase;

@@ -144,8 +144,8 @@ class CostingTest extends TestCase
         $grn = $this->makeGrn($product, qty: 10, unitPrice: 1000);
 
         // fob 1000 + expenses (150+50) + margin 60 = 1260
-        // sscl 1.25% × 1260 = 15.75 → before_tax = 1275.75
-        // vat 18% × 1275.75 = 229.635 → after_tax = 1505.385
+        // sscl 1.25% × 1260 = 15.75, rounded UP to 16 → before_tax = 1276
+        // vat 18% × 1276 = 229.68 → after_tax = 1505.68
         $response = $this->actingAs($this->user)
             ->postJson('/api/v1/costings', $this->validPayload(
                 [$grn['grn']->id],
@@ -167,11 +167,11 @@ class CostingTest extends TestCase
         $item = $response->json('data.items.0');
         $this->assertEquals(200.0, $item['expense_total_base']);
         $this->assertEquals(1200.0, $item['landed_unit_cost']);
-        $this->assertEquals(15.75, $item['sscl_amount_base']);      // 1.25% of (fob + expenses + margin)
+        $this->assertEquals(16.0, $item['sscl_amount_base']);       // 1.25% of (fob + expenses + margin) = 15.75, ceiled
         $this->assertEquals(60.0, $item['margin_amount_base']);
-        $this->assertEquals(1275.75, $item['before_tax_price_base']);
-        $this->assertEquals(229.635, $item['vat_amount_base']);     // 18% of before-tax
-        $this->assertEquals(1505.385, $item['selling_price_base']);
+        $this->assertEquals(1276.0, $item['before_tax_price_base']);
+        $this->assertEquals(229.68, $item['vat_amount_base']);      // 18% of before-tax
+        $this->assertEquals(1505.68, $item['selling_price_base']);
 
         // The typed expense rows round-trip
         $expenses = collect($item['expenses'])->keyBy('expense_type_id');
@@ -183,10 +183,10 @@ class CostingTest extends TestCase
         $this->assertEquals(10000.0, $response->json('data.material_cost'));
         $this->assertEquals(2000.0, $response->json('data.total_additional_expenses'));
         $this->assertEquals(12000.0, $response->json('data.total_landed_cost'));
-        $this->assertEquals(157.5, $response->json('data.sscl_amount'));
-        $this->assertEquals(12757.5, $response->json('data.gross_fob_cif_value')); // Before-Tax Value
-        $this->assertEquals(2296.35, $response->json('data.vat_amount'));
-        $this->assertEquals(15053.85, $response->json('data.total_price_with_vat')); // After-Tax Value
+        $this->assertEquals(160.0, $response->json('data.sscl_amount'));
+        $this->assertEquals(12760.0, $response->json('data.gross_fob_cif_value')); // Before-Tax Value
+        $this->assertEquals(2296.8, $response->json('data.vat_amount'));
+        $this->assertEquals(15056.8, $response->json('data.total_price_with_vat')); // After-Tax Value
     }
 
     public function test_sscl_applies_to_the_full_cost_plus_margin_sum(): void
@@ -207,9 +207,9 @@ class CostingTest extends TestCase
             ))
             ->assertCreated();
 
-        // 1.25% of (1000 + 500) = 18.75 — the expenses ARE part of the SSCL base
-        $this->assertEquals(18.75, $response->json('data.items.0.sscl_amount_base'));
-        $this->assertEquals(1518.75, $response->json('data.items.0.before_tax_price_base'));
+        // 1.25% of (1000 + 500) = 18.75, ceiled to 19 — the expenses ARE part of the SSCL base
+        $this->assertEquals(19.0, $response->json('data.items.0.sscl_amount_base'));
+        $this->assertEquals(1519.0, $response->json('data.items.0.before_tax_price_base'));
     }
 
     public function test_line_sscl_and_vat_overrides_beat_header_defaults(): void
@@ -238,10 +238,10 @@ class CostingTest extends TestCase
         $this->assertEquals(84.0, $a['vat_amount_base']);
         $this->assertEquals(1134.0, $a['selling_price_base']);
 
-        $b = $items[$grnB['item']->id]; // defaults: sscl 1.25% = 12.50, before 1012.50, vat 18% = 182.25
-        $this->assertEquals(12.5, $b['sscl_amount_base']);
-        $this->assertEquals(182.25, $b['vat_amount_base']);
-        $this->assertEquals(1194.75, $b['selling_price_base']);
+        $b = $items[$grnB['item']->id]; // defaults: sscl 1.25% = 12.50 ceiled to 13, before 1013, vat 18% = 182.34
+        $this->assertEquals(13.0, $b['sscl_amount_base']);
+        $this->assertEquals(182.34, $b['vat_amount_base']);
+        $this->assertEquals(1195.34, $b['selling_price_base']);
     }
 
     public function test_sscl_and_vat_toggles_off_leave_before_and_after_tax_equal(): void
