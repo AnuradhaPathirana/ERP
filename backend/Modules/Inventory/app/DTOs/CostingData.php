@@ -49,7 +49,7 @@ final class CostingData
             transactionDate: $request->validated('transaction_date'),
             note:            $request->validated('note'),
             applySscl:       (bool) ($request->validated('apply_sscl') ?? true),
-            ssclPct:         (float) ($request->validated('sscl_pct') ?? 2.5),
+            ssclPct:         (float) ($request->validated('sscl_pct') ?? 1.25),
             applyVat:        (bool) ($request->validated('apply_vat') ?? true),
             vatPct:          (float) ($request->validated('vat_pct') ?? 18),
             items:           (array) ($request->validated('items') ?? []),

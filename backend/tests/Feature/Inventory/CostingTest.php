@@ -20,7 +20,8 @@ use Tests\TestCase;
 
 /**
  * Costing redesign: per-product cost build-up, every amount per BASE unit.
- *   before_tax = fob/cif (GRN price) + Σ expenses + sscl% × fob/cif ONLY + margin
+ *   before_tax = fob/cif (GRN price) + Σ expenses + margin
+ *                + sscl% × (fob/cif + expenses + margin)   [default 1.25%]
  *   after_tax  = before_tax + vat%              (= selling_price)
  * Confirm keeps the one-GRN-per-confirmed-costing lock and mirrors
  * landed/selling onto the product price list.
@@ -100,7 +101,7 @@ class CostingTest extends TestCase
             'grn_ids'          => $grnIds,
             'transaction_date' => '2026-07-10',
             'apply_sscl'       => false,
-            'sscl_pct'         => 2.5,
+            'sscl_pct'         => 1.25,
             'apply_vat'        => false,
             'vat_pct'          => 18,
             'items'            => [],
@@ -142,8 +143,9 @@ class CostingTest extends TestCase
         $product = Product::factory()->create();
         $grn = $this->makeGrn($product, qty: 10, unitPrice: 1000);
 
-        // fob 1000 + expenses (150+50) + sscl 2.5% × 1000 = 25 + margin 60
-        // before_tax = 1285 ; vat 18% = 231.30 ; after_tax = 1516.30
+        // fob 1000 + expenses (150+50) + margin 60 = 1260
+        // sscl 1.25% × 1260 = 15.75 → before_tax = 1275.75
+        // vat 18% × 1275.75 = 229.635 → after_tax = 1505.385
         $response = $this->actingAs($this->user)
             ->postJson('/api/v1/costings', $this->validPayload(
                 [$grn['grn']->id],
@@ -165,11 +167,11 @@ class CostingTest extends TestCase
         $item = $response->json('data.items.0');
         $this->assertEquals(200.0, $item['expense_total_base']);
         $this->assertEquals(1200.0, $item['landed_unit_cost']);
-        $this->assertEquals(25.0, $item['sscl_amount_base']);       // 2.5% of the FOB amount ONLY
+        $this->assertEquals(15.75, $item['sscl_amount_base']);      // 1.25% of (fob + expenses + margin)
         $this->assertEquals(60.0, $item['margin_amount_base']);
-        $this->assertEquals(1285.0, $item['before_tax_price_base']);
-        $this->assertEquals(231.3, $item['vat_amount_base']);       // 18% of before-tax
-        $this->assertEquals(1516.3, $item['selling_price_base']);
+        $this->assertEquals(1275.75, $item['before_tax_price_base']);
+        $this->assertEquals(229.635, $item['vat_amount_base']);     // 18% of before-tax
+        $this->assertEquals(1505.385, $item['selling_price_base']);
 
         // The typed expense rows round-trip
         $expenses = collect($item['expenses'])->keyBy('expense_type_id');
@@ -181,13 +183,13 @@ class CostingTest extends TestCase
         $this->assertEquals(10000.0, $response->json('data.material_cost'));
         $this->assertEquals(2000.0, $response->json('data.total_additional_expenses'));
         $this->assertEquals(12000.0, $response->json('data.total_landed_cost'));
-        $this->assertEquals(250.0, $response->json('data.sscl_amount'));
-        $this->assertEquals(12850.0, $response->json('data.gross_fob_cif_value')); // Before-Tax Value
-        $this->assertEquals(2313.0, $response->json('data.vat_amount'));
-        $this->assertEquals(15163.0, $response->json('data.total_price_with_vat')); // After-Tax Value
+        $this->assertEquals(157.5, $response->json('data.sscl_amount'));
+        $this->assertEquals(12757.5, $response->json('data.gross_fob_cif_value')); // Before-Tax Value
+        $this->assertEquals(2296.35, $response->json('data.vat_amount'));
+        $this->assertEquals(15053.85, $response->json('data.total_price_with_vat')); // After-Tax Value
     }
 
-    public function test_sscl_applies_to_fob_amount_only_never_the_expenses(): void
+    public function test_sscl_applies_to_the_full_cost_plus_margin_sum(): void
     {
         $product = Product::factory()->create();
         $grn = $this->makeGrn($product, qty: 10, unitPrice: 1000);
@@ -205,9 +207,9 @@ class CostingTest extends TestCase
             ))
             ->assertCreated();
 
-        // 2.5% of 1000 = 25 — NOT 2.5% of 1500
-        $this->assertEquals(25.0, $response->json('data.items.0.sscl_amount_base'));
-        $this->assertEquals(1525.0, $response->json('data.items.0.before_tax_price_base'));
+        // 1.25% of (1000 + 500) = 18.75 — the expenses ARE part of the SSCL base
+        $this->assertEquals(18.75, $response->json('data.items.0.sscl_amount_base'));
+        $this->assertEquals(1518.75, $response->json('data.items.0.before_tax_price_base'));
     }
 
     public function test_line_sscl_and_vat_overrides_beat_header_defaults(): void
@@ -236,10 +238,10 @@ class CostingTest extends TestCase
         $this->assertEquals(84.0, $a['vat_amount_base']);
         $this->assertEquals(1134.0, $a['selling_price_base']);
 
-        $b = $items[$grnB['item']->id]; // defaults: sscl 2.5% = 25, before 1025, vat 18% = 184.50
-        $this->assertEquals(25.0, $b['sscl_amount_base']);
-        $this->assertEquals(184.5, $b['vat_amount_base']);
-        $this->assertEquals(1209.5, $b['selling_price_base']);
+        $b = $items[$grnB['item']->id]; // defaults: sscl 1.25% = 12.50, before 1012.50, vat 18% = 182.25
+        $this->assertEquals(12.5, $b['sscl_amount_base']);
+        $this->assertEquals(182.25, $b['vat_amount_base']);
+        $this->assertEquals(1194.75, $b['selling_price_base']);
     }
 
     public function test_sscl_and_vat_toggles_off_leave_before_and_after_tax_equal(): void
@@ -346,24 +348,25 @@ class CostingTest extends TestCase
         $product = Product::factory()->create();
         $grn = $this->makeGrn($product, qty: 10, unitPrice: 1000);
 
+        // fob 1000 + exp 200 + margin 80 = 1280 ; sscl 1.25% × 1280 = 16 → before-tax 1296
         $this->actingAs($this->user)
             ->postJson('/api/v1/costings/calculate-preview', [
                 'grn_ids'    => [$grn['grn']->id],
                 'apply_sscl' => true,
-                'sscl_pct'   => 2.5,
+                'sscl_pct'   => 1.25,
                 'apply_vat'  => false,
                 'items'      => [[
                     'grn_item_id'        => $grn['item']->id,
-                    'margin_amount_base' => 75,
+                    'margin_amount_base' => 80,
                     'expenses'           => [['expense_type_id' => $this->freight->id, 'amount' => 200]],
                 ]],
             ])
             ->assertOk()
             ->assertJsonPath('data.items.0.landed_unit_cost', 1200)
-            ->assertJsonPath('data.items.0.before_tax_price_base', 1300)
-            ->assertJsonPath('data.items.0.selling_price_base', 1300)
-            ->assertJsonPath('data.summary.total_price_with_vat', 13000)
-            ->assertJsonPath('data.summary.gross_fob_cif_value', 13000);
+            ->assertJsonPath('data.items.0.before_tax_price_base', 1296)
+            ->assertJsonPath('data.items.0.selling_price_base', 1296)
+            ->assertJsonPath('data.summary.total_price_with_vat', 12960)
+            ->assertJsonPath('data.summary.gross_fob_cif_value', 12960);
 
         $this->assertSame(0, Costing::count());
     }

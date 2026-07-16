@@ -136,8 +136,8 @@ function QtyChips({ groups }) {
  *
  *   fob/cif    = grn unit_price ÷ conversion_factor
  *   expenses   = Σ typed amounts per expense type
- *   sscl       = sscl% × fob/cif ONLY (never the expenses)
- *   before_tax = fob/cif + expenses + sscl + margin (typed addon amount)
+ *   sscl       = sscl% × (fob/cif + expenses + margin); default 1.25
+ *   before_tax = fob/cif + expenses + margin + sscl
  *   after_tax  = before_tax + VAT%
  *
  * before_tax feeds non-VAT invoices later, after_tax feeds VAT invoices. */
@@ -164,9 +164,9 @@ function calcBreakdown(lines, cfg, lineCosting) {
     const effVatPct  = cfg.applyVat ? numOr(lc.vat_pct, cfg.vatPct) : 0
     const marginBase = numOr(lc.margin, 0)
 
-    // SSCL is levied on the FOB/CIF amount ONLY — never on the expenses
-    const ssclBase      = fobBase * (effSsclPct / 100)
-    const beforeTaxBase = fobBase + expBase + ssclBase + marginBase
+    // SSCL is levied on the whole cost-plus-margin sum (FOB/CIF + expenses + margin)
+    const ssclBase      = (fobBase + expBase + marginBase) * (effSsclPct / 100)
+    const beforeTaxBase = fobBase + expBase + marginBase + ssclBase
     const vatBase       = beforeTaxBase * (effVatPct / 100)
     const afterTaxBase  = beforeTaxBase + vatBase
 
@@ -289,7 +289,7 @@ export default function CostingFormPage() {
     transaction_date: today,
     note:             '',
     apply_sscl:       true,
-    sscl_pct:         2.5,
+    sscl_pct:         1.25,
     apply_vat:        true,
     vat_pct:          18,
   })
@@ -798,7 +798,7 @@ export default function CostingFormPage() {
               extra={
                 <div className="flex items-center gap-2 text-[10px]">
                   <span className="text-slate-400">
-                    {typeLabel} + Expenses{form.apply_sscl ? ' + SSCL' : ''} + Margin = Before-Tax{form.apply_vat ? ' → +VAT = After-Tax' : ''} · per base unit
+                    {typeLabel} + Expenses + Margin{form.apply_sscl ? ' + SSCL' : ''} = Before-Tax{form.apply_vat ? ' → +VAT = After-Tax' : ''} · per base unit
                   </span>
                   {breakdownItems.length > 0 && (
                     <span className="flex items-center gap-1 text-slate-500">
@@ -830,8 +830,8 @@ export default function CostingFormPage() {
                     <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Received</th>
                     <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title={`The GRN purchasing price — the ${typeLabel} value, per the product's stocking unit`}>{typeLabel}</th>
                     <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title="Sum of the expense amounts typed in the line's panel">+Expenses</th>
-                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title={`SSCL % of the ${typeLabel} amount only`}>+SSCL</th>
                     <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title="Addon margin amount per base unit">+Margin</th>
+                    <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title={`SSCL % of (${typeLabel} + Expenses + Margin)`}>+SSCL</th>
                     <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title="Selling price before VAT — what non-VAT invoices bill">Before-Tax</th>
                     <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">+VAT</th>
                     <th className="px-2 py-2 text-right font-semibold uppercase tracking-wider text-slate-500" title="Selling price including VAT — what VAT invoices bill">After-Tax</th>
@@ -893,11 +893,11 @@ export default function CostingFormPage() {
                             <td className={`px-2 py-1 text-right ${group.expense_total_base > 0 ? 'text-emerald-600' : 'text-slate-300'}`}>
                               +<PerUnit value={group.expense_total_base} symbol={baseSym} />
                             </td>
-                            <td className={`px-2 py-1 text-right ${group.sscl.max > 0 ? 'text-amber-600' : 'text-slate-300'}`} title={`${fmt(rep.eff_sscl_pct)}% of the ${typeLabel} amount only`}>
-                              +<RangeUnit range={group.sscl} symbol={baseSym} />
-                            </td>
                             <td className={`px-2 py-1 text-right ${group.margin_amount_base > 0 ? 'text-slate-600' : 'text-slate-300'}`}>
                               +<PerUnit value={group.margin_amount_base} symbol={baseSym} />
+                            </td>
+                            <td className={`px-2 py-1 text-right ${group.sscl.max > 0 ? 'text-amber-600' : 'text-slate-300'}`} title={`${fmt(rep.eff_sscl_pct)}% of (${typeLabel} + Expenses + Margin)`}>
+                              +<RangeUnit range={group.sscl} symbol={baseSym} />
                             </td>
                             <td className="px-2 py-1 text-right font-semibold"><RangeUnit range={group.before} symbol={baseSym} className="text-slate-800" /></td>
                             <td className={`px-2 py-1 text-right ${group.vat.max > 0 ? 'text-amber-600' : 'text-slate-300'}`} title={`VAT ${fmt(rep.eff_vat_pct)}% of before-tax`}>
@@ -937,8 +937,8 @@ export default function CostingFormPage() {
                       <td className={`px-2 py-1.5 text-right ${footCell}`}><QtyChips groups={qtyGroups} /></td>
                       <td className={`px-2 py-1.5 text-right tabular-nums text-slate-700 ${footCell}`} title={`Total ${typeLabel} (purchase) value of the selected GRNs`}><Money value={totals.purchaseValue} /></td>
                       <td className={`px-2 py-1.5 text-right tabular-nums text-emerald-700 ${footCell}`}>+<Money value={totals.expensesValue} /></td>
-                      <td className={`px-2 py-1.5 text-right tabular-nums text-amber-700 ${footCell}`}>+<Money value={totals.ssclValue} /></td>
                       <td className={`px-2 py-1.5 text-right tabular-nums text-slate-700 ${footCell}`}>+<Money value={totals.marginValue} /></td>
+                      <td className={`px-2 py-1.5 text-right tabular-nums text-amber-700 ${footCell}`}>+<Money value={totals.ssclValue} /></td>
                       <td className={`px-2 py-1.5 text-right tabular-nums text-slate-800 ${footCell}`} title="Total Before-Tax selling value"><Money value={totals.beforeTaxValue} /></td>
                       <td className={`px-2 py-1.5 text-right tabular-nums text-amber-700 ${footCell}`}>+<Money value={totals.vatValue} /></td>
                       <td className={`px-2 py-1.5 text-right tabular-nums text-indigo-700 ${footCell}`} title="Total After-Tax selling value"><Money value={totals.afterTaxValue} /></td>
@@ -1000,17 +1000,17 @@ export default function CostingFormPage() {
 
               <div className="border-t border-slate-200 my-1" />
 
-              {/* SSCL toggle — % of the FOB/CIF amount only */}
+              {/* SSCL toggle — % of (FOB/CIF + Expenses + Margin) */}
               <div className="flex items-center justify-between py-1">
                 <div className="flex items-center gap-1.5">
                   <CheckToggle checked={form.apply_sscl} onChange={(v) => setField('apply_sscl', v)} label="SSCL" disabled={readOnly} />
                   <input
-                    type="number" min="0" max="100" step="0.1"
+                    type="number" min="0" max="100" step="0.05"
                     className={PCT_INP}
                     value={form.sscl_pct}
                     onChange={(e) => setField('sscl_pct', e.target.value)}
                     disabled={readOnly || !form.apply_sscl}
-                    title={`SSCL % of the ${typeLabel} amount only (lines can override)`}
+                    title={`SSCL % of (${typeLabel} + Expenses + Margin) — lines can override`}
                   />
                   <span className="text-[10px] text-slate-400">%</span>
                 </div>
@@ -1123,11 +1123,28 @@ function GroupCostingPanel({ group, lc, baseSym, typeLabel, expenseTypes, form, 
   const perUnitTag = <span className="text-[9px] font-normal text-slate-400">/{baseSym || 'unit'}</span>
   const baseQty    = group.totalBaseQty
   const rep        = group.rep
+  const panelRef   = useRef(null)
 
   const total = (perUnit) => `${fmt((parseFloat(perUnit) || 0) * baseQty)} ${CURRENCY}`
 
+  // Keyboard-first entry: Enter hops to the next input of the panel, in visual
+  // order — expense fields one by one, then Margin → SSCL % → VAT % (DOM order).
+  // The target's value is pre-selected so the next number types straight over it.
+  const onEnterNext = (e) => {
+    if (e.key !== 'Enter' || e.target.tagName !== 'INPUT') return
+    e.preventDefault()
+    const inputs = [...(panelRef.current?.querySelectorAll('input:not([disabled])') ?? [])]
+    const next   = inputs[inputs.indexOf(e.target) + 1]
+    if (next) {
+      next.focus()
+      next.select?.()
+    } else {
+      e.target.blur() // last field — done with this product
+    }
+  }
+
   return (
-    <div onClick={(e) => e.stopPropagation()}>
+    <div ref={panelRef} onClick={(e) => e.stopPropagation()} onKeyDown={onEnterNext}>
       <div className="flex flex-wrap gap-x-5 gap-y-2 items-start">
 
         {/* Expense inputs — one per type, shared by every colour of this product */}
@@ -1179,24 +1196,6 @@ function GroupCostingPanel({ group, lc, baseSym, typeLabel, expenseTypes, form, 
           <BuildUpRow label={`${typeLabel} (GRN Price)`} value={rep.fob_base} tag={perUnitTag} totalText={total(rep.fob_base)} />
           <BuildUpRow label="+ Expenses" value={group.expense_total_base} tag={perUnitTag} totalText={total(group.expense_total_base)} valueClass="text-emerald-600" />
 
-          {/* SSCL — % of the FOB/CIF amount ONLY */}
-          <div className="flex items-center justify-between gap-1 py-0.5">
-            <div className="flex items-center gap-1">
-              <span className="text-[10px] text-slate-500">+ SSCL</span>
-              <input
-                type="number" min="0" max="100" step="0.1"
-                className={`${PCT_INP} !w-11`}
-                placeholder={String(form.sscl_pct)}
-                value={lc.sscl_pct ?? ''}
-                onChange={(e) => onField('sscl_pct', e.target.value)}
-                disabled={readOnly || !form.apply_sscl}
-                title={form.apply_sscl ? `SSCL % of the ${typeLabel} amount only (blank = ${form.sscl_pct}%)` : 'SSCL is off for this costing'}
-              />
-              <span className="text-[9px] text-slate-400">% of {typeLabel}</span>
-            </div>
-            <span className="text-[11px] tabular-nums text-amber-600" title={total(rep.sscl_amount_base)}>{fmt(rep.sscl_amount_base)}{perUnitTag}</span>
-          </div>
-
           {/* Margin — a typed addon AMOUNT per base unit */}
           <div className="flex items-center justify-between gap-1 py-0.5">
             <div className="flex items-center gap-1">
@@ -1215,6 +1214,24 @@ function GroupCostingPanel({ group, lc, baseSym, typeLabel, expenseTypes, form, 
             <span className="text-[11px] tabular-nums text-slate-600" title={total(group.margin_amount_base)}>{fmt(group.margin_amount_base)}{perUnitTag}</span>
           </div>
 
+          {/* SSCL — % of the whole sum above (FOB/CIF + Expenses + Margin) */}
+          <div className="flex items-center justify-between gap-1 py-0.5">
+            <div className="flex items-center gap-1">
+              <span className="text-[10px] text-slate-500">+ SSCL</span>
+              <input
+                type="number" min="0" max="100" step="0.05"
+                className={`${PCT_INP} w-16!`}
+                placeholder={String(form.sscl_pct)}
+                value={lc.sscl_pct ?? ''}
+                onChange={(e) => onField('sscl_pct', e.target.value)}
+                disabled={readOnly || !form.apply_sscl}
+                title={form.apply_sscl ? `SSCL % of (${typeLabel} + Expenses + Margin) — blank = ${form.sscl_pct}%` : 'SSCL is off for this costing'}
+              />
+              <span className="text-[9px] text-slate-400">% of sum</span>
+            </div>
+            <span className="text-[11px] tabular-nums text-amber-600" title={total(rep.sscl_amount_base)}>{fmt(rep.sscl_amount_base)}{perUnitTag}</span>
+          </div>
+
           <div className="my-0.5 border-t border-slate-200" />
           <BuildUpRow label="= Before-Tax" value={rep.before_tax_price_base} tag={perUnitTag} totalText={total(rep.before_tax_price_base)} labelClass="font-bold text-slate-700" valueClass="font-bold text-slate-800" />
 
@@ -1224,7 +1241,7 @@ function GroupCostingPanel({ group, lc, baseSym, typeLabel, expenseTypes, form, 
               <span className="text-[10px] text-slate-500">+ VAT</span>
               <input
                 type="number" min="0" max="100" step="0.1"
-                className={`${PCT_INP} !w-11`}
+                className={`${PCT_INP} w-16!`}
                 placeholder={String(form.vat_pct)}
                 value={lc.vat_pct ?? ''}
                 onChange={(e) => onField('vat_pct', e.target.value)}

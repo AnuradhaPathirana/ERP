@@ -27,7 +27,7 @@ class StoreCostingRequest extends FormRequest
             'note'             => ['nullable', 'string'],
 
             // Header defaults for the per-line build-up: every line computes
-            //   before_tax = fob/cif + Σ expenses + SSCL(% of fob/cif only) + margin
+            //   before_tax = fob/cif + Σ expenses + margin + SSCL(% of that whole sum)
             //   after_tax  = before_tax + VAT%
             // sscl_pct / vat_pct are the defaults a line uses unless it overrides them.
             'apply_sscl' => ['nullable', 'boolean'],

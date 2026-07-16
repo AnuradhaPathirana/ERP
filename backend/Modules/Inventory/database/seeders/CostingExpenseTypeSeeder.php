@@ -12,16 +12,16 @@ class CostingExpenseTypeSeeder extends Seeder
     public function run(): void
     {
         $types = [
-            // FOB expenses
+            // FOB expenses ("/SSCL" is part of the duty charge's NAME, not a tax)
             ['name' => 'Freight Charges',            'costing_type' => 'fob', 'sort_order' => 1],
-            ['name' => 'Custom Duty',                'costing_type' => 'fob', 'sort_order' => 2],
+            ['name' => 'Custom Duty/SSCL',           'costing_type' => 'fob', 'sort_order' => 2],
             ['name' => 'Bank Charges',               'costing_type' => 'fob', 'sort_order' => 3],
             ['name' => 'Bank Commission',            'costing_type' => 'fob', 'sort_order' => 4],
             ['name' => 'Clearance & Transportation', 'costing_type' => 'fob', 'sort_order' => 5],
             ['name' => 'Insurance',                  'costing_type' => 'fob', 'sort_order' => 6],
 
             // CIF expenses
-            ['name' => 'Import Customs Duty',        'costing_type' => 'cif', 'sort_order' => 1],
+            ['name' => 'Import Customs Duty/SSCL',   'costing_type' => 'cif', 'sort_order' => 1],
             ['name' => 'Clearance & Transportation', 'costing_type' => 'cif', 'sort_order' => 2],
             ['name' => 'Bank Charges',               'costing_type' => 'cif', 'sort_order' => 3],
             ['name' => 'Bank Commission',            'costing_type' => 'cif', 'sort_order' => 4],

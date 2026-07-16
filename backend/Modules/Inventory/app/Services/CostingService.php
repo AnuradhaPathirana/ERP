@@ -28,8 +28,8 @@ use Modules\Inventory\Models\GoodsReceivedNoteItem;
  *
  *   fob_cif      = grn unit_price ÷ conversion_factor          (per base unit)
  *   expenses     = Σ typed amounts per expense type of the costing's FOB/CIF list
- *   sscl         = sscl% × fob_cif ONLY (never the expenses); default 2.5
- *   before_tax   = fob_cif + expenses + sscl + margin (typed addon amount)
+ *   sscl         = sscl% × (fob_cif + expenses + margin); default 1.25
+ *   before_tax   = fob_cif + expenses + margin + sscl
  *   after_tax    = before_tax + VAT%                  (= selling_price)
  *
  * Before- and after-tax are both persisted so VAT and non-VAT invoices can later
@@ -381,7 +381,7 @@ class CostingService
 
         return $this->computeBreakdown($grns, null, [
             'apply_sscl' => (bool) ($input['apply_sscl'] ?? true),
-            'sscl_pct'   => (float) ($input['sscl_pct'] ?? 2.5),
+            'sscl_pct'   => (float) ($input['sscl_pct'] ?? 1.25),
             'apply_vat'  => (bool) ($input['apply_vat'] ?? true),
             'vat_pct'    => (float) ($input['vat_pct'] ?? 18),
             'items'      => (array) ($input['items'] ?? []),
@@ -396,7 +396,7 @@ class CostingService
      * costing inputs — expenses, SSCL %, margin amount and VAT %, ALL per the
      * product's BASE (stocking) unit:
      *
-     *   before_tax = fob/cif + Σ expenses + sscl% × fob/cif ONLY + margin
+     *   before_tax = fob/cif + Σ expenses + margin + sscl% × (fob/cif + expenses + margin)
      *   after_tax  = before_tax + vat%              (= selling_price)
      *
      * There is no cross-line apportionment any more: every line prices itself.
@@ -458,9 +458,9 @@ class CostingService
             $effSsclPct = $applySscl ? ($lineSsclPct ?? $ssclPct) : 0.0;
             $effVatPct  = $applyVat ? ($lineVatPct ?? $vatPct) : 0.0;
 
-            // SSCL is levied on the FOB/CIF amount ONLY — never on the expenses
-            $ssclBase      = $fobBase * ($effSsclPct / 100);
-            $beforeTaxBase = $fobBase + $expBase + $ssclBase + $marginBase;
+            // SSCL is levied on the whole cost-plus-margin sum (FOB/CIF + expenses + margin)
+            $ssclBase      = ($fobBase + $expBase + $marginBase) * ($effSsclPct / 100);
+            $beforeTaxBase = $fobBase + $expBase + $marginBase + $ssclBase;
             $vatBase       = $beforeTaxBase * ($effVatPct / 100);
             $afterTaxBase  = $beforeTaxBase + $vatBase;
 
