@@ -21,9 +21,10 @@ use Modules\Inventory\Models\SalesOrderItem;
 use Modules\Inventory\Support\Quantity;
 
 /**
- * Invoices bill either one confirmed delivery order (do_id set, 1:1) or a
- * whole sales order directly (do_id null, advance billing). An SO's billing
- * mode is fixed by its first non-cancelled invoice — the two modes never mix.
+ * Invoices bill exactly one confirmed delivery order (do_id set, 1:1) — the
+ * stock behind the invoice always left at DO confirm. Direct-SO (advance)
+ * invoices (do_id null) can no longer be created; existing ones remain
+ * viewable/editable and still block per-DO billing on their SO.
  *
  * Every invoice is either a TAX or a NON-TAX invoice:
  *   tax     — lines bill the costing's BEFORE-tax price and the VAT the costing
@@ -151,14 +152,11 @@ class InvoiceService
 
     public function create(InvoiceData $data): Invoice
     {
-        if ($data->doId !== null) {
-            return $this->createFromDo($data->doId, $data);
-        }
-        if ($data->soId !== null) {
-            return $this->createFromSo($data->soId, $data);
+        if ($data->doId === null) {
+            abort(422, 'An invoice must bill a confirmed delivery order.');
         }
 
-        abort(422, 'An invoice must reference a delivery order or a sales order.');
+        return $this->createFromDo($data->doId, $data);
     }
 
     public function update(Invoice $invoice, InvoiceData $data): Invoice
@@ -281,71 +279,6 @@ class InvoiceService
                     'quantity'     => (float) $doItem->quantity,
                     'unit_price'   => $pricing['unit_price'],
                     'discount'     => (float) ($soItem?->discount ?? 0),
-                    'tax'          => $pricing['tax'],
-                ]);
-                $this->recalculateLineTotal($item);
-            }
-
-            $this->applyItemOverrides($invoice, $data->items);
-            $this->enforceInvoiceType($invoice);
-            $this->recalculateTotals($invoice);
-
-            return $this->find($invoice->id);
-        });
-    }
-
-    private function createFromSo(int $soId, InvoiceData $data): Invoice
-    {
-        return DB::transaction(function () use ($soId, $data): Invoice {
-            $so = SalesOrder::with('items')
-                ->whereKey($soId)
-                ->lockForUpdate()
-                ->firstOrFail();
-
-            if (!in_array($so->status, [SalesOrderStatus::Confirmed, SalesOrderStatus::Completed])) {
-                abort(422, 'Only confirmed or completed sales orders can be invoiced.');
-            }
-
-            if ($this->soHasLivePerDoInvoice($so->id)) {
-                abort(422, "Sales order {$so->so_no} already has per-delivery invoices — direct billing is not allowed.");
-            }
-
-            if ($this->soHasLiveDirectInvoice($so->id)) {
-                abort(422, "Sales order {$so->so_no} already has a direct invoice.");
-            }
-
-            $invoice = Invoice::create([
-                'invoice_no'       => $this->buildInvoiceNo(lock: true),
-                'so_id'            => $so->id,
-                'do_id'            => null,
-                'customer_id'      => $so->customer_id,
-                'company_id'       => $data->companyId ?? $this->defaultCompanyId(),
-                'invoice_date'     => $data->invoiceDate,
-                'due_date'         => $data->dueDate,
-                'status'           => InvoiceStatus::Draft,
-                'invoice_type'     => $data->invoiceType ?? 'tax',
-                'transport_charge' => $data->transportCharge ?? (float) $so->transport_charge,
-                'delivery_address' => $data->deliveryAddress ?? $so->delivery_address,
-                'remarks'          => $data->remarks,
-                'mode_of_payment'  => $data->modeOfPayment,
-                'created_by'       => Auth::id(),
-                'subtotal'         => 0,
-                'grand_total'      => 0,
-            ]);
-
-            foreach ($so->items as $soItem) {
-                $pricing = $this->linePricing($soItem, $invoice->invoice_type);
-                $item = new InvoiceItem([
-                    'invoice_id'   => $invoice->id,
-                    'so_item_id'   => $soItem->id,
-                    'do_item_id'   => null,
-                    'product_id'   => $soItem->product_id,
-                    'unit_id'      => $soItem->unit_id,
-                    'price_unit_id' => $soItem->price_unit_id,
-                    'attribute_id' => $soItem->attribute_id,
-                    'quantity'     => (float) $soItem->quantity,
-                    'unit_price'   => $pricing['unit_price'],
-                    'discount'     => (float) $soItem->discount,
                     'tax'          => $pricing['tax'],
                 ]);
                 $this->recalculateLineTotal($item);

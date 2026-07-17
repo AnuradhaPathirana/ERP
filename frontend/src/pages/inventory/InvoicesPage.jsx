@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Plus } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { deleteInvoice, downloadInvoicePdf, getInvoices } from '../../api/invoices'
 import { getAllCustomers } from '../../api/customers'
@@ -99,7 +100,13 @@ export default function InvoicesPage() {
           <h1 className="text-xl font-bold leading-none text-slate-800">Invoices</h1>
           <Breadcrumb crumbs={CRUMBS} />
         </div>
-        {/* Invoices are created from a Sales Order or Delivery Order view page */}
+        <Link
+          to="/inventory/invoices/create"
+          className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
+        >
+          <Plus size={14} strokeWidth={2.5} />
+          New Invoice
+        </Link>
       </div>
 
       <TableFilter open={open} onToggle={toggle} onApply={() => apply(resetPage)} onClear={() => clear(resetPage)} activeCount={activeCount}>
@@ -154,7 +161,7 @@ export default function InvoicesPage() {
                       <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
                         {activeCount > 0
                           ? 'No invoices match the current filters.'
-                          : 'No invoices yet — create one from a confirmed Delivery Order or Sales Order.'}
+                          : 'No invoices yet — click New Invoice and select a confirmed Delivery Order to bill.'}
                       </td>
                     </tr>
                   ) : (

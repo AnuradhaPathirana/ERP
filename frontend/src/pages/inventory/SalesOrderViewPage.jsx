@@ -99,15 +99,6 @@ export default function SalesOrderViewPage() {
               <Truck size={12} /> Create DO
             </Link>
           )}
-          {(so.status === 'confirmed' || so.status === 'completed') && so.billing_mode == null && (
-            <Link
-              to={`/inventory/invoices/create?so=${so.id}`}
-              className="flex items-center gap-1 rounded border border-blue-300 bg-blue-50 px-3 py-1.5 text-xs font-bold text-blue-700 transition-all hover:bg-blue-100 active:scale-95"
-              title="Bill the whole sales order directly (advance invoicing)"
-            >
-              <FileText size={12} /> Create Invoice
-            </Link>
-          )}
           {so.status === 'draft' && (
             <button
               type="button"
@@ -123,21 +114,9 @@ export default function SalesOrderViewPage() {
               <CheckCircle2 size={12} /> Confirm
             </button>
           )}
-          {so.status === 'confirmed' && (
-            <button
-              type="button"
-              disabled={statusMutation.isPending}
-              onClick={() => handleStatus('completed', {
-                title: 'Complete Sales Order?',
-                message: `Mark ${so.so_no} as completed?`,
-                confirmText: 'Yes, Complete',
-                confirmColor: '#16a34a',
-              })}
-              className="flex items-center gap-1 rounded bg-green-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-green-700 disabled:opacity-60 active:scale-95"
-            >
-              <Truck size={12} /> Complete
-            </button>
-          )}
+          {/* No manual Complete — the SO completes automatically when its
+              confirmed DOs deliver every line in full. Invoices are raised
+              from confirmed DOs (Invoices → New Invoice), never from the SO. */}
           {(so.status === 'draft' || so.status === 'confirmed') && (
             <>
               <button

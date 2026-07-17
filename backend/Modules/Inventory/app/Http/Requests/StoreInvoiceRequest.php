@@ -19,9 +19,9 @@ class StoreInvoiceRequest extends FormRequest
     public function rules(): array
     {
         return [
-            // Source is exactly one of the two: a confirmed DO or a sales order (advance billing)
-            'so_id'            => ['nullable', 'required_without:do_id', 'prohibits:do_id', 'integer', 'exists:inv_sales_orders,id'],
-            'do_id'            => ['nullable', 'required_without:so_id', 'integer', 'exists:inv_delivery_orders,id'],
+            // Invoices bill exactly one confirmed DO. Direct-SO (advance) billing
+            // is retired — so_id is never accepted from input.
+            'do_id'            => ['required', 'integer', 'exists:inv_delivery_orders,id'],
             'company_id'       => ['nullable', 'integer', 'exists:inv_companies,id'],
             'invoice_date'     => ['required', 'date'],
             'due_date'         => ['nullable', 'date', 'after_or_equal:invoice_date'],

@@ -208,6 +208,31 @@ class InvoiceTest extends TestCase
             ->assertJsonPath('data.grand_total', 27500);
     }
 
+    /** The invoice form's "Recall DO" picker: invoiced=0 lists only confirmed DOs still awaiting billing. */
+    public function test_do_list_invoiced_filter_splits_billed_and_unbilled_dos(): void
+    {
+        ['so' => $soA, 'pieces' => $piecesA] = $this->makeConfirmedSoWithRolls([10.0]);
+        ['so' => $soB, 'pieces' => $piecesB] = $this->makeConfirmedSoWithRolls([20.0]);
+        $doA = $this->makeConfirmedDo($soA, $piecesA);
+        $doB = $this->makeConfirmedDo($soB, $piecesB);
+
+        $this->actingAs($this->user)
+            ->postJson('/api/v1/invoices', ['do_id' => $doA, 'invoice_date' => '2026-07-11'])
+            ->assertCreated();
+
+        $unbilled = $this->actingAs($this->user)
+            ->getJson('/api/v1/delivery-orders?status=confirmed&invoiced=0')
+            ->assertOk()
+            ->json('data.*.id');
+        $this->assertSame([$doB], $unbilled);
+
+        $billed = $this->actingAs($this->user)
+            ->getJson('/api/v1/delivery-orders?status=confirmed&invoiced=1')
+            ->assertOk()
+            ->json('data.*.id');
+        $this->assertSame([$doA], $billed);
+    }
+
     public function test_tax_invoice_bills_costing_before_tax_price_plus_vat(): void
     {
         // SO priced at the costing's AFTER-tax price (1180 = 1000 + 18% VAT)
@@ -309,76 +334,39 @@ class InvoiceTest extends TestCase
             ->assertCreated();
     }
 
-    // ── Direct-SO invoices & billing-mode exclusion ─────────────────────────
+    // ── Direct-SO invoices are retired — invoices bill confirmed DOs only ───
 
-    public function test_direct_so_invoice_bills_all_lines(): void
+    public function test_direct_so_invoice_creation_is_rejected(): void
     {
-        ['so' => $so] = $this->makeConfirmedSoWithRolls([10.0, 20.0], unitPrice: 1000, transport: 250);
+        ['so' => $so] = $this->makeConfirmedSoWithRolls();
 
+        // so_id is no longer accepted; do_id is required
         $this->actingAs($this->user)
             ->postJson('/api/v1/invoices', ['so_id' => $so->id, 'invoice_date' => '2026-07-11'])
-            ->assertCreated()
-            ->assertJsonPath('data.do_id', null)
-            ->assertJsonPath('data.items.0.quantity', 30)
-            ->assertJsonPath('data.transport_charge', 250);
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['do_id']);
     }
 
-    public function test_direct_invoice_blocked_when_per_do_invoice_exists(): void
-    {
-        ['so' => $so, 'pieces' => $pieces] = $this->makeConfirmedSoWithRolls();
-        $doId = $this->makeConfirmedDo($so, $pieces);
-
-        $this->actingAs($this->user)
-            ->postJson('/api/v1/invoices', ['do_id' => $doId, 'invoice_date' => '2026-07-11'])
-            ->assertCreated();
-
-        $this->actingAs($this->user)
-            ->postJson('/api/v1/invoices', ['so_id' => $so->id, 'invoice_date' => '2026-07-11'])
-            ->assertStatus(422);
-    }
-
-    public function test_per_do_invoice_blocked_when_direct_invoice_exists(): void
+    /** Legacy direct invoices (created before retirement) still lock their SO's billing mode. */
+    public function test_per_do_invoice_blocked_when_legacy_direct_invoice_exists(): void
     {
         ['so' => $so, 'pieces' => $pieces] = $this->makeConfirmedSoWithRolls();
 
-        $this->actingAs($this->user)
-            ->postJson('/api/v1/invoices', ['so_id' => $so->id, 'invoice_date' => '2026-07-11'])
-            ->assertCreated();
+        \Modules\Inventory\Models\Invoice::create([
+            'invoice_no'   => 'INV-LEGACY-0001',
+            'so_id'        => $so->id,
+            'do_id'        => null,
+            'customer_id'  => $so->customer_id,
+            'invoice_date' => '2026-07-10',
+            'status'       => 'draft',
+            'subtotal'     => 0,
+            'grand_total'  => 0,
+        ]);
 
         $doId = $this->makeConfirmedDo($so->fresh(), $pieces);
 
         $this->actingAs($this->user)
             ->postJson('/api/v1/invoices', ['do_id' => $doId, 'invoice_date' => '2026-07-11'])
-            ->assertStatus(422);
-    }
-
-    public function test_second_direct_invoice_is_rejected(): void
-    {
-        ['so' => $so] = $this->makeConfirmedSoWithRolls();
-
-        $this->actingAs($this->user)
-            ->postJson('/api/v1/invoices', ['so_id' => $so->id, 'invoice_date' => '2026-07-11'])
-            ->assertCreated();
-
-        $this->actingAs($this->user)
-            ->postJson('/api/v1/invoices', ['so_id' => $so->id, 'invoice_date' => '2026-07-11'])
-            ->assertStatus(422);
-    }
-
-    public function test_direct_invoice_from_draft_so_is_rejected(): void
-    {
-        $product = Product::factory()->create();
-
-        $soId = $this->actingAs($this->user)->postJson('/api/v1/sales-orders', [
-            'order_date'      => '2026-07-09',
-            'customer_id'     => $this->customer->id,
-            'sales_person_id' => $this->user->id,
-            'status'          => 'draft',
-            'items'           => [['product_id' => $product->id, 'quantity' => 5, 'unit_price' => 100]],
-        ])->json('data.id');
-
-        $this->actingAs($this->user)
-            ->postJson('/api/v1/invoices', ['so_id' => $soId, 'invoice_date' => '2026-07-11'])
             ->assertStatus(422);
     }
 

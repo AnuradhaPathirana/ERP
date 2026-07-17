@@ -11,7 +11,9 @@ import {
   updateInvoice,
 } from '../../api/invoices'
 import { getAllCompanies } from '../../api/companies'
+import { getDeliveryOrders } from '../../api/deliveryOrders'
 import Breadcrumb from '../../components/Breadcrumb'
+import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
 import Money from '../../components/ui/Money'
 import { showError, showSuccess } from '../../utils/alerts'
 import { fmtMoney } from '../../utils/currency'
@@ -52,8 +54,9 @@ export default function InvoiceFormPage() {
   const isEdit    = Boolean(id)
   const navigate  = useNavigate()
   const [search]  = useSearchParams()
+  // Invoices are only raised against confirmed DOs — ?do= deep links from the
+  // DO view page pre-select the document; there is no ?so= direct-billing path.
   const doFromUrl = search.get('do')
-  const soFromUrl = search.get('so')
 
   const CRUMBS = [
     { label: 'Inventory', to: '/inventory/products' },
@@ -71,6 +74,9 @@ export default function InvoiceFormPage() {
     company_id:       '',
   })
   const [lines, setLines]   = useState([]) // {so_item_id, do_item_id, product, unit, attribute, quantity, unit_price, discount, tax, so_unit_price, so_tax, tax_unit_price, tax_vat_pct}
+  // "Recall DO" — the confirmed delivery order this invoice bills. Pre-set when
+  // arriving from a DO view page (?do=), user-picked on a fresh New Invoice.
+  const [doId, setDoId]     = useState(doFromUrl ?? '')
   const [errors, setErrors] = useState({})
   // tax: costing Before-Tax prices + VAT added per line · non_tax: SO (after-tax) prices, no VAT
   const [invoiceType, setInvoiceType] = useState('tax')
@@ -103,10 +109,24 @@ export default function InvoiceFormPage() {
     enabled:  isEdit,
   })
 
+  /* ── Recall DO — confirmed delivery orders still awaiting an invoice,
+     for the picker shown when New Invoice is opened without a document. ─ */
+  const { data: billableDosRes } = useQuery({
+    queryKey: ['delivery-orders-billable'],
+    queryFn:  () => getDeliveryOrders(1, { status: 'confirmed', invoiced: 0 }),
+    enabled:  !isEdit && !doFromUrl,
+    staleTime: 60 * 1000,
+  })
+  const doOptions = (billableDosRes?.data ?? []).map((d) => ({
+    value: String(d.id),
+    label: `${d.do_no} — ${d.sales_order?.so_no ?? ''} · ${d.customer?.name ?? ''}`,
+  }))
+
   /* ── Billing source — also fetched in edit mode (via the invoice's own
      SO/DO) so the Tax ↔ Non-Tax toggle can re-price the lines. ─ */
-  const sourceDoId = doFromUrl ?? (isEdit ? existing?.data?.do_id : null)
-  const sourceSoId = soFromUrl ?? (isEdit ? existing?.data?.so_id : null)
+  const sourceDoId = isEdit ? existing?.data?.do_id : (doId || null)
+  // Only legacy direct (advance) invoices reach the SO source — edit mode, do_id null.
+  const sourceSoId = isEdit ? existing?.data?.so_id : null
 
   const { data: source, isLoading: loadingSource, isError: sourceError, error: sourceErrorObj } = useQuery({
     queryKey: ['invoice-billing-source', sourceDoId, sourceSoId],
@@ -129,8 +149,8 @@ export default function InvoiceFormPage() {
       unit:       it.unit,
       attribute:  it.attribute,
       quantity:   it.quantity,
-      // New invoices start as Tax — Before-Tax price + the costing's VAT per line
-      ...priceFor(it, 'tax'),
+      // Price per the invoice-type toggle (new invoices start as Tax)
+      ...priceFor(it, invoiceType),
       discount:   it.discount ? String(it.discount) : '',
       so_unit_price:  it.unit_price,
       so_tax:         it.tax,
@@ -222,6 +242,7 @@ export default function InvoiceFormPage() {
 
   const handleSubmit = () => {
     const clientErrors = {}
+    if (!isEdit && !doId) clientErrors.do_id = ['Select a confirmed delivery order to bill.']
     if (!form.invoice_date) clientErrors.invoice_date = ['Invoice date is required.']
     if (form.due_date && form.due_date < form.invoice_date)
       clientErrors.due_date = ['Due date must be on or after the invoice date.']
@@ -234,7 +255,7 @@ export default function InvoiceFormPage() {
 
     setErrors({})
     saveMutation.mutate({
-      ...(isEdit ? {} : (doFromUrl ? { do_id: parseInt(doFromUrl) } : { so_id: parseInt(soFromUrl) })),
+      ...(isEdit ? {} : { do_id: parseInt(doId) }),
       invoice_date:     form.invoice_date,
       due_date:         form.due_date || null,
       invoice_type:     invoiceType,
@@ -255,17 +276,7 @@ export default function InvoiceFormPage() {
 
   const err = (f) => errors[f]?.[0]
 
-  if (!isEdit && !doFromUrl && !soFromUrl) {
-    return (
-      <div className="py-16 text-center">
-        <p className="text-sm text-slate-500">
-          Invoices are created against a document — open a confirmed <b>Delivery Order</b> or a <b>Sales Order</b> and use its <i>Create Invoice</i> button.
-        </p>
-      </div>
-    )
-  }
-
-  if ((isEdit && loadingInvoice) || (!isEdit && loadingSource)) {
+  if ((isEdit && loadingInvoice) || (!isEdit && doFromUrl && loadingSource)) {
     return (
       <div className="flex items-center justify-center py-20">
         <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -275,7 +286,7 @@ export default function InvoiceFormPage() {
     )
   }
 
-  if (!isEdit && sourceError) {
+  if (!isEdit && doFromUrl && sourceError) {
     return (
       <div className="py-16 text-center text-sm text-red-500">
         {sourceErrorObj?.response?.data?.message ?? 'Failed to load the billing source.'}
@@ -361,6 +372,32 @@ export default function InvoiceFormPage() {
                   value={isEdit ? (existing?.data?.invoice_no ?? '') : (loadingNo ? 'Generating…' : (nextInvoiceNo ?? ''))}
                 />
               </div>
+              {/* The document being billed — picked here on a fresh New Invoice,
+                  locked when it came from a DO/SO view page or in edit mode. */}
+              <div>
+                <label className={LABEL_CLS}>
+                  Delivery Order {!isEdit && <span className="text-red-500 normal-case font-bold">*</span>}
+                </label>
+                {isEdit || doFromUrl ? (
+                  <input
+                    readOnly
+                    className={INPUT_RO_CLS}
+                    value={
+                      isEdit
+                        ? (existing?.data?.delivery_order?.do_no ?? `Direct — ${existing?.data?.sales_order?.so_no ?? ''}`)
+                        : (source?.delivery_order?.do_no ?? '')
+                    }
+                  />
+                ) : (
+                  <FilterSearchSelect
+                    value={doId}
+                    onChange={(val) => { setDoId(val); setLines([]); setErrors((e) => ({ ...e, do_id: undefined })) }}
+                    options={doOptions}
+                    placeholder="Select confirmed DO…"
+                  />
+                )}
+                {err('do_id') && <p className={ERR_CLS}>{err('do_id')}</p>}
+              </div>
               <div>
                 <label className={LABEL_CLS}>Supplier (Company)</label>
                 <select className={SELECT_CLS} value={form.company_id} onChange={(e) => setForm((f) => ({ ...f, company_id: e.target.value }))}>
@@ -429,6 +466,27 @@ export default function InvoiceFormPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
+                {!isEdit && !sourceDoId && !sourceSoId && (
+                  <tr>
+                    <td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-400">
+                      Select a confirmed <b>Delivery Order</b> above to load its billable lines.
+                    </td>
+                  </tr>
+                )}
+                {!isEdit && Boolean(sourceDoId || sourceSoId) && loadingSource && (
+                  <tr>
+                    <td colSpan={10} className="px-4 py-10 text-center text-sm text-slate-400">
+                      <span className="inline-flex items-center gap-2"><RefreshCw size={13} className="animate-spin" /> Loading delivery order…</span>
+                    </td>
+                  </tr>
+                )}
+                {!isEdit && sourceError && (
+                  <tr>
+                    <td colSpan={10} className="px-4 py-10 text-center text-sm text-red-500">
+                      {sourceErrorObj?.response?.data?.message ?? 'Failed to load the billing source.'}
+                    </td>
+                  </tr>
+                )}
                 {lines.map((row, idx) => (
                   <tr key={row.so_item_id} className="hover:bg-slate-50/60 transition-colors">
                     <td className="px-2 py-1 text-slate-400 tabular-nums">{idx + 1}</td>

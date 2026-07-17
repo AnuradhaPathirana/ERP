@@ -66,6 +66,13 @@ class DeliveryOrderService
             $query->where('status', $filters['status']);
         }
 
+        // invoiced=0 → only DOs still awaiting a live (non-cancelled) invoice;
+        // invoiced=1 → only DOs already billed. Used by the invoice "Recall DO" picker.
+        if (isset($filters['invoiced']) && $filters['invoiced'] !== '') {
+            $wantInvoiced = filter_var($filters['invoiced'], FILTER_VALIDATE_BOOLEAN);
+            $query->{$wantInvoiced ? 'whereHas' : 'whereDoesntHave'}('invoice');
+        }
+
         if (!empty($filters['customer_id'])) {
             $query->where('customer_id', (int) $filters['customer_id']);
         }

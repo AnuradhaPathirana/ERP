@@ -26,7 +26,7 @@ class DeliveryOrderController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $filters   = $request->only(['search', 'status', 'customer_id', 'so_id', 'date_from', 'date_to']);
+        $filters   = $request->only(['search', 'status', 'customer_id', 'so_id', 'date_from', 'date_to', 'invoiced']);
         $paginator = $this->service->paginate(50, $filters);
 
         return response()->json([

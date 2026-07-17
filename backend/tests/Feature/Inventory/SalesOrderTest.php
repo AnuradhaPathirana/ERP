@@ -389,10 +389,11 @@ class SalesOrderTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.status', 'confirmed');
 
+        // confirmed → completed is never manual — the SO completes automatically
+        // when its confirmed DOs have delivered every line in full
         $this->actingAs($this->user)
             ->patchJson("/api/v1/sales-orders/{$soId}/status", ['status' => 'completed'])
-            ->assertOk()
-            ->assertJsonPath('data.status', 'completed');
+            ->assertStatus(422);
     }
 
     public function test_cancelling_releases_allocated_pieces(): void

@@ -167,9 +167,12 @@ class SalesOrderService
     {
         $newStatus = SalesOrderStatus::from($status);
 
+        // Completed is never reachable by hand — the SO completes automatically
+        // when its confirmed DOs have delivered every line in full
+        // (DeliveryOrderService::updateStatus, which writes the status directly).
         $allowedTransitions = [
             SalesOrderStatus::Draft->value     => [SalesOrderStatus::Confirmed, SalesOrderStatus::Cancelled],
-            SalesOrderStatus::Confirmed->value => [SalesOrderStatus::Completed, SalesOrderStatus::Cancelled],
+            SalesOrderStatus::Confirmed->value => [SalesOrderStatus::Cancelled],
         ];
 
         $allowed = $allowedTransitions[$so->status->value] ?? [];
