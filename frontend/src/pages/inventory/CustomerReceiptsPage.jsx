@@ -1,8 +1,12 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus } from 'lucide-react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { deleteInvoice, downloadInvoicePdf, getInvoices } from '../../api/invoices'
+import { CheckCircle, Plus } from 'lucide-react'
+import {
+  confirmCustomerReceipt,
+  deleteCustomerReceipt,
+  getCustomerReceipts,
+} from '../../api/customerReceipts'
 import { getAllCustomers } from '../../api/customers'
 import Pagination from '../../components/ui/Pagination'
 import Money from '../../components/ui/Money'
@@ -10,36 +14,25 @@ import Breadcrumb from '../../components/Breadcrumb'
 import TableFilter, { FilterField } from '../../components/TableFilter'
 import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
 import { useTableFilter } from '../../hooks/useTableFilter'
-import { confirmDelete, showError, showSuccess } from '../../utils/alerts'
-import { printPdfBlob } from '../../utils/pdf'
-import { ViewBtn, EditBtn, DeleteBtn, PrintBtn, PdfBtn } from '../../components/ui/ActionButtons'
+import { confirmDelete, confirmAction, showError, showSuccess } from '../../utils/alerts'
+import { ViewBtn, EditBtn, DeleteBtn } from '../../components/ui/ActionButtons'
 import { FILTER_INPUT_CLS, FILTER_SELECT_CLS } from '../../utils/fieldStyles'
 
 const CRUMBS = [
   { label: 'Inventory', to: '/inventory/products' },
   { label: 'Sales' },
-  { label: 'Invoices' },
+  { label: 'Customer Receipts' },
 ]
 
 const INITIAL_FILTERS = { search: '', status: '', customer_id: '', date_from: '', date_to: '' }
 
 const STATUS_STYLES = {
   draft:     'bg-amber-100 text-amber-700',
-  issued:    'bg-blue-100 text-blue-700',
-  paid:      'bg-green-100 text-green-700',
-  cancelled: 'bg-red-100 text-red-500',
+  confirmed: 'bg-green-100 text-green-700',
 }
 
-const STATUS_OPTIONS = [
-  { value: 'draft',     label: 'Draft' },
-  { value: 'issued',    label: 'Issued' },
-  { value: 'paid',      label: 'Paid' },
-  { value: 'cancelled', label: 'Cancelled' },
-]
-
-export default function InvoicesPage() {
+export default function CustomerReceiptsPage() {
   const [page, setPage] = useState(1)
-  const [pdfBusy, setPdfBusy] = useState(null)
   const navigate        = useNavigate()
   const queryClient     = useQueryClient()
   const resetPage       = () => setPage(1)
@@ -55,40 +48,38 @@ export default function InvoicesPage() {
   const customerOptions = customers.map((c) => ({ value: c.id, label: c.name }))
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['invoices', page, applied],
-    queryFn:  () => getInvoices(page, applied),
+    queryKey: ['customer-receipts', page, applied],
+    queryFn:  () => getCustomerReceipts(page, applied),
     placeholderData: (prev) => prev,
   })
 
   const deleteMutation = useMutation({
-    mutationFn: deleteInvoice,
-    onSuccess:  () => { queryClient.invalidateQueries({ queryKey: ['invoices'] }); showSuccess('Invoice deleted.') },
-    onError:    (e) => showError(e.response?.data?.message ?? 'Cannot delete — only draft invoices can be removed.'),
+    mutationFn: deleteCustomerReceipt,
+    onSuccess:  () => { queryClient.invalidateQueries({ queryKey: ['customer-receipts'] }); showSuccess('Receipt deleted.') },
+    onError:    () => showError('Cannot delete — only draft receipts can be removed.'),
   })
 
-  const handleDelete = async (id, no) => {
-    if (await confirmDelete(no)) deleteMutation.mutate(id)
+  const confirmMutation = useMutation({
+    mutationFn: confirmCustomerReceipt,
+    onSuccess:  () => {
+      queryClient.invalidateQueries({ queryKey: ['customer-receipts'] })
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
+      showSuccess('Receipt confirmed. Invoice outstanding balances updated.')
+    },
+    onError: (err) => showError(err.response?.data?.message ?? 'Confirmation failed.'),
+  })
+
+  const handleDelete = async (id, receiptNo) => {
+    if (await confirmDelete(receiptNo)) deleteMutation.mutate(id)
   }
 
-  const handlePdf = async (id, no, print) => {
-    setPdfBusy(id)
-    try {
-      const blob = await downloadInvoicePdf(id)
-      if (print) {
-        printPdfBlob(blob)
-      } else {
-        const url = URL.createObjectURL(blob)
-        const a   = document.createElement('a')
-        a.href    = url
-        a.download = `INV_${no}.pdf`
-        a.click()
-        URL.revokeObjectURL(url)
-      }
-    } catch {
-      showError('Failed to generate PDF.')
-    } finally {
-      setPdfBusy(null)
-    }
+  const handleConfirm = async (id, receiptNo) => {
+    const ok = await confirmAction({
+      title: `Confirm ${receiptNo}?`,
+      message: 'This will <strong>settle against outstanding invoice balances</strong>, post any setoffs and mark fully-received invoices as Paid. This action cannot be easily undone.',
+      confirmText: 'Yes, Confirm Receipt',
+    })
+    if (ok) confirmMutation.mutate(id)
   }
 
   const meta = data?.meta
@@ -98,26 +89,27 @@ export default function InvoicesPage() {
     <div className="w-full">
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-xl font-bold leading-none text-slate-800">Invoices</h1>
+          <h1 className="text-xl font-bold leading-none text-slate-800">Customer Receipts</h1>
           <Breadcrumb crumbs={CRUMBS} />
         </div>
         <Link
-          to="/inventory/invoices/create"
+          to="/inventory/customer-receipts/create"
           className="flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-700"
         >
           <Plus size={14} strokeWidth={2.5} />
-          New Invoice
+          New Receipt
         </Link>
       </div>
 
       <TableFilter open={open} onToggle={toggle} onApply={() => apply(resetPage)} onClear={() => clear(resetPage)} activeCount={activeCount}>
         <FilterField label="Search">
-          <input className={FILTER_INPUT_CLS} placeholder="Invoice No, SO No or customer…" value={draft.search} onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))} />
+          <input className={FILTER_INPUT_CLS} placeholder="Receipt No or Reference No…" value={draft.search} onChange={(e) => setDraft((d) => ({ ...d, search: e.target.value }))} />
         </FilterField>
         <FilterField label="Status">
           <select className={FILTER_SELECT_CLS} value={draft.status} onChange={(e) => setDraft((d) => ({ ...d, status: e.target.value }))}>
             <option value="">All statuses</option>
-            {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+            <option value="draft">Draft</option>
+            <option value="confirmed">Confirmed</option>
           </select>
         </FilterField>
         <FilterField label="Customer">
@@ -136,9 +128,9 @@ export default function InvoicesPage() {
         </FilterField>
       </TableFilter>
 
-      <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="mt-2 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         {isLoading && <div className="flex items-center justify-center py-14 text-sm text-slate-400">Loading…</div>}
-        {isError && <div className="flex items-center justify-center py-14 text-sm text-red-500">Failed to load invoices.</div>}
+        {isError && <div className="flex items-center justify-center py-14 text-sm text-red-500">Failed to load customer receipts.</div>}
 
         {!isLoading && !isError && (
           <>
@@ -147,11 +139,12 @@ export default function InvoicesPage() {
                 <thead>
                   <tr className="border-b border-slate-200 bg-slate-50 text-left">
                     <th className="w-8 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">#</th>
-                    <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Invoice No</th>
-                    <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">SO / DO</th>
+                    <th className="w-28 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Receipt No</th>
                     <th className="px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Customer</th>
                     <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Date</th>
-                    <th className="w-28 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Total</th>
+                    <th className="w-24 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Gross</th>
+                    <th className="w-24 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Setoff</th>
+                    <th className="w-24 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Net</th>
                     <th className="w-24 px-3 py-2 font-semibold uppercase tracking-wider text-slate-500">Status</th>
                     <th className="w-28 px-3 py-2 text-right font-semibold uppercase tracking-wider text-slate-500">Actions</th>
                   </tr>
@@ -159,45 +152,41 @@ export default function InvoicesPage() {
                 <tbody className="divide-y divide-slate-100">
                   {rows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-400">
-                        {activeCount > 0
-                          ? 'No invoices match the current filters.'
-                          : 'No invoices yet — click New Invoice and select a confirmed Delivery Order to bill.'}
+                      <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-400">
+                        {activeCount > 0 ? 'No receipts match the current filters.' : 'No customer receipts yet.'}
                       </td>
                     </tr>
                   ) : (
-                    rows.map((row, i) => (
+                    rows.map((r, i) => (
                       <tr
-                        key={row.id}
-                        onClick={() => navigate(`/inventory/invoices/${row.id}`)}
+                        key={r.id}
+                        onClick={() => navigate(`/inventory/customer-receipts/${r.id}/edit`)}
                         className="cursor-pointer transition-colors hover:bg-slate-50"
                       >
-                        <td className="px-3 py-2 text-slate-400">{(page - 1) * (meta?.per_page ?? 25) + i + 1}</td>
+                        <td className="px-3 py-2 text-slate-400">{(page - 1) * (meta?.per_page ?? 50) + i + 1}</td>
                         <td className="px-3 py-2 font-mono font-medium text-indigo-600">
-                          <Link to={`/inventory/invoices/${row.id}`} className="hover:underline">{row.invoice_no}</Link>
+                          <Link to={`/inventory/customer-receipts/${r.id}/edit`} className="hover:underline">{r.receipt_no}</Link>
+                          {r.is_advance && <span className="ml-1 rounded bg-sky-50 px-1 py-0.5 text-[9px] font-bold text-sky-600">ADV</span>}
                         </td>
-                        <td className="px-3 py-2 font-mono text-[10px] text-slate-500">
-                          <div>{row.sales_order?.so_no}</div>
-                          <div className="text-slate-400">{row.delivery_order?.do_no ?? 'Direct'}</div>
-                        </td>
-                        <td className="px-3 py-2 font-medium text-slate-700">{row.customer?.name || <span className="italic text-slate-300">—</span>}</td>
-                        <td className="whitespace-nowrap px-3 py-2 text-slate-500">{row.invoice_date}</td>
-                        <td className="px-3 py-2 text-right font-medium text-slate-700"><Money value={row.grand_total} /></td>
+                        <td className="px-3 py-2 font-medium text-slate-700">{r.customer?.name || <span className="italic text-slate-300">—</span>}</td>
+                        <td className="whitespace-nowrap px-3 py-2 text-slate-500">{r.receipt_date}</td>
+                        <td className="px-3 py-2 text-right text-slate-600"><Money value={r.gross_amount} /></td>
+                        <td className="px-3 py-2 text-right text-slate-600"><Money value={r.setoff_amount} /></td>
+                        <td className="px-3 py-2 text-right font-medium text-slate-700"><Money value={r.net_amount} /></td>
                         <td className="px-3 py-2">
-                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[row.status] ?? 'bg-slate-100 text-slate-500'}`}>
-                            {row.status_label}
+                          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold ${STATUS_STYLES[r.status] ?? 'bg-slate-100 text-slate-500'}`}>
+                            {r.status_label}
                           </span>
                         </td>
                         {/* stopPropagation so action buttons don't also fire the row's navigate */}
                         <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
-                            <ViewBtn to={`/inventory/invoices/${row.id}`} />
-                            <PrintBtn onClick={() => handlePdf(row.id, row.invoice_no, true)} disabled={pdfBusy === row.id} />
-                            <PdfBtn onClick={() => handlePdf(row.id, row.invoice_no, false)} disabled={pdfBusy === row.id} />
-                            {row.status === 'draft' && (
+                            <ViewBtn to={`/inventory/customer-receipts/${r.id}/edit`} />
+                            {r.status === 'draft' && (
                               <>
-                                <EditBtn to={`/inventory/invoices/${row.id}/edit`} />
-                                <DeleteBtn onClick={() => handleDelete(row.id, row.invoice_no)} disabled={deleteMutation.isPending} />
+                                <EditBtn to={`/inventory/customer-receipts/${r.id}/edit`} />
+                                <button type="button" title="Confirm Receipt" onClick={() => handleConfirm(r.id, r.receipt_no)} disabled={confirmMutation.isPending} className="inline-flex items-center justify-center rounded-lg p-1.5 bg-green-50 text-green-600 hover:bg-green-100 transition-colors disabled:opacity-40"><CheckCircle size={14} strokeWidth={2} /></button>
+                                <DeleteBtn onClick={() => handleDelete(r.id, r.receipt_no)} disabled={deleteMutation.isPending} />
                               </>
                             )}
                           </div>

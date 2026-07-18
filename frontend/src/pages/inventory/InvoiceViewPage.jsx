@@ -1,12 +1,11 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Ban, BadgeCheck, Download, Pencil, Printer, RefreshCw, Send, Trash2 } from 'lucide-react'
+import { Ban, Download, Pencil, Printer, RefreshCw, Send, Trash2, Wallet } from 'lucide-react'
 import { useState } from 'react'
 import { deleteInvoice, downloadInvoicePdf, getInvoice, updateInvoiceStatus } from '../../api/invoices'
 import Breadcrumb from '../../components/Breadcrumb'
 import Money from '../../components/ui/Money'
 import { confirmAction, confirmDelete, showError, showSuccess } from '../../utils/alerts'
-import { fmtMoneyWithSymbol } from '../../utils/currency'
 import { printPdfBlob } from '../../utils/pdf'
 
 const STATUS_STYLES = {
@@ -157,20 +156,14 @@ export default function InvoiceViewPage() {
             </>
           )}
           {inv.status === 'issued' && (
+            // Opens a new Customer Receipt with this invoice pre-selected — the invoice
+            // flips to Paid automatically when the receipt is confirmed, never by hand.
             <button
               type="button"
-              disabled={statusMutation.isPending}
-              onClick={async () => {
-                if (await confirmAction({
-                  title: 'Mark as Paid?',
-                  message: `Record ${inv.invoice_no} (${fmtMoneyWithSymbol(inv.grand_total)}) as fully paid?`,
-                  confirmText: 'Yes, Mark Paid',
-                  confirmColor: '#16a34a',
-                })) statusMutation.mutate('paid')
-              }}
-              className="flex items-center gap-1 rounded bg-green-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-green-700 disabled:opacity-60 active:scale-95"
+              onClick={() => navigate(`/inventory/customer-receipts/create?invoice=${inv.id}`)}
+              className="flex items-center gap-1 rounded bg-green-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-green-700 active:scale-95"
             >
-              <BadgeCheck size={12} /> Mark as Paid
+              <Wallet size={12} /> Make a Payment
             </button>
           )}
           {(inv.status === 'draft' || inv.status === 'issued') && (

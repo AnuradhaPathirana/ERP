@@ -71,6 +71,8 @@ const NAV_ITEMS = [
       { label: 'Sales Orders',      to: '/inventory/sales-orders',         icon: ShoppingCart,  permissionGuard: 'view_sales_orders' },
       { label: 'Delivery Orders',   to: '/inventory/delivery-orders',      icon: Truck,         permissionGuard: 'view_delivery_orders' },
       { label: 'Invoices',          to: '/inventory/invoices',             icon: FileText,      permissionGuard: 'view_invoices' },
+      { label: 'Customer Receipts', to: '/inventory/customer-receipts',    icon: DollarSign,    permissionGuard: 'view_customer_receipts' },
+      { label: 'Customer Credit Notes', to: '/inventory/customer-credit-notes', icon: CreditCard, permissionGuard: 'view_customer_credit_notes' },
       {
         label: 'Reports',
         icon: BarChart2,

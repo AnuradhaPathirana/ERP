@@ -41,6 +41,8 @@ use Modules\Inventory\Http\Controllers\CostingExpenseTypeController;
 use Modules\Inventory\Http\Controllers\ReportController;
 use Modules\Inventory\Http\Controllers\SupplierPaymentController;
 use Modules\Inventory\Http\Controllers\SupplierCreditNoteController;
+use Modules\Inventory\Http\Controllers\CustomerReceiptController;
+use Modules\Inventory\Http\Controllers\CustomerCreditNoteController;
 use Modules\Inventory\Http\Controllers\PaymentModeController;
 use Modules\Inventory\Http\Controllers\SalesOrderController;
 use Modules\Inventory\Http\Controllers\DeliveryOrderController;
@@ -286,6 +288,22 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
     Route::apiResource('supplier-credit-notes', SupplierCreditNoteController::class)
         ->only(['index', 'show'])
         ->names('inventory.supplier-credit-notes');
+
+    // ── Customer Receipts ────────────────────────────────────────────────────
+    Route::get('customer-receipts/next-receipt-no', [CustomerReceiptController::class, 'nextReceiptNo'])
+        ->name('inventory.customer-receipts.next-receipt-no');
+    Route::get('customer-receipts/outstanding-invoices/{customerId}', [CustomerReceiptController::class, 'outstandingInvoices'])
+        ->name('inventory.customer-receipts.outstanding-invoices');
+    Route::get('customer-receipts/open-credit-notes', [CustomerReceiptController::class, 'openCreditNotes'])
+        ->name('inventory.customer-receipts.open-credit-notes');
+    Route::post('customer-receipts/{customer_receipt}/confirm', [CustomerReceiptController::class, 'confirm'])
+        ->name('inventory.customer-receipts.confirm');
+    Route::apiResource('customer-receipts', CustomerReceiptController::class)
+        ->names('inventory.customer-receipts');
+
+    Route::apiResource('customer-credit-notes', CustomerCreditNoteController::class)
+        ->only(['index', 'show'])
+        ->names('inventory.customer-credit-notes');
 
     // ── Payment Modes (master) ───────────────────────────────────────────────
     Route::get('payment-modes/all', [PaymentModeController::class, 'all'])

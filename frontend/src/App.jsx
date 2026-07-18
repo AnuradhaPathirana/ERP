@@ -63,6 +63,9 @@ const DeliveryOrderViewPage     = lazy(() => import('./pages/inventory/DeliveryO
 const InvoicesPage              = lazy(() => import('./pages/inventory/InvoicesPage'))
 const InvoiceFormPage           = lazy(() => import('./pages/inventory/InvoiceFormPage'))
 const InvoiceViewPage           = lazy(() => import('./pages/inventory/InvoiceViewPage'))
+const CustomerReceiptsPage      = lazy(() => import('./pages/inventory/CustomerReceiptsPage'))
+const CustomerReceiptFormPage   = lazy(() => import('./pages/inventory/CustomerReceiptFormPage'))
+const CustomerCreditNotesPage   = lazy(() => import('./pages/inventory/CustomerCreditNotesPage'))
 // Inventory Reports
 const StockLevelsReport        = lazy(() => import('./pages/inventory/reports/StockLevelsReport'))
 const StockMovementsReport     = lazy(() => import('./pages/inventory/reports/StockMovementsReport'))
@@ -185,6 +188,10 @@ export default function App() {
         <Route path="/inventory/invoices/create"               element={<Lazy component={InvoiceFormPage} />} />
         <Route path="/inventory/invoices/:id"                  element={<Lazy component={InvoiceViewPage} />} />
         <Route path="/inventory/invoices/:id/edit"             element={<Lazy component={InvoiceFormPage} />} />
+        <Route path="/inventory/customer-receipts"             element={<Lazy component={CustomerReceiptsPage} />} />
+        <Route path="/inventory/customer-receipts/create"      element={<Lazy component={CustomerReceiptFormPage} />} />
+        <Route path="/inventory/customer-receipts/:id/edit"    element={<Lazy component={CustomerReceiptFormPage} />} />
+        <Route path="/inventory/customer-credit-notes"         element={<Lazy component={CustomerCreditNotesPage} />} />
         <Route path="/inventory/goods-received-notes"          element={<Lazy component={GoodsReceivedNotesPage} />} />
         <Route path="/inventory/goods-received-notes/create"   element={<Lazy component={GoodsReceivedNoteFormPage} />} />
         <Route path="/inventory/goods-received-notes/:id"      element={<Lazy component={GoodsReceivedNoteFormPage} />} />

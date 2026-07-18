@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { deleteDeliveryOrder, downloadDoPdf, getDeliveryOrders } from '../../api/deliveryOrders'
@@ -35,6 +35,7 @@ const STATUS_OPTIONS = [
 ]
 
 export default function DeliveryOrdersPage() {
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const [pdfBusy, setPdfBusy] = useState(null)
   const queryClient     = useQueryClient()
@@ -170,12 +171,17 @@ export default function DeliveryOrdersPage() {
                     </tr>
                   ) : (
                     rows.map((row, i) => (
-                      <tr key={row.id} className="transition-colors hover:bg-slate-50">
+                      <tr
+                        key={row.id}
+                        onClick={() => navigate(`/inventory/delivery-orders/${row.id}`)}
+                        className="cursor-pointer transition-colors hover:bg-slate-50"
+                      >
                         <td className="px-3 py-2 text-slate-400">{(page - 1) * (meta?.per_page ?? 25) + i + 1}</td>
                         <td className="px-3 py-2 font-mono font-medium text-indigo-600">
                           <Link to={`/inventory/delivery-orders/${row.id}`} className="hover:underline">{row.do_no}</Link>
                         </td>
-                        <td className="px-3 py-2 font-mono text-slate-500">
+                        {/* stopPropagation so the SO link doesn't also fire the row's navigate */}
+                        <td className="px-3 py-2 font-mono text-slate-500" onClick={(e) => row.sales_order?.so_no && e.stopPropagation()}>
                           {row.sales_order?.so_no ? (
                             <Link to={`/inventory/sales-orders/${row.so_id}`} className="hover:underline">{row.sales_order.so_no}</Link>
                           ) : '—'}
@@ -190,7 +196,8 @@ export default function DeliveryOrdersPage() {
                             {row.status_label}
                           </span>
                         </td>
-                        <td className="px-3 py-2">
+                        {/* stopPropagation so action buttons don't also fire the row's navigate */}
+                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
                             <ViewBtn to={`/inventory/delivery-orders/${row.id}`} />
                             <PrintBtn onClick={() => handlePrintPdf(row.id)} disabled={pdfBusy === row.id} />

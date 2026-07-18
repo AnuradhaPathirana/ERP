@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, Plus } from 'lucide-react'
 import { confirmCosting, deleteCosting, getCostings } from '../../api/costings'
@@ -33,6 +33,7 @@ const TYPE_STYLES = {
 }
 
 export default function CostingsPage() {
+  const navigate = useNavigate()
   const [page, setPage] = useState(1)
   const queryClient     = useQueryClient()
   const resetPage       = () => setPage(1)
@@ -161,7 +162,11 @@ export default function CostingsPage() {
                     </tr>
                   ) : (
                     rows.map((c, i) => (
-                      <tr key={c.id} className="transition-colors hover:bg-slate-50">
+                      <tr
+                        key={c.id}
+                        onClick={() => navigate(`/inventory/costings/${c.id}`)}
+                        className="cursor-pointer transition-colors hover:bg-slate-50"
+                      >
                         <td className="px-3 py-2 text-slate-400">{(page - 1) * (meta?.per_page ?? 25) + i + 1}</td>
                         <td className="px-3 py-2 font-mono font-medium text-indigo-600">
                           <Link to={`/inventory/costings/${c.id}`} className="hover:underline">{c.document_no}</Link>
@@ -182,7 +187,8 @@ export default function CostingsPage() {
                             {c.status_label}
                           </span>
                         </td>
-                        <td className="px-3 py-2">
+                        {/* stopPropagation so action buttons don't also fire the row's navigate */}
+                        <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                           <div className="flex items-center justify-end gap-1">
                             <ViewBtn to={`/inventory/costings/${c.id}`} />
                             {c.status === 'draft' && (

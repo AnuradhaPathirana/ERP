@@ -1,25 +1,25 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, CreditCard, FileText, Percent, Plus, RefreshCw, Save, Trash2, Wallet } from 'lucide-react'
 import {
-  confirmSupplierPayment,
-  createSupplierPayment,
-  getNextPaymentNo,
-  getOpenCreditNotes,
-  getOutstandingGrns,
-  getSupplierPayment,
-  updateSupplierPayment,
-} from '../../api/supplierPayments'
-import { getAllSuppliers } from '../../api/suppliers'
+  confirmCustomerReceipt,
+  createCustomerReceipt,
+  getNextReceiptNo,
+  getOpenCustomerCreditNotes,
+  getOutstandingInvoices,
+  getCustomerReceipt,
+  updateCustomerReceipt,
+} from '../../api/customerReceipts'
+import { getAllCustomers } from '../../api/customers'
 import { getAllPaymentModes } from '../../api/paymentModes'
+import { getInvoice } from '../../api/invoices'
 import Breadcrumb from '../../components/Breadcrumb'
 import Money from '../../components/ui/Money'
 import { confirmAction, showError, showSuccess } from '../../utils/alerts'
 import { fmtMoneyWithSymbol } from '../../utils/currency'
 import { INPUT_CLS, INPUT_DISABLED_CLS, LABEL_CLS, SELECT_CLS } from '../../utils/fieldStyles'
 
-const SUPPLIER_TYPES = ['Trade', 'Service']
 const BANK_NAMES = [
   'Bank of Ceylon', 'Commercial Bank', 'Sampath Bank', 'Hatton National Bank',
   "People's Bank", 'Nations Trust Bank', 'Seylan Bank', 'DFCC Bank', 'NDB Bank', 'Union Bank',
@@ -50,32 +50,38 @@ function fmt(n) {
   return fmtMoneyWithSymbol(n)
 }
 
-export default function SupplierPaymentFormPage() {
+export default function CustomerReceiptFormPage() {
   const { id }       = useParams()
   const isEdit       = Boolean(id)
   const navigate     = useNavigate()
   const queryClient  = useQueryClient()
   const today        = new Date().toISOString().slice(0, 10)
 
+  // ?invoice= deep link (Invoice View → "Make a Payment"): pre-selects the invoice's
+  // customer and pre-checks only that invoice in the picker — the picker still lists
+  // every outstanding invoice for the customer, so the user can tick more to settle
+  // several at once before pressing Continue.
+  const [search]       = useSearchParams()
+  const invoiceFromUrl = !isEdit ? search.get('invoice') : null
+
   const CRUMBS = [
     { label: 'Inventory', to: '/inventory/products' },
-    { label: 'Supplier Payments', to: '/inventory/supplier-payments' },
-    { label: isEdit ? 'Edit Payment' : 'New Payment' },
+    { label: 'Customer Receipts', to: '/inventory/customer-receipts' },
+    { label: isEdit ? 'Edit Receipt' : 'New Receipt' },
   ]
 
   const [form, setForm] = useState({
-    payment_date:     today,
+    receipt_date:     today,
     transaction_date: today,
-    payment_no:       '',
+    receipt_no:       '',
     reference_no:     '',
-    supplier_type:    '',
-    supplier_id:      '',
-    payment_remark:   '',
+    customer_id:      '',
+    receipt_remark:   '',
   })
   const [isAdvance, setIsAdvance]         = useState(false)
   const [advanceAmount, setAdvanceAmount] = useState('')
-  const [rows, setRows]                   = useState([])       // pending GRN picker
-  const [continued, setContinued]         = useState(false)    // Continue → Payment Summary view
+  const [rows, setRows]                   = useState([])       // outstanding invoice picker
+  const [continued, setContinued]         = useState(false)    // Continue → Receipt Summary view
   const [discountPct, setDiscountPct]     = useState('')
   const [creditNoteRows, setCreditNoteRows] = useState([])     // Set Off table
   const [setoffPct, setSetoffPct]         = useState('')
@@ -84,129 +90,142 @@ export default function SupplierPaymentFormPage() {
   const [errors, setErrors]               = useState({})
   const [status, setStatus]               = useState('draft')
 
-  const { data: suppliers = EMPTY_ARRAY } = useQuery({ queryKey: ['suppliers-all'], queryFn: getAllSuppliers })
+  const { data: customers = EMPTY_ARRAY } = useQuery({ queryKey: ['customers-all'], queryFn: getAllCustomers })
   const { data: paymentModes = EMPTY_ARRAY } = useQuery({ queryKey: ['payment-modes-all'], queryFn: getAllPaymentModes })
   const settleableModes = paymentModes.filter((m) => m.code !== 'setoff')
 
-  const { data: nextPaymentNo } = useQuery({
-    queryKey:  ['supplier-payments-next-no'],
-    queryFn:   getNextPaymentNo,
+  const { data: nextReceiptNo } = useQuery({
+    queryKey:  ['customer-receipts-next-no'],
+    queryFn:   getNextReceiptNo,
     enabled:   !isEdit,
     staleTime: 0,
   })
 
   useEffect(() => {
-    if (!isEdit && nextPaymentNo) {
-      setForm((f) => ({ ...f, payment_no: nextPaymentNo }))
+    if (!isEdit && nextReceiptNo) {
+      setForm((f) => ({ ...f, receipt_no: nextReceiptNo }))
     }
-  }, [nextPaymentNo, isEdit])
+  }, [nextReceiptNo, isEdit])
 
   const { data: existing, isLoading: loadingExisting } = useQuery({
-    queryKey: ['supplier-payment', id],
-    queryFn:  () => getSupplierPayment(id),
+    queryKey: ['customer-receipt', id],
+    queryFn:  () => getCustomerReceipt(id),
     enabled:  isEdit,
   })
 
-  // Live pickers only matter while the payment is still editable — a confirmed payment
+  // Source invoice for the ?invoice= deep link — only needed to derive the customer
+  const { data: sourceInvoice } = useQuery({
+    queryKey: ['invoice', invoiceFromUrl],
+    queryFn:  () => getInvoice(invoiceFromUrl),
+    enabled:  Boolean(invoiceFromUrl),
+  })
+
+  useEffect(() => {
+    const customerId = sourceInvoice?.data?.customer_id
+    if (customerId) {
+      setForm((f) => (f.customer_id ? f : { ...f, customer_id: String(customerId) }))
+    }
+  }, [sourceInvoice])
+
+  // Live pickers only matter while the receipt is still editable — a confirmed receipt
   // renders from its saved snapshot instead (see the row-building effects below).
-  const { data: outstandingGrns = EMPTY_ARRAY } = useQuery({
-    queryKey: ['outstanding-grns', form.supplier_id],
-    queryFn:  () => getOutstandingGrns(form.supplier_id),
-    enabled:  Boolean(form.supplier_id) && !isAdvance && status === 'draft',
+  const { data: outstandingInvoices = EMPTY_ARRAY } = useQuery({
+    queryKey: ['outstanding-invoices', form.customer_id],
+    queryFn:  () => getOutstandingInvoices(form.customer_id),
+    enabled:  Boolean(form.customer_id) && !isAdvance && status === 'draft',
   })
 
   const { data: openCreditNotes = EMPTY_ARRAY } = useQuery({
-    queryKey: ['open-credit-notes', form.supplier_id],
-    queryFn:  () => getOpenCreditNotes(form.supplier_id),
-    enabled:  Boolean(form.supplier_id) && status === 'draft',
+    queryKey: ['open-customer-credit-notes', form.customer_id],
+    queryFn:  () => getOpenCustomerCreditNotes(form.customer_id),
+    enabled:  Boolean(form.customer_id) && status === 'draft',
   })
 
   // Seed header + advance state from an existing draft
   useEffect(() => {
     if (!existing?.data) return
-    const p = existing.data
+    const r = existing.data
     setForm({
-      payment_date:     p.payment_date     ?? today,
-      transaction_date: p.transaction_date ?? today,
-      payment_no:       p.payment_no       ?? '',
-      reference_no:     p.reference_no     ?? '',
-      supplier_type:    p.supplier_type    ?? '',
-      supplier_id:      p.supplier_id      ?? '',
-      payment_remark:   p.payment_remark   ?? '',
+      receipt_date:     r.receipt_date     ?? today,
+      transaction_date: r.transaction_date ?? today,
+      receipt_no:       r.receipt_no       ?? '',
+      reference_no:     r.reference_no     ?? '',
+      customer_id:      r.customer_id      ?? '',
+      receipt_remark:   r.receipt_remark   ?? '',
     })
-    setIsAdvance(Boolean(p.is_advance))
-    setAdvanceAmount(p.is_advance ? String(p.advance_amount) : '')
-    setStatus(p.status)
+    setIsAdvance(Boolean(r.is_advance))
+    setAdvanceAmount(r.is_advance ? String(r.advance_amount) : '')
+    setStatus(r.status)
     setContinued(true)
-    setSettlements((p.settlements ?? []).map((s) => ({
+    setSettlements((r.settlements ?? []).map((s) => ({
       _key: s.id, payment_mode_id: s.payment_mode_id, payment_mode_name: s.payment_mode_name,
       amount: String(s.amount), bank_name: s.bank_name ?? '', bank_account_no: s.bank_account_no ?? '',
       reference_no: s.reference_no ?? '', instrument_date: s.instrument_date ?? '',
     })))
   }, [existing])
 
-  // Build the GRN rows. Confirmed payments render purely from the saved allocation
-  // snapshot — their GRNs are paid off, so the live "outstanding" list no longer
+  // Build the invoice rows. Confirmed receipts render purely from the saved allocation
+  // snapshot — their invoices are settled, so the live "outstanding" list no longer
   // contains them. Drafts merge the live outstanding list with any saved allocations.
   useEffect(() => {
     const allocations = existing?.data?.allocations ?? []
 
     if (existing?.data && existing.data.status !== 'draft') {
       setRows(allocations.map((a) => ({
-        grn_id:       a.reference_id,
-        grn_no:       a.grn_no ?? `#${a.reference_id}`,
-        grn_date:     a.grn_date,
-        po_no:        a.po_no,
-        reference_no: a.reference_no,
-        due_date:     a.due_date ?? '',
-        amount:       a.outstanding_before,
-        checked:      true,
-        discount:     String(a.discount),
-        payAmount:    String(a.payment_amount),
+        invoice_id:    a.reference_id,
+        invoice_no:    a.invoice_no ?? `#${a.reference_id}`,
+        invoice_date:  a.invoice_date,
+        so_no:         a.so_no,
+        do_no:         a.do_no,
+        due_date:      a.due_date ?? '',
+        amount:        a.outstanding_before,
+        checked:       true,
+        discount:      String(a.discount),
+        payAmount:     String(a.receipt_amount),
       })))
       return
     }
 
-    const savedByGrn = new Map(allocations.map((a) => [a.reference_id, a]))
-    const liveRows = outstandingGrns.map((g) => {
-      const saved = savedByGrn.get(g.grn_id)
+    const savedByInvoice = new Map(allocations.map((a) => [a.reference_id, a]))
+    const liveRows = outstandingInvoices.map((inv) => {
+      const saved = savedByInvoice.get(inv.invoice_id)
       return {
-        grn_id:       g.grn_id,
-        grn_no:       g.grn_no,
-        grn_date:     g.grn_date,
-        po_no:        g.po_no,
-        reference_no: g.reference_no,
-        due_date:     saved?.due_date ?? g.due_date ?? '',
-        amount:       g.outstanding,
-        checked:      Boolean(saved),
-        discount:     saved ? String(saved.discount) : '',
-        // Defaults to full payment (outstanding − discount); user can reduce it for a partial payment.
-        payAmount:    saved ? String(saved.payment_amount) : String(g.outstanding),
+        invoice_id:    inv.invoice_id,
+        invoice_no:    inv.invoice_no,
+        invoice_date:  inv.invoice_date,
+        so_no:         inv.so_no,
+        do_no:         inv.do_no,
+        due_date:      saved?.due_date ?? inv.due_date ?? '',
+        amount:        inv.outstanding,
+        checked:       Boolean(saved) || String(inv.invoice_id) === String(invoiceFromUrl),
+        discount:      saved ? String(saved.discount) : '',
+        // Defaults to full receipt (outstanding − discount); user can reduce it for a partial receipt.
+        payAmount:     saved ? String(saved.receipt_amount) : String(inv.outstanding),
       }
     })
 
-    // Draft allocations whose GRN vanished from the live list (paid off by another
-    // confirmed payment meanwhile) must stay visible so the user can review/remove them.
-    const liveIds = new Set(outstandingGrns.map((g) => g.grn_id))
+    // Draft allocations whose invoice vanished from the live list (settled by another
+    // confirmed receipt meanwhile) must stay visible so the user can review/remove them.
+    const liveIds = new Set(outstandingInvoices.map((inv) => inv.invoice_id))
     const orphanRows = allocations
       .filter((a) => !liveIds.has(a.reference_id))
       .map((a) => ({
-        grn_id:       a.reference_id,
-        grn_no:       a.grn_no ?? `#${a.reference_id}`,
-        grn_date:     a.grn_date,
-        po_no:        a.po_no,
-        reference_no: a.reference_no,
-        due_date:     a.due_date ?? '',
-        amount:       0, // nothing left outstanding on this GRN
-        checked:      true,
-        discount:     String(a.discount),
-        payAmount:    String(a.payment_amount),
+        invoice_id:    a.reference_id,
+        invoice_no:    a.invoice_no ?? `#${a.reference_id}`,
+        invoice_date:  a.invoice_date,
+        so_no:         a.so_no,
+        do_no:         a.do_no,
+        due_date:      a.due_date ?? '',
+        amount:        0, // nothing left outstanding on this invoice
+        checked:       true,
+        discount:      String(a.discount),
+        payAmount:     String(a.receipt_amount),
       }))
 
     setRows([...liveRows, ...orphanRows])
-  }, [outstandingGrns, existing])
+  }, [outstandingInvoices, existing])
 
-  // Build the Set Off rows. Confirmed payments render from the saved setoffs — the
+  // Build the Set Off rows. Confirmed receipts render from the saved setoffs — the
   // consumed credit notes are exhausted, so the live "open" list no longer has them.
   // Drafts merge the live open credit notes with any setoffs already saved.
   useEffect(() => {
@@ -218,7 +237,7 @@ export default function SupplierPaymentFormPage() {
         credit_type_label:  s.credit_note?.credit_type_label ?? s.setoff_type_label,
         created_at:         s.credit_note?.created_at,
         amount:             s.credit_note?.amount ?? s.amount,
-        // Reconstruct the balance as it stood before this payment consumed it, so the
+        // Reconstruct the balance as it stood before this receipt consumed it, so the
         // "Remaining" column (balance − setoff) shows the credit note's current balance.
         remaining_balance:  (s.credit_note?.remaining_balance ?? 0) + s.amount,
         checked:            true,
@@ -246,17 +265,17 @@ export default function SupplierPaymentFormPage() {
 
   const setField = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
 
-  const toggleRow = (grnId) => setRows((prev) => prev.map((r) => r.grn_id === grnId ? { ...r, checked: !r.checked } : r))
+  const toggleRow = (invoiceId) => setRows((prev) => prev.map((r) => r.invoice_id === invoiceId ? { ...r, checked: !r.checked } : r))
   const checkedRows = rows.filter((r) => r.checked)
 
-  // What's actually still owed on this GRN once the discount write-off is applied.
+  // What's actually still owed on this invoice once the discount write-off is applied.
   // payAmount is allowed to exceed this — that's a deliberate overpayment, and the excess
   // becomes an over_payment credit note (available for setoff later) rather than being blocked.
-  const maxPayable = (r) => Math.max(0, r.amount - (parseFloat(r.discount) || 0))
+  const maxReceivable = (r) => Math.max(0, r.amount - (parseFloat(r.discount) || 0))
 
-  const setRowDiscount = (grnId, value) => setRows((prev) => prev.map((r) => r.grn_id === grnId ? { ...r, discount: value } : r))
-  const setRowPayAmount = (grnId, value) => setRows((prev) => prev.map((r) => r.grn_id === grnId ? { ...r, payAmount: value } : r))
-  const removeSummaryRow = (grnId) => setRows((prev) => prev.map((r) => r.grn_id === grnId ? { ...r, checked: false, discount: '', payAmount: String(r.amount) } : r))
+  const setRowDiscount = (invoiceId, value) => setRows((prev) => prev.map((r) => r.invoice_id === invoiceId ? { ...r, discount: value } : r))
+  const setRowPayAmount = (invoiceId, value) => setRows((prev) => prev.map((r) => r.invoice_id === invoiceId ? { ...r, payAmount: value } : r))
+  const removeSummaryRow = (invoiceId) => setRows((prev) => prev.map((r) => r.invoice_id === invoiceId ? { ...r, checked: false, discount: '', payAmount: String(r.amount) } : r))
 
   const applyDiscountPct = () => {
     const pct = parseFloat(discountPct)
@@ -269,8 +288,8 @@ export default function SupplierPaymentFormPage() {
     }))
   }
 
-  const totalPayable = checkedRows.reduce((sum, r) => sum + (parseFloat(r.payAmount) || 0), 0)
-  const target = isAdvance ? (parseFloat(advanceAmount) || 0) : totalPayable
+  const totalReceivable = checkedRows.reduce((sum, r) => sum + (parseFloat(r.payAmount) || 0), 0)
+  const target = isAdvance ? (parseFloat(advanceAmount) || 0) : totalReceivable
 
   const toggleCreditNote = (cnId) => setCreditNoteRows((prev) => prev.map((c) => c.id === cnId ? { ...c, checked: !c.checked, setoff_amount: !c.checked ? c.setoff_amount : '' } : c))
   const setCreditNoteAmount = (cnId, value) => setCreditNoteRows((prev) => prev.map((c) => c.id === cnId ? { ...c, setoff_amount: value } : c))
@@ -322,41 +341,42 @@ export default function SupplierPaymentFormPage() {
   const removeSettlement = (key) => setSettlements((prev) => prev.filter((s) => s._key !== key))
 
   const saveMutation = useMutation({
-    mutationFn: (payload) => isEdit ? updateSupplierPayment(id, payload) : createSupplierPayment(payload),
+    mutationFn: (payload) => isEdit ? updateCustomerReceipt(id, payload) : createCustomerReceipt(payload),
     onSuccess: (res) => {
-      showSuccess(isEdit ? 'Supplier payment updated.' : 'Supplier payment created.')
+      showSuccess(isEdit ? 'Customer receipt updated.' : 'Customer receipt created.')
       const savedId = res?.data?.id ?? id
-      navigate(`/inventory/supplier-payments/${savedId}/edit`)
-      queryClient.invalidateQueries({ queryKey: ['supplier-payments'] })
-      queryClient.invalidateQueries({ queryKey: ['supplier-payment', String(savedId)] })
+      navigate(`/inventory/customer-receipts/${savedId}/edit`)
+      queryClient.invalidateQueries({ queryKey: ['customer-receipts'] })
+      queryClient.invalidateQueries({ queryKey: ['customer-receipt', String(savedId)] })
     },
     onError: (e) => {
       const data = e.response?.data
       if (data?.errors) setErrors(data.errors)
-      showError(data?.message ?? 'Failed to save supplier payment.')
+      showError(data?.message ?? 'Failed to save customer receipt.')
     },
   })
 
   const confirmMutation = useMutation({
-    mutationFn: () => confirmSupplierPayment(id),
+    mutationFn: () => confirmCustomerReceipt(id),
     onSuccess: () => {
-      showSuccess('Payment confirmed. Outstanding balances updated.')
-      queryClient.invalidateQueries({ queryKey: ['supplier-payment', id] })
-      queryClient.invalidateQueries({ queryKey: ['supplier-payments'] })
-      queryClient.invalidateQueries({ queryKey: ['outstanding-grns'] })
-      queryClient.invalidateQueries({ queryKey: ['open-credit-notes'] })
+      showSuccess('Receipt confirmed. Invoice outstanding balances updated.')
+      queryClient.invalidateQueries({ queryKey: ['customer-receipt', id] })
+      queryClient.invalidateQueries({ queryKey: ['customer-receipts'] })
+      queryClient.invalidateQueries({ queryKey: ['outstanding-invoices'] })
+      queryClient.invalidateQueries({ queryKey: ['open-customer-credit-notes'] })
+      queryClient.invalidateQueries({ queryKey: ['invoices'] })
     },
-    onError: (e) => showError(e.response?.data?.message ?? 'Failed to confirm payment.'),
+    onError: (e) => showError(e.response?.data?.message ?? 'Failed to confirm receipt.'),
   })
 
   const err = (f) => errors[f]?.[0]
 
   const handleSubmit = () => {
     const clientErrors = {}
-    if (!form.supplier_id) clientErrors.supplier_id = ['Supplier is required.']
+    if (!form.customer_id) clientErrors.customer_id = ['Customer is required.']
     if (isAdvance && !(parseFloat(advanceAmount) > 0)) clientErrors.advance_amount = ['Advance amount is required.']
-    if (!isAdvance && checkedRows.length === 0) clientErrors.allocations = ['Select at least one GRN, or mark this as a standalone advance.']
-    if (isUnderfunded) clientErrors.balance = [`Payment is underfunded by ${fmt(remaining)}. Add more Setoffs or Payment Details.`]
+    if (!isAdvance && checkedRows.length === 0) clientErrors.allocations = ['Select at least one invoice, or mark this as a standalone advance.']
+    if (isUnderfunded) clientErrors.balance = [`Receipt is underfunded by ${fmt(remaining)}. Add more Setoffs or Receipt Details.`]
 
     if (Object.keys(clientErrors).length) {
       setErrors(clientErrors)
@@ -366,20 +386,19 @@ export default function SupplierPaymentFormPage() {
 
     setErrors({})
     saveMutation.mutate({
-      payment_date:     form.payment_date,
+      receipt_date:     form.receipt_date,
       transaction_date: form.transaction_date || null,
       reference_no:     form.reference_no || null,
-      supplier_type:    form.supplier_type || null,
-      supplier_id:      parseInt(form.supplier_id),
-      payment_remark:   form.payment_remark || null,
+      customer_id:      parseInt(form.customer_id),
+      receipt_remark:   form.receipt_remark || null,
       is_advance:       isAdvance,
       advance_amount:   isAdvance ? parseFloat(advanceAmount) : null,
       allocations: isAdvance ? [] : checkedRows.map((r) => ({
-        reference_type: 'grn',
-        reference_id:   r.grn_id,
+        reference_type: 'invoice',
+        reference_id:   r.invoice_id,
         due_date:       r.due_date || null,
         discount:       parseFloat(r.discount) || 0,
-        payment_amount: parseFloat(r.payAmount) || 0,
+        receipt_amount: parseFloat(r.payAmount) || 0,
         line_remark:    null,
       })),
       setoffs: checkedCreditNotes.map((c) => ({
@@ -402,9 +421,9 @@ export default function SupplierPaymentFormPage() {
 
   const handleConfirm = async () => {
     const ok = await confirmAction({
-      title: 'Confirm this payment?',
-      message: 'This will deduct against GRN outstanding balances and post any setoffs. This action cannot be easily undone.',
-      confirmText: 'Yes, Confirm Payment',
+      title: 'Confirm this receipt?',
+      message: 'This will settle against invoice outstanding balances, post any setoffs and mark fully-received invoices as Paid. This action cannot be easily undone.',
+      confirmText: 'Yes, Confirm Receipt',
     })
     if (ok) confirmMutation.mutate()
   }
@@ -427,7 +446,7 @@ export default function SupplierPaymentFormPage() {
       <div className="mb-2 flex items-start justify-between">
         <div>
           <h1 className="text-xl font-bold leading-none text-slate-800">
-            {isEdit ? 'Edit Supplier Payment' : 'New Supplier Payment'}
+            {isEdit ? 'Edit Customer Receipt' : 'New Customer Receipt'}
           </h1>
           <Breadcrumb crumbs={CRUMBS} />
         </div>
@@ -443,11 +462,11 @@ export default function SupplierPaymentFormPage() {
       <div className="space-y-2">
         {/* ── Header details ── */}
         <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-          <SectionHeader icon={FileText} title="Payment Note Details" colorClass="text-indigo-700 bg-indigo-50 border-indigo-100" />
+          <SectionHeader icon={FileText} title="Receipt Note Details" colorClass="text-indigo-700 bg-indigo-50 border-indigo-100" />
           <div className="grid grid-cols-1 gap-2 p-2.5 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             <div>
               <label className={LABEL_CLS}>Date <span className="text-red-500">*</span></label>
-              <input type="date" className={INPUT_CLS} value={form.payment_date} onChange={setField('payment_date')} disabled={!isDraft} />
+              <input type="date" className={INPUT_CLS} value={form.receipt_date} onChange={setField('receipt_date')} disabled={!isDraft} />
             </div>
             <div>
               <label className={LABEL_CLS}>Transaction Date</label>
@@ -455,35 +474,28 @@ export default function SupplierPaymentFormPage() {
             </div>
             <div>
               <label className={LABEL_CLS}>Document Number <span className="ml-1 normal-case font-medium text-indigo-400 text-[10px]">auto</span></label>
-              <input readOnly className={INPUT_DISABLED_CLS} placeholder={!isEdit ? 'Generating…' : ''} value={form.payment_no} />
+              <input readOnly className={INPUT_DISABLED_CLS} placeholder={!isEdit ? 'Generating…' : ''} value={form.receipt_no} />
             </div>
             <div>
               <label className={LABEL_CLS}>Reference Number</label>
               <input className={INPUT_CLS} value={form.reference_no} onChange={setField('reference_no')} disabled={!isDraft} />
             </div>
             <div>
-              <label className={LABEL_CLS}>Supplier Type <span className="text-red-500">*</span></label>
-              <select className={SELECT_CLS} value={form.supplier_type} onChange={setField('supplier_type')} disabled={!isDraft}>
-                <option value="">— Select —</option>
-                {SUPPLIER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-              </select>
-            </div>
-            <div>
-              <label className={LABEL_CLS}>Supplier <span className="text-red-500">*</span></label>
+              <label className={LABEL_CLS}>Customer <span className="text-red-500">*</span></label>
               <select
-                className={err('supplier_id') ? SELECT_CLS.replace('border-slate-200', 'border-red-300') : SELECT_CLS}
-                value={form.supplier_id}
-                onChange={(e) => { setField('supplier_id')(e); setContinued(false) }}
+                className={err('customer_id') ? SELECT_CLS.replace('border-slate-200', 'border-red-300') : SELECT_CLS}
+                value={form.customer_id}
+                onChange={(e) => { setField('customer_id')(e); setContinued(false) }}
                 disabled={!isDraft}
               >
-                <option value="">— Select supplier —</option>
-                {suppliers.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                <option value="">— Select customer —</option>
+                {customers.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
-              {err('supplier_id') && <p className="mt-0.5 text-[10px] text-red-500">{err('supplier_id')}</p>}
+              {err('customer_id') && <p className="mt-0.5 text-[10px] text-red-500">{err('customer_id')}</p>}
             </div>
             <div className="md:col-span-2 xl:col-span-2">
-              <label className={LABEL_CLS}>Payment Remark</label>
-              <input className={INPUT_CLS} value={form.payment_remark} onChange={setField('payment_remark')} disabled={!isDraft} />
+              <label className={LABEL_CLS}>Receipt Remark</label>
+              <input className={INPUT_CLS} value={form.receipt_remark} onChange={setField('receipt_remark')} disabled={!isDraft} />
             </div>
           </div>
 
@@ -497,7 +509,7 @@ export default function SupplierPaymentFormPage() {
                 className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
               />
               <label htmlFor="is_advance" className="cursor-pointer text-xs font-semibold text-slate-600">
-                This is a standalone advance payment (no GRNs)
+                This is a standalone advance receipt (no invoices)
               </label>
             </div>
           )}
@@ -521,44 +533,46 @@ export default function SupplierPaymentFormPage() {
           </div>
         )}
 
-        {/* ── Step 1: Pending GRN picker (selection only) ── */}
+        {/* ── Step 1: Outstanding invoice picker (selection only) ── */}
         {!isAdvance && !showSummary && (
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <SectionHeader icon={FileText} title="Pending GRNs" colorClass="text-indigo-700 bg-indigo-50 border-indigo-100" />
+            <SectionHeader icon={FileText} title="Outstanding Invoices" colorClass="text-indigo-700 bg-indigo-50 border-indigo-100" />
 
-            {!form.supplier_id ? (
-              <div className="px-4 py-10 text-center text-xs text-slate-400">Select a supplier to load pending GRNs.</div>
+            {!form.customer_id ? (
+              <div className="px-4 py-10 text-center text-xs text-slate-400">Select a customer to load outstanding invoices.</div>
             ) : rows.length === 0 ? (
-              <div className="px-4 py-10 text-center text-xs text-slate-400">No pending GRNs for this supplier.</div>
+              <div className="px-4 py-10 text-center text-xs text-slate-400">No outstanding invoices for this customer.</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">
                       <th className="w-8 px-2 py-1.5"></th>
-                      <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN No</th>
-                      <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN Date</th>
-                      <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">PO Number</th>
-                      <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Reference No</th>
+                      <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Invoice No</th>
+                      <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Invoice Date</th>
+                      <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">SO No</th>
+                      <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">DO No</th>
+                      <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Due Date</th>
                       <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Outstanding</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {rows.map((r) => (
-                      <tr key={r.grn_id} className="hover:bg-slate-50/60 cursor-pointer" onClick={() => toggleRow(r.grn_id)}>
+                      <tr key={r.invoice_id} className="hover:bg-slate-50/60 cursor-pointer" onClick={() => toggleRow(r.invoice_id)}>
                         <td className="px-2 py-1 text-center">
                           <input
                             type="checkbox"
                             checked={r.checked}
-                            onChange={() => toggleRow(r.grn_id)}
+                            onChange={() => toggleRow(r.invoice_id)}
                             onClick={(e) => e.stopPropagation()}
                             className="h-3.5 w-3.5 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
                           />
                         </td>
-                        <td className="px-2 py-1 font-mono text-indigo-600">{r.grn_no}</td>
-                        <td className="px-2 py-1 text-slate-600 whitespace-nowrap">{r.grn_date}</td>
-                        <td className="px-2 py-1 text-slate-500 font-mono">{r.po_no || '—'}</td>
-                        <td className="px-2 py-1 text-slate-500 font-mono">{r.reference_no || '—'}</td>
+                        <td className="px-2 py-1 font-mono text-indigo-600">{r.invoice_no}</td>
+                        <td className="px-2 py-1 text-slate-600 whitespace-nowrap">{r.invoice_date}</td>
+                        <td className="px-2 py-1 text-slate-500 font-mono">{r.so_no || '—'}</td>
+                        <td className="px-2 py-1 text-slate-500 font-mono">{r.do_no || '—'}</td>
+                        <td className="px-2 py-1 text-slate-500 whitespace-nowrap">{r.due_date || '—'}</td>
                         <td className="px-2 py-1 text-right font-medium text-slate-700"><Money value={r.amount} /></td>
                       </tr>
                     ))}
@@ -584,13 +598,13 @@ export default function SupplierPaymentFormPage() {
           </div>
         )}
 
-        {/* ── Step 2: Payment Summary + Set Off ── */}
+        {/* ── Step 2: Receipt Summary + Set Off ── */}
         {!isAdvance && showSummary && (
           <>
             <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
               <SectionHeader
                 icon={FileText}
-                title="Payment Summary"
+                title="Receipt Summary"
                 colorClass="text-indigo-700 bg-indigo-50 border-indigo-100"
                 right={
                   <div className="flex items-center gap-2">
@@ -619,22 +633,22 @@ export default function SupplierPaymentFormPage() {
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200">
-                      <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">GRN Number</th>
+                      <th className="px-2 py-1.5 text-left text-[10px] font-bold uppercase tracking-wider text-slate-500">Invoice Number</th>
                       <th className="px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Amount</th>
                       <th className="w-28 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Discount</th>
-                      <th className="w-32 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Payable Amount</th>
+                      <th className="w-32 px-2 py-1.5 text-right text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Receivable Amount</th>
                       <th className="w-8"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {checkedRows.map((r) => {
-                      const cap = maxPayable(r)
-                      const paid = parseFloat(r.payAmount) || 0
-                      const remainderAfterThis = Math.max(0, cap - paid)
-                      const overpaidAfterThis  = Math.max(0, paid - cap)
+                      const cap = maxReceivable(r)
+                      const received = parseFloat(r.payAmount) || 0
+                      const remainderAfterThis = Math.max(0, cap - received)
+                      const overpaidAfterThis  = Math.max(0, received - cap)
                       return (
-                        <tr key={r.grn_id} className="hover:bg-slate-50/60">
-                          <td className="px-2 py-1 font-mono text-indigo-600">{r.grn_no}</td>
+                        <tr key={r.invoice_id} className="hover:bg-slate-50/60">
+                          <td className="px-2 py-1 font-mono text-indigo-600">{r.invoice_no}</td>
                           <td className="px-2 py-1 text-right text-slate-600"><Money value={r.amount} /></td>
                           <td className="px-2 py-1">
                             <input
@@ -642,7 +656,7 @@ export default function SupplierPaymentFormPage() {
                               className="w-full rounded-md border-2 border-slate-200 bg-slate-50 px-1.5 py-0.5 text-right text-xs outline-none focus:border-indigo-400 disabled:cursor-not-allowed disabled:bg-slate-100"
                               value={r.discount}
                               disabled={!isDraft}
-                              onChange={(e) => setRowDiscount(r.grn_id, e.target.value)}
+                              onChange={(e) => setRowDiscount(r.invoice_id, e.target.value)}
                             />
                           </td>
                           <td className="px-2 py-1">
@@ -651,7 +665,7 @@ export default function SupplierPaymentFormPage() {
                               className="w-full rounded-md border-2 border-slate-200 bg-slate-50 px-1.5 py-0.5 text-right text-xs font-medium text-slate-700 outline-none focus:border-indigo-400 disabled:cursor-not-allowed disabled:bg-slate-100"
                               value={r.payAmount}
                               disabled={!isDraft}
-                              onChange={(e) => setRowPayAmount(r.grn_id, e.target.value)}
+                              onChange={(e) => setRowPayAmount(r.invoice_id, e.target.value)}
                             />
                             {remainderAfterThis > 0.01 && (
                               <div className="mt-0.5 text-right text-[9px] font-semibold text-amber-500">
@@ -666,7 +680,7 @@ export default function SupplierPaymentFormPage() {
                           </td>
                           <td className="px-2 py-1 text-center">
                             {isDraft && (
-                              <button type="button" onClick={() => removeSummaryRow(r.grn_id)} className="rounded-md p-1 text-slate-300 hover:bg-red-50 hover:text-red-500" title="Remove">
+                              <button type="button" onClick={() => removeSummaryRow(r.invoice_id)} className="rounded-md p-1 text-slate-300 hover:bg-red-50 hover:text-red-500" title="Remove">
                                 <Trash2 size={12} />
                               </button>
                             )}
@@ -702,7 +716,7 @@ export default function SupplierPaymentFormPage() {
                 )}
               />
               {creditNoteRows.length === 0 ? (
-                <div className="px-4 py-8 text-center text-xs text-slate-400">No open credit notes for this supplier.</div>
+                <div className="px-4 py-8 text-center text-xs text-slate-400">No open credit notes for this customer.</div>
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
@@ -765,10 +779,10 @@ export default function SupplierPaymentFormPage() {
           </>
         )}
 
-        {/* ── Payment Details (Cash/Cheque/Card settlement lines) ── */}
+        {/* ── Receipt Details (Cash/Cheque/Card settlement lines) ── */}
         {showSummary && (
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-            <SectionHeader icon={Wallet} title="Payment Details" colorClass="text-emerald-700 bg-emerald-50 border-emerald-100" />
+            <SectionHeader icon={Wallet} title="Receipt Details" colorClass="text-emerald-700 bg-emerald-50 border-emerald-100" />
 
             {isDraft && (
               <div className="grid grid-cols-1 gap-2 border-b border-slate-100 p-2.5 md:grid-cols-2 lg:grid-cols-4">
@@ -913,7 +927,7 @@ export default function SupplierPaymentFormPage() {
               type="button"
               disabled={saveMutation.isPending || isUnderfunded}
               onClick={handleSubmit}
-              title={isUnderfunded ? 'Cover the full Total Payable before saving' : undefined}
+              title={isUnderfunded ? 'Cover the full Total Receivable before saving' : undefined}
               className="flex items-center gap-1 rounded bg-indigo-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm shadow-indigo-100 transition-all hover:bg-indigo-700 disabled:opacity-40 active:scale-95"
             >
               {saveMutation.isPending ? (<><RefreshCw size={11} className="animate-spin" /> Saving…</>) : (<><Save size={11} /> {isEdit ? 'Update' : 'Save Draft'}</>)}
@@ -925,10 +939,10 @@ export default function SupplierPaymentFormPage() {
               type="button"
               disabled={confirmMutation.isPending || isUnderfunded}
               onClick={handleConfirm}
-              title={isUnderfunded ? 'Cover the full Total Payable before confirming' : undefined}
+              title={isUnderfunded ? 'Cover the full Total Receivable before confirming' : undefined}
               className="flex items-center gap-1 rounded bg-emerald-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm shadow-emerald-100 transition-all hover:bg-emerald-700 disabled:opacity-40 active:scale-95"
             >
-              {confirmMutation.isPending ? 'Confirming…' : 'Confirm Payment'}
+              {confirmMutation.isPending ? 'Confirming…' : 'Confirm Receipt'}
             </button>
           )}
         </div>

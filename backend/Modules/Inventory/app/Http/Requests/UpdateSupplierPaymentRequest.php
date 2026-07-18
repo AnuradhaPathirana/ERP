@@ -78,6 +78,9 @@ class UpdateSupplierPaymentRequest extends FormRequest
             $isAdvance   = (bool) $this->input('is_advance');
             $allocations = (array) $this->input('allocations', []);
             $setoffs     = (array) $this->input('setoffs', []);
+            $settlements = (array) $this->input('settlements', []);
+
+            $this->validateChequeNumbers($validator, $settlements);
 
             if ($isAdvance && count($allocations) > 0) {
                 $validator->errors()->add('allocations', 'A standalone advance payment cannot also include GRN allocations.');
@@ -99,5 +102,29 @@ class UpdateSupplierPaymentRequest extends FormRequest
                 }
             }
         });
+    }
+
+    /**
+     * A settlement line paid by cheque must carry a 6-digit cheque number in reference_no.
+     * @param array<int, array<string, mixed>> $settlements
+     */
+    private function validateChequeNumbers(Validator $validator, array $settlements): void
+    {
+        if (empty($settlements)) {
+            return;
+        }
+
+        $chequeModeIds = \Modules\Inventory\Models\PaymentMode::where('code', 'cheque')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        foreach ($settlements as $index => $settlement) {
+            $isCheque = in_array((int) ($settlement['payment_mode_id'] ?? 0), $chequeModeIds, true);
+
+            if ($isCheque && !preg_match('/^\d{6}$/', (string) ($settlement['reference_no'] ?? ''))) {
+                $validator->errors()->add("settlements.{$index}.reference_no", 'Cheque number must be exactly 6 digits.');
+            }
+        }
     }
 }
