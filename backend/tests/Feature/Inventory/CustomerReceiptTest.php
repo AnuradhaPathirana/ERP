@@ -377,6 +377,33 @@ class CustomerReceiptTest extends TestCase
             ->assertCreated();
     }
 
+    public function test_receipt_pdf_downloads_for_confirmed_receipts_only(): void
+    {
+        $invoice = $this->makeIssuedInvoice(1000);
+
+        $receiptId = $this->actingAs($this->user)
+            ->postJson('/api/v1/customer-receipts', $this->receiptPayload($invoice))
+            ->assertCreated()
+            ->json('data.id');
+
+        // Draft receipts have no printable document
+        $this->actingAs($this->user)
+            ->get("/api/v1/customer-receipts/{$receiptId}/pdf")
+            ->assertStatus(422);
+
+        $this->actingAs($this->user)
+            ->postJson("/api/v1/customer-receipts/{$receiptId}/confirm")
+            ->assertOk();
+
+        $response = $this->actingAs($this->user)
+            ->get("/api/v1/customer-receipts/{$receiptId}/pdf")
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+
+        $receiptNo = CustomerReceipt::findOrFail($receiptId)->receipt_no;
+        $this->assertStringContainsString("RCP_{$receiptNo}.pdf", (string) $response->headers->get('content-disposition'));
+    }
+
     public function test_receipt_requires_permission(): void
     {
         $outsider = User::factory()->create(['active_modules' => ['inventory']]);

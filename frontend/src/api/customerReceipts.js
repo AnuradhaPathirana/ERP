@@ -24,6 +24,9 @@ export const getNextReceiptNo = () =>
 export const getOutstandingInvoices = (customerId) =>
   api.get(`/api/v1/customer-receipts/outstanding-invoices/${customerId}`).then((r) => r.data.data)
 
+export const downloadCustomerReceiptPdf = (id) =>
+  api.get(`/api/v1/customer-receipts/${id}/pdf`, { responseType: 'blob' }).then((r) => r.data)
+
 export const getOpenCustomerCreditNotes = (customerId, type = null) =>
   api.get('/api/v1/customer-receipts/open-credit-notes', {
     params: { customer_id: customerId, ...(type ? { type } : {}) },

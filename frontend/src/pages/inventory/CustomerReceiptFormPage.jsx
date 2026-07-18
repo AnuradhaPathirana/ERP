@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, CreditCard, FileText, Percent, Plus, RefreshCw, Save, Trash2, Wallet } from 'lucide-react'
+import { ArrowLeft, CreditCard, Download, FileText, Percent, Plus, Printer, RefreshCw, Save, Trash2, Wallet } from 'lucide-react'
 import {
   confirmCustomerReceipt,
   createCustomerReceipt,
+  downloadCustomerReceiptPdf,
   getNextReceiptNo,
   getOpenCustomerCreditNotes,
   getOutstandingInvoices,
@@ -18,6 +19,7 @@ import Breadcrumb from '../../components/Breadcrumb'
 import Money from '../../components/ui/Money'
 import { confirmAction, showError, showSuccess } from '../../utils/alerts'
 import { fmtMoneyWithSymbol } from '../../utils/currency'
+import { printPdfBlob } from '../../utils/pdf'
 import { INPUT_CLS, INPUT_DISABLED_CLS, LABEL_CLS, SELECT_CLS } from '../../utils/fieldStyles'
 
 const BANK_NAMES = [
@@ -89,6 +91,7 @@ export default function CustomerReceiptFormPage() {
   const [settlementDraft, setSettlementDraft] = useState(emptySettlementDraft())
   const [errors, setErrors]               = useState({})
   const [status, setStatus]               = useState('draft')
+  const [pdfBusy, setPdfBusy]             = useState(false)
 
   const { data: customers = EMPTY_ARRAY } = useQuery({ queryKey: ['customers-all'], queryFn: getAllCustomers })
   const { data: paymentModes = EMPTY_ARRAY } = useQuery({ queryKey: ['payment-modes-all'], queryFn: getAllPaymentModes })
@@ -417,6 +420,27 @@ export default function CustomerReceiptFormPage() {
         remark:           null,
       })),
     })
+  }
+
+  const handlePdf = async (print) => {
+    setPdfBusy(true)
+    try {
+      const blob = await downloadCustomerReceiptPdf(id)
+      if (print) {
+        printPdfBlob(blob)
+      } else {
+        const url = URL.createObjectURL(blob)
+        const a   = document.createElement('a')
+        a.href    = url
+        a.download = `RCP_${form.receipt_no || id}.pdf`
+        a.click()
+        URL.revokeObjectURL(url)
+      }
+    } catch {
+      showError('Failed to generate the receipt PDF.')
+    } finally {
+      setPdfBusy(false)
+    }
   }
 
   const handleConfirm = async () => {
@@ -920,6 +944,27 @@ export default function CustomerReceiptFormPage() {
             <div className={`text-sm ${isUnderfunded ? 'text-amber-600' : isOverfunded ? 'text-sky-600' : 'text-emerald-600'}`}>
               Remaining: <span className="text-base font-black">{fmt(remaining)}</span>
             </div>
+          )}
+
+          {isEdit && status === 'confirmed' && (
+            <>
+              <button
+                type="button"
+                disabled={pdfBusy}
+                onClick={() => handlePdf(true)}
+                className="flex items-center gap-1 rounded border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition-all hover:bg-slate-50 disabled:opacity-60 active:scale-95"
+              >
+                <Printer size={12} /> Print
+              </button>
+              <button
+                type="button"
+                disabled={pdfBusy}
+                onClick={() => handlePdf(false)}
+                className="flex items-center gap-1 rounded bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm shadow-indigo-100 transition-all hover:bg-indigo-700 disabled:opacity-60 active:scale-95"
+              >
+                {pdfBusy ? (<><RefreshCw size={11} className="animate-spin" /> Generating…</>) : (<><Download size={12} /> Download Receipt</>)}
+              </button>
+            </>
           )}
 
           {isDraft && (

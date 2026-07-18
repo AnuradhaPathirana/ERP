@@ -42,6 +42,7 @@ use Modules\Inventory\Http\Controllers\ReportController;
 use Modules\Inventory\Http\Controllers\SupplierPaymentController;
 use Modules\Inventory\Http\Controllers\SupplierCreditNoteController;
 use Modules\Inventory\Http\Controllers\CustomerReceiptController;
+use Modules\Inventory\Http\Controllers\CustomerReceiptPdfController;
 use Modules\Inventory\Http\Controllers\CustomerCreditNoteController;
 use Modules\Inventory\Http\Controllers\PaymentModeController;
 use Modules\Inventory\Http\Controllers\SalesOrderController;
@@ -298,6 +299,8 @@ Route::middleware(['auth:sanctum', 'module:inventory'])->prefix('v1')->group(fun
         ->name('inventory.customer-receipts.open-credit-notes');
     Route::post('customer-receipts/{customer_receipt}/confirm', [CustomerReceiptController::class, 'confirm'])
         ->name('inventory.customer-receipts.confirm');
+    Route::get('customer-receipts/{customer_receipt}/pdf', [CustomerReceiptPdfController::class, 'download'])
+        ->name('inventory.customer-receipts.pdf');
     Route::apiResource('customer-receipts', CustomerReceiptController::class)
         ->names('inventory.customer-receipts');
 
