@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, CreditCard, Download, FileText, Percent, Plus, Printer, RefreshCw, Save, Trash2, Wallet } from 'lucide-react'
@@ -452,6 +452,29 @@ export default function CustomerReceiptFormPage() {
     if (ok) confirmMutation.mutate()
   }
 
+  const showSummary = isAdvance || continued
+
+  /* ── Enter → Continue, only while the outstanding-invoice picker (Step 1)
+     is showing and at least one invoice is checked. All hooks must run
+     unconditionally on every render, so this sits above the loading guard
+     below rather than after it. ────────────────────────────────────── */
+  const canContinue = !isAdvance && !showSummary && checkedRows.length > 0
+  const canContinueRef = useRef(canContinue)
+  useEffect(() => {
+    canContinueRef.current = canContinue
+  })
+
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.key === 'Enter' && canContinueRef.current) {
+        e.preventDefault()
+        setContinued(true)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
   if (isEdit && loadingExisting) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -463,7 +486,6 @@ export default function CustomerReceiptFormPage() {
   }
 
   const isDraft = !isEdit || status === 'draft'
-  const showSummary = isAdvance || continued
 
   return (
     <div className="w-full pb-16">
@@ -614,9 +636,10 @@ export default function CustomerReceiptFormPage() {
                 type="button"
                 disabled={checkedRows.length === 0}
                 onClick={() => setContinued(true)}
-                className="flex items-center gap-1 rounded bg-indigo-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-indigo-700 disabled:opacity-40"
+                className="flex items-center gap-1.5 rounded bg-indigo-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-indigo-700 disabled:opacity-40"
               >
                 Continue ({checkedRows.length} selected)
+                <kbd className="rounded border border-white/40 bg-white/20 px-1.5 py-0.5 text-[10px] font-bold leading-none shadow-[0_1px_0_rgba(0,0,0,0.18)]">Enter</kbd>
               </button>
             </div>
           </div>

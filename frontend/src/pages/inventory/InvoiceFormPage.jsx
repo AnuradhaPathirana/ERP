@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery } from '@tanstack/react-query'
-import { AlertTriangle, FileText, RefreshCw, Save } from 'lucide-react'
+import { AlertTriangle, FileText, RefreshCw, Save, Zap } from 'lucide-react'
 import {
   createInvoice,
   getBillingSourceForDo,
@@ -9,13 +9,14 @@ import {
   getInvoice,
   getNextInvoiceNo,
   updateInvoice,
+  updateInvoiceStatus,
 } from '../../api/invoices'
 import { getAllCompanies } from '../../api/companies'
 import { getDeliveryOrders } from '../../api/deliveryOrders'
 import Breadcrumb from '../../components/Breadcrumb'
 import FilterSearchSelect from '../../components/ui/FilterSearchSelect'
 import Money from '../../components/ui/Money'
-import { showError, showSuccess } from '../../utils/alerts'
+import { confirmTriState, showError, showSuccess } from '../../utils/alerts'
 import { fmtMoney } from '../../utils/currency'
 
 const INPUT_CLS =
@@ -135,6 +136,10 @@ export default function InvoiceFormPage() {
     retry:    false,
   })
 
+  // Declared here (rather than nearer its JSX use) so closures defined further down
+  // (handleQuickCreate) always see it initialized, even on renders that return early.
+  const blocked = !isEdit && source?.guards?.blocked
+
   /* The two price sets a line can bill, straight from the billing source. */
   const priceFor = (it, type) => type === 'tax'
     ? { unit_price: String(it.tax_unit_price ?? it.unit_price), tax: it.tax_vat_pct ? String(it.tax_vat_pct) : '' }
@@ -240,13 +245,36 @@ export default function InvoiceFormPage() {
     },
   })
 
-  const handleSubmit = () => {
+  const getClientErrors = () => {
     const clientErrors = {}
     if (!isEdit && !doId) clientErrors.do_id = ['Select a confirmed delivery order to bill.']
     if (!form.invoice_date) clientErrors.invoice_date = ['Invoice date is required.']
     if (form.due_date && form.due_date < form.invoice_date)
       clientErrors.due_date = ['Due date must be on or after the invoice date.']
+    return clientErrors
+  }
 
+  const buildPayload = () => ({
+    ...(isEdit ? {} : { do_id: parseInt(doId) }),
+    invoice_date:     form.invoice_date,
+    due_date:         form.due_date || null,
+    invoice_type:     invoiceType,
+    transport_charge: parseFloat(form.transport_charge) || 0,
+    delivery_address: form.delivery_address.trim() || null,
+    remarks:          form.remarks.trim() || null,
+    mode_of_payment:  form.mode_of_payment || null,
+    company_id:       form.company_id ? Number(form.company_id) : null,
+    items: lines.map((row) => ({
+      so_item_id: row.so_item_id,
+      unit_price: parseFloat(row.unit_price) || 0,
+      discount:   parseFloat(row.discount)   || 0,
+      // A Non-Tax invoice never adds VAT — the backend enforces this too
+      tax:        invoiceType === 'non_tax' ? 0 : (parseFloat(row.tax) || 0),
+    })),
+  })
+
+  const handleSubmit = () => {
+    const clientErrors = getClientErrors()
     if (Object.keys(clientErrors).length) {
       setErrors(clientErrors)
       showError('Please complete the highlighted fields.')
@@ -254,25 +282,79 @@ export default function InvoiceFormPage() {
     }
 
     setErrors({})
-    saveMutation.mutate({
-      ...(isEdit ? {} : { do_id: parseInt(doId) }),
-      invoice_date:     form.invoice_date,
-      due_date:         form.due_date || null,
-      invoice_type:     invoiceType,
-      transport_charge: parseFloat(form.transport_charge) || 0,
-      delivery_address: form.delivery_address.trim() || null,
-      remarks:          form.remarks.trim() || null,
-      mode_of_payment:  form.mode_of_payment || null,
-      company_id:       form.company_id ? Number(form.company_id) : null,
-      items: lines.map((row) => ({
-        so_item_id: row.so_item_id,
-        unit_price: parseFloat(row.unit_price) || 0,
-        discount:   parseFloat(row.discount)   || 0,
-        // A Non-Tax invoice never adds VAT — the backend enforces this too
-        tax:        invoiceType === 'non_tax' ? 0 : (parseFloat(row.tax) || 0),
-      })),
-    })
+    saveMutation.mutate(buildPayload())
   }
+
+  /* ── Quick-create — new invoices only, wired to both the Create Invoice
+     button and Ctrl+Enter. Asks whether to jump straight into a receipt for
+     this invoice; either way the invoice is issued immediately (never left
+     as a draft), since only Issued invoices are billable on a receipt. ── */
+  const [quickSaving, setQuickSaving] = useState(false)
+
+  const handleQuickCreate = async () => {
+    if (isEdit || saveMutation.isPending || quickSaving || blocked || lines.length === 0) return
+
+    const clientErrors = getClientErrors()
+    if (Object.keys(clientErrors).length) {
+      setErrors(clientErrors)
+      showError('Please complete the highlighted fields.')
+      return
+    }
+    setErrors({})
+
+    const choice = await confirmTriState({
+      title: 'Generate a Receipt?',
+      message: 'Do you want to generate a customer receipt for this invoice now?',
+      confirmText: 'Yes',
+      denyText: 'No',
+      icon: 'question',
+    })
+
+    setQuickSaving(true)
+    try {
+      const res    = await createInvoice(buildPayload())
+      const newId  = res.data.id
+      if (choice === 'cancel') {
+        // Cancel backs out of the issue/receipt decision entirely — the invoice
+        // is still saved, just left as a draft instead of being issued.
+        showSuccess('Invoice saved as draft.')
+        navigate(`/inventory/invoices/${newId}`)
+        return
+      }
+      // Yes/No both issue the invoice immediately — a receipt can only be raised
+      // against an issued invoice (the outstanding-invoices list only surfaces
+      // Issued invoices).
+      await updateInvoiceStatus(newId, 'issued')
+      showSuccess('Invoice created and issued.')
+      if (choice === 'confirm') {
+        navigate(`/inventory/customer-receipts/create?invoice=${newId}`)
+      } else {
+        navigate(`/inventory/invoices/${newId}`)
+      }
+    } catch (e) {
+      const data = e.response?.data
+      if (data?.errors) setErrors(data.errors)
+      showError(data?.message ?? 'Failed to save invoice.')
+    } finally {
+      setQuickSaving(false)
+    }
+  }
+
+  const handleQuickCreateRef = useRef(handleQuickCreate)
+  useEffect(() => {
+    handleQuickCreateRef.current = handleQuickCreate
+  })
+
+  useEffect(() => {
+    const handler = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault()
+        handleQuickCreateRef.current()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
 
   const err = (f) => errors[f]?.[0]
 
@@ -293,8 +375,6 @@ export default function InvoiceFormPage() {
       </div>
     )
   }
-
-  const blocked = !isEdit && source?.guards?.blocked
 
   return (
     <div className="w-full">
@@ -541,13 +621,18 @@ export default function InvoiceFormPage() {
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-slate-100 bg-white px-3 py-2">
+            {!isEdit && (
+              <span className="flex items-center gap-1 text-[10px] font-medium text-slate-400" title="Asks whether to generate a receipt, then creates the invoice and issues it.">
+                <Zap size={11} className="text-amber-400" /> Ctrl+Enter also works
+              </span>
+            )}
             <button
               type="button"
-              disabled={saveMutation.isPending || blocked || lines.length === 0}
-              onClick={handleSubmit}
+              disabled={saveMutation.isPending || quickSaving || blocked || lines.length === 0}
+              onClick={isEdit ? handleSubmit : handleQuickCreate}
               className="flex items-center gap-1 rounded bg-indigo-600 px-4 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:bg-indigo-700 disabled:opacity-60 active:scale-95"
             >
-              {saveMutation.isPending
+              {saveMutation.isPending || quickSaving
                 ? <><RefreshCw size={11} className="animate-spin" /> Saving…</>
                 : <><Save size={11} /> {isEdit ? 'Update Invoice' : 'Create Invoice'}</>}
             </button>

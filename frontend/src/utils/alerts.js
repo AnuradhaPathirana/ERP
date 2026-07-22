@@ -52,7 +52,7 @@ export async function confirmDelete(name) {
   return result.isConfirmed
 }
 
-export async function confirmAction({ title, message, confirmText = 'Yes, Confirm', confirmColor = '#16a34a', icon = 'question' }) {
+export async function confirmAction({ title, message, confirmText = 'Yes, Confirm', cancelText = 'Cancel', confirmColor = '#16a34a', icon = 'question' }) {
   const result = await Swal.fire({
     title,
     html: `<span>${message}</span>`,
@@ -61,7 +61,7 @@ export async function confirmAction({ title, message, confirmText = 'Yes, Confir
     confirmButtonColor: confirmColor,
     cancelButtonColor: '#64748b',
     confirmButtonText: `<span>${confirmText}</span>`,
-    cancelButtonText: 'Cancel',
+    cancelButtonText: cancelText,
     reverseButtons: true,
     width: '360px',
     customClass: {
@@ -74,6 +74,64 @@ export async function confirmAction({ title, message, confirmText = 'Yes, Confir
     },
   })
   return result.isConfirmed
+}
+
+/**
+ * Three-way prompt: Confirm / Deny / Close, each mapped to a distinct outcome
+ * rather than collapsing to a plain yes/no. Returns 'confirm' | 'deny' | 'cancel'.
+ * "Cancel" has no button of its own — it's the top-right ✕ close icon — so the
+ * only way out is Yes, No, or ✕; outside-click and a bare Esc keypress do
+ * nothing (Esc is instead rebound to trigger No, per keyboard shortcuts below).
+ */
+export async function confirmTriState({
+  title, message,
+  confirmText = 'Yes', confirmColor = '#16a34a',
+  denyText = 'No', denyColor = '#64748b',
+  closeNote = 'Save as draft',
+  icon = 'question',
+}) {
+  const result = await Swal.fire({
+    title,
+    html: `<span>${message}</span>`,
+    icon,
+    showDenyButton: true,
+    showCloseButton: true,
+    allowOutsideClick: false,
+    allowEscapeKey: false,
+    confirmButtonColor: confirmColor,
+    denyButtonColor: denyColor,
+    confirmButtonText: `<span class="swal2-btn-label">${confirmText}<kbd class="swal2-kbd">Enter</kbd></span>`,
+    denyButtonText: `<span class="swal2-btn-label">${denyText}<kbd class="swal2-kbd">Esc</kbd></span>`,
+    reverseButtons: true,
+    width: '400px',
+    customClass: {
+      popup:         'swal2-styled-popup',
+      title:         'swal2-styled-title',
+      htmlContainer: 'swal2-styled-html',
+      confirmButton: 'swal2-styled-confirm-btn',
+      denyButton:    'swal2-styled-confirm-btn',
+      closeButton:   'swal2-styled-close-btn',
+      icon:          'swal2-styled-icon',
+    },
+    didOpen: (popup) => {
+      const closeBtn = popup.querySelector('.swal2-close')
+      if (closeBtn) {
+        const note = document.createElement('span')
+        note.className = 'swal2-close-note'
+        note.textContent = closeNote
+        closeBtn.insertAdjacentElement('beforebegin', note)
+      }
+      popup.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          Swal.clickDeny()
+        }
+      })
+    },
+  })
+  if (result.isConfirmed) return 'confirm'
+  if (result.isDenied) return 'deny'
+  return 'cancel'
 }
 
 export async function confirmWithReason({ title, inputLabel, inputPlaceholder, confirmText = 'Confirm', confirmColor = '#ef4444' }) {
