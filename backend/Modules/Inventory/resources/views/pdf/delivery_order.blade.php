@@ -133,7 +133,7 @@
                 @foreach($item->pieces->chunk(3) as $chunk)
                   <tr>
                     @foreach($chunk as $piece)
-                      <td class="mono">{{ $piece->piece_code }} — Roll {{ $piece->roll_no ?? '?' }} ({{ number_format((float) $piece->weight, 2) }})</td>
+                      <td class="mono">{{ $piece->piece_code }} — Roll {{ $piece->piece?->roll_no ?? '?' }} ({{ number_format((float) $piece->weight, 2) }})</td>
                     @endforeach
                   </tr>
                 @endforeach
